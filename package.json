@@ -1,7 +1,7 @@
 {
   "name": "deepseek-harness-chat-ui",
   "version": "0.1.0-alpha.1",
-  "description": "ChatGPT-style multi-Skill chat UI, agent rooms, personas and automations for DeepSeek Harness",
+  "description": "Social-network-style AI agent UI with personified Skills, direct messages, group chats and automations for DeepSeek Harness",
   "type": "module",
   "main": "./dist/index.js",
   "exports": {
@@ -98,6 +98,8 @@
     "deepseek-chat-ui",
     "ai-agent-chat",
     "multi-agent-chat",
+    "social-ai",
+    "group-chat",
     "skill-chat",
     "agent-rooms",
     "automation"

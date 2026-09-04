@@ -1,6 +1,6 @@
 # DeepSeek Harness Chat UI
 
-> 面向 DeepSeek Harness 的 ChatGPT 风格多 Skill 聊天界面：持久化 Room、智能体群组、Persona、自动化、项目文件、终端侧栏和可切换皮肤。
+> 面向 DeepSeek Harness 的社交媒体式 AI 协作界面：把 Skill 拟人化为可发现、可加为联系人、可私聊、可拉群的数字成员。
 
 [English](README.md) · [功能](#功能) · [安装](#从-github-直接安装) · [开发](#源码开发)
 
@@ -8,21 +8,21 @@
 
 ## 为什么做这个项目
 
-DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Session 和 Workspace。本插件增加了一层以持续对话为中心的产品体验：
+DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Session 和 Workspace。本插件把 Skill 组织成一个社交化协作网络，强调联系人、私聊、群聊和清晰的成员身份：
 
 - **持久化 Room**：切换群组再回来时恢复原对话，不再隐式创建 Session。
 - **普通对话入口**：不选择 Skill 也能直接和模型交流。
-- **多 Skill 群组**：支持搜索成员、设置协调者、绑定项目目录和群组 System Prompt。
-- **友好 Persona**：稳定昵称与纯圆动物头像，同时保留原始 Skill 名称和能力信息。
+- **Skill 拟人化**：每个 Skill 都有稳定昵称、纯圆动物头像、资料页和原始能力信息。
+- **可以拉群**：像社交软件一样搜索 Skill、加入或剔除群成员、设置协调者和群组 System Prompt。
 - **自动化入口**：将计划任务、运行记录和目标 Room 联系起来。
 - **文件与终端侧栏**：在当前对话旁打开项目文件、终端和临时任务。
 - **皮肤系统**：通过声明式 Skin Manifest 修改视觉，不接触 Room、Persona 或自动化数据。
 
 ## 截图
 
-### 多 Skill 群组创建
+### 把拟人化 Skill 拉进群聊
 
-可以搜索已安装 Skill、加入或剔除成员、选择圆形群组头像，并设置用于 System Prompt 的群组职能。
+可以像社交软件拉群一样搜索已安装 Skill、加入或剔除成员、选择圆形群组头像，并设置用于 System Prompt 的群组职能。
 
 ![创建 DeepSeek Harness 多智能体群组](docs/images/deepseek-harness-chat-ui-groups.png)
 
@@ -34,9 +34,9 @@ DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Ses
 
 | 模块 | 能力 |
 | --- | --- |
-| 聊天 | 普通对话、Skill 私聊、群组 Room、可折叠会话历史 |
+| 社交对话 | 普通对话、Skill 联系人、私聊、群聊、可折叠会话历史 |
 | 群组 | 成员搜索、协调者、群组职能、项目目录绑定 |
-| 身份 | 纯圆动物头像、稳定友好昵称、原始 Skill 元数据 |
+| Skill 拟人化 | 纯圆动物头像、稳定友好昵称、资料页和原始 Skill 元数据 |
 | Skills | 已安装目录、`skills.sh` 搜索、安装、安装并加入 |
 | Workspace | 项目文件浏览、文件预览、终端与旁路任务入口 |
 | 自动化 | Room 绑定、立即运行与运行历史 |

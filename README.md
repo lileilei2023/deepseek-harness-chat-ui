@@ -1,6 +1,6 @@
 # DeepSeek Harness Chat UI
 
-> A ChatGPT-style multi-Skill chat interface for DeepSeek Harness — persistent rooms, agent groups, personas, automations, project files, terminal sidecars, and switchable visual skins.
+> A social-network-style AI collaboration interface for DeepSeek Harness — Skills become recognizable digital members that users can discover, message directly, personalize, and bring into persistent group chats.
 
 [中文说明](README.zh.md) · [Features](#features) · [Install](#install-from-github) · [Development](#development)
 
@@ -8,21 +8,21 @@
 
 ## Why this project
 
-DeepSeek Harness provides a powerful agent runtime, but its default interface is organized around sessions and workspaces. This plugin adds a conversation-first product layer inspired by modern AI collaboration tools:
+DeepSeek Harness provides a powerful agent runtime, but its default interface is organized around sessions and workspaces. This plugin turns Skills into a social collaboration network with contacts, direct conversations, persistent groups, and visible member identities:
 
 - **Persistent rooms** restore the previous conversation instead of silently creating a new session.
 - **Normal chat** works without selecting a Skill.
-- **Multi-Skill groups** combine searchable agents, a coordinator, and a reusable group system prompt.
-- **Friendly personas** provide deterministic names and circular animal avatars without hiding original Skill metadata.
+- **Personified Skills** appear as recognizable contacts with deterministic names, circular animal avatars, profiles, and original capability metadata.
+- **Group chats** let users search Skills, pull them into a group, choose a coordinator, and define a reusable group system prompt.
 - **Automation entry points** connect scheduled tasks to rooms and conversation history.
 - **Project and terminal sidecars** keep files and command-line work beside the active conversation.
 - **Skin support** allows declarative visual themes without touching Room or automation data.
 
 ## Screenshots
 
-### Multi-Skill group creation
+### Create a group with personified Skills
 
-Search installed Skills, add or remove members, choose a circular group avatar, and define the group role used as its system prompt.
+Search installed Skills, add or remove them like group members, choose a circular group avatar, and define the group's role as its system prompt.
 
 ![Create a DeepSeek Harness multi-agent group](docs/images/deepseek-harness-chat-ui-groups.png)
 
@@ -34,9 +34,9 @@ Search installed Skills, add or remove members, choose a circular group avatar, 
 
 | Area | Capability |
 | --- | --- |
-| Chat | Normal chat, direct Skill rooms, group rooms, collapsible session history |
+| Social chat | Normal chat, Skill contacts, direct conversations, group chats, collapsible session history |
 | Groups | Searchable members, coordinator selection, group system prompt, project binding |
-| Identity | Circular animal avatars, deterministic friendly names, original Skill metadata |
+| Personification | Circular animal avatars, deterministic friendly names, profiles and original Skill metadata |
 | Skills | Installed Skill directory, `skills.sh` search, install and install-then-add flows |
 | Workspace | Project browser, file preview, terminal and sidecar task entry points |
 | Automation | Room-bound definitions, run-now flow and persisted run history |

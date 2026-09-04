@@ -10,9 +10,9 @@
 
 ![Skill 拟人化与社交群聊演示](docs/media/deepseek-harness-chat-ui-demo.gif)
 
-Skill 不再只是工具列表，而是拥有昵称、圆形动物头像和资料页的数字成员；你可以像使用社交软件一样找 Skill、私聊、修改身份，并用成员搜索、群组职能和 System Prompt 拉群协作。
+演示使用真实模型完成一次群组咨询：查看群成员与群组职能，让三位拟人化 Skill 分工回答，由协调者汇总结果；随后切换到另一个群组再返回，原对话仍会恢复。内嵌 GIF 使用 15 FPS，播放更流畅。
 
-[观看 56 秒完整 MP4 演示](docs/media/deepseek-harness-chat-ui-demo.mp4)
+[观看 48 秒完整 MP4 演示](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI 主界面](docs/images/deepseek-harness-chat-ui-main.png)
 

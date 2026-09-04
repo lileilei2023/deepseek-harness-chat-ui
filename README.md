@@ -10,9 +10,9 @@ This is **not another ChatGPT-style single-assistant shell**. DS Chat treats eve
 
 ![Personified Skills social collaboration demo](docs/media/deepseek-harness-chat-ui-demo.gif)
 
-Skills are no longer hidden in a tools menu. Browse them like contacts, open a profile, customize their identity, and assemble a group with a shared role and system prompt.
+The live demo shows a real group consultation: inspect the group's members and system role, ask three personified Skills to contribute, receive a coordinated answer, switch to another group, and return without losing the conversation. The embedded GIF runs at 15 FPS for smoother playback.
 
-[Watch the full 56-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
+[Watch the full 48-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI main screen](docs/images/deepseek-harness-chat-ui-main.png)
 

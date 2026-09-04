@@ -102,18 +102,41 @@ source/
 DeepSeek Harness is still pre-release and its Web client bundler lives inside the Harness repository. Use a dedicated matching Harness checkout or worktree when rebuilding:
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
+git clone --depth 1 --branch dsh-v0.1.2-alpha.5 https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
-git checkout v0.1.2-alpha.5
 pnpm install
 
 cd ../deepseek-harness-chat-ui
 npm install
-DSH_SOURCE=../deepseek-harness npm run build
+npm run rebuild -- ../deepseek-harness
 npm run check
 ```
 
-`npm run build` copies the editable source into the matching Harness checkout, runs the official Host and Web Client build pipeline, and refreshes `dist/`. Do not point it at a checkout containing uncommitted work.
+`npm run rebuild` materialises the three plugin packages under the Harness checkout's `packages/experimental`, registers them in the `tsconfig.host.json` and `tsconfig.client.json` project-reference aggregates, builds the Host and Client faces, and refreshes `dist/`. Pass `--client-only` to skip the Host face while iterating on the UI. Do not point it at a checkout containing uncommitted work.
+
+`npm run build` is the original entry point. It drives the Harness's full workspace build and expects the three packages to already exist under `packages/experimental`, which a clean public checkout does not have — use `npm run rebuild` there.
+
+## Skill sources
+
+The catalog scans directories for `SKILL.md` files and lists what it finds as contacts. Nothing is downloaded, executed, or mounted into the runtime — it is a read-only metadata scan. Three roots are scanned by default:
+
+| Root | Path | Layout |
+| --- | --- | --- |
+| WorkBuddy | `~/.workbuddy/plugins/cache/workbuddy-builtin` | `<plugin>/<version>/**` |
+| Claude Code | `~/.claude/skills` | `<skill>/SKILL.md`, plus one level of bundles |
+| Claude plugins | `~/.claude/plugins/marketplaces` | nested |
+
+Override the roster from the profile's patch layer:
+
+```yaml
+- id: workbuddy-skill-catalog
+  config:
+    roots:
+      - { id: workbuddy, label: WorkBuddy, path: '~/.workbuddy/plugins/cache/workbuddy-builtin', layout: plugin-version }
+      - { id: team, label: Team, path: /srv/shared/skills, layout: flat }
+```
+
+A Skill name found under more than one root keeps the first root's entry, so roster order is precedence order. `config.root` still relocates the WorkBuddy cache on its own and leaves the other roots in place.
 
 ## Compatibility
 

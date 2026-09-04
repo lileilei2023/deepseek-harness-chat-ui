@@ -1,4 +1,4 @@
-/** One read-only Skill contact discovered from a WorkBuddy installation. */
+/** One read-only Skill contact discovered from a configured Skill root. */
 export interface WorkBuddySkillContact {
   /** Stable source-qualified identifier. */
   readonly id: string
@@ -10,11 +10,15 @@ export interface WorkBuddySkillContact {
   readonly whenToUse?: string
   /** Fixed catalog source label. */
   readonly source: 'workbuddy'
-  /** WorkBuddy plugin directory that owns the Skill. */
+  /** Identifier of the configured Skill root the entry was discovered in. */
+  readonly originId: string
+  /** Human label for that root, shown as the contact's provenance. */
+  readonly originLabel: string
+  /** Top-level directory under the root that owns the Skill. */
   readonly plugin: string
-  /** Installed plugin version directory. */
-  readonly version: string
-  /** WorkBuddy catalog entries are not mounted into the Harness runtime. */
+  /** Version directory, when the root's layout carries one. */
+  readonly version?: string
+  /** Filesystem catalog entries are not mounted into the Harness runtime. */
   readonly invocable: false
 }
 

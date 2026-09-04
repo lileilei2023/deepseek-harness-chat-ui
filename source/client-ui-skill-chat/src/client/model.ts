@@ -100,10 +100,25 @@ export const ANIMAL_AVATARS = [
   'dog-cocoa', 'dog-blue', 'mouse-lemon', 'mouse-pink', 'tiger-apricot', 'tiger-jade',
 ] as const
 
+/**
+ * The given-name pool. Sized against a real Skill directory rather than a demo
+ * one: with three Skill roots scanned a machine easily reaches several hundred
+ * contacts, and a 24-name pool meant almost every persona carried a
+ * disambiguating suffix instead of a name.
+ */
 const FRIENDLY_NAMES = [
   '栗子', '团团', '阿鹿', '小满', '布丁', '云朵', '米粒', '松松',
   '桃桃', '可可', '星野', '麦麦', '小禾', '圆圆', '朵朵', '木木',
   '豆豆', '暖暖', '果果', '泡泡', '小岛', '悠悠', '橙子', '月牙',
+  '汤圆', '芝麻', '花卷', '麻薯', '元宝', '青提', '柚子', '荔枝',
+  '杏仁', '山楂', '莲子', '菱角', '笋尖', '菌菇', '糖糖', '蜜蜜',
+  '酥酥', '脆脆', '软软', '糯糯', '绵绵', '云吞', '米糕', '豆花',
+  '银杏', '白露', '小雪', '谷雨', '惊蛰', '立夏', '秋分', '冬至',
+  '海棠', '芦苇', '竹影', '松针', '苔苔', '藤藤', '荷叶', '川川',
+  '岭岭', '湖心', '江南', '星尘', '月半', '拂晓', '晚晚', '早早',
+  '咕咕', '呱呱', '啾啾', '喵喵', '汪汪', '哞哞', '叽叽', '嘟嘟',
+  '沙沙', '露露', '霜霜', '雾雾', '叮叮', '咚咚', '铃铃', '当当',
+  '噜噜', '呼呼', '嗡嗡', '滴滴', '答答', '咔咔', '唰唰', '哒哒',
 ] as const
 
 export function stableHash(value: string): number {
@@ -154,9 +169,13 @@ export function ensurePersonas(
   for (const contact of contacts.toSorted((left, right) => left.id.localeCompare(right.id))) {
     const current = next[contact.id]
     const generated = defaultPersona(contact, now)
+    // Duplicates are normal once the pool is smaller than the contact list. A
+    // readable ordinal ("松松2") keeps the persona a name; the former base36
+    // hash ("松松·1B") read as a machine id and undid the personification.
     let generatedName = generated.displayName
-    if (usedNames.has(generatedName)) generatedName = `${generatedName}·${stableHash(contact.id).toString(36).slice(0, 2).toUpperCase()}`
-    while (usedNames.has(generatedName)) generatedName = `${generatedName}·`
+    for (let ordinal = 2; usedNames.has(generatedName); ordinal += 1) {
+      generatedName = `${generated.displayName}${ordinal}`
+    }
     usedNames.add(current?.customizedName === true ? current.displayName : generatedName)
     if (current === undefined) {
       next[contact.id] = { ...generated, displayName: generatedName }

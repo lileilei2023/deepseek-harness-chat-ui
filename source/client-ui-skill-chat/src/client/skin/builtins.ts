@@ -10,31 +10,27 @@ export const BUILTIN_SKINS: readonly DSChatSkinPackage[] = [{
     nameEn: 'DS Chat Mint',
     version: '1.0.0',
     author: 'DS Chat',
-    tagline: '清爽、轻拟物、适合长时间协作',
-    description: 'DS Chat 默认皮肤，使用柔和薄荷色、圆形头像与清晰层级。',
+    tagline: '清爽、平整、适合长时间协作',
+    description: 'DS Chat 默认皮肤：薄荷强调色、平整材质与发丝描边，明暗两种配色均适用。',
     tags: ['builtin', 'mint', 'light'],
-    accent: '#2fbc79',
+    accent: '#17b877',
     order: 0,
     contributes: { stylesheet: 'skin.css' },
   },
   css: `html[data-dsh-skin="ds-chat-mint"] {
-    --ds-chat-accent-solid: #2fbf79;
-    --ds-chat-accent: linear-gradient(180deg, #43d38b, #22ad68);
-    --ds-chat-accent-border: color-mix(in srgb, #2fbf79 34%, transparent);
-    --ds-chat-accent-soft: #e8f7ee;
-    --ds-chat-accent-faint: linear-gradient(145deg, #f7fff9, #ecfaf2);
-    --ds-chat-avatar-gradient: radial-gradient(circle at 32% 26%, #fff 0 16%, #c8f2d8 42%, #8ad8a9 100%);
-    --ds-chat-focus: #2fbf79;
-    --ds-chat-surface: color-mix(in srgb, var(--dsw-alias-bg-base) 96%, #effcf5);
-    --ds-chat-surface-raised: linear-gradient(145deg, color-mix(in srgb, var(--dsw-alias-bg-base) 94%, white), color-mix(in srgb, var(--dsw-alias-bg-subtle) 90%, #ecfaf2));
-    --ds-chat-surface-sunken: color-mix(in srgb, var(--dsw-alias-bg-subtle) 88%, #e8f8ef);
-    --ds-chat-row-hover: color-mix(in srgb, var(--dsw-alias-bg-hover) 82%, #e8f8ef);
-    --ds-chat-row-selected: color-mix(in srgb, #e5f8ed 80%, var(--dsw-alias-bg-base));
-    --ds-chat-user-bubble: #e7f8ee;
+    /* A skin states its identity and its shape; every tint, stroke, focus ring
+       and selection fill is derived from the accent in theme.css, so a skin
+       never restates the same green six times. */
+    --ds-chat-accent-solid: #17b877;
+    --ds-chat-accent-hover: #12a068;
     --ds-chat-radius-control: 12px;
     --ds-chat-radius-lg: 18px;
     --ds-chat-radius-xl: 24px;
-    --ds-chat-shadow: 0 16px 40px rgb(28 62 45 / 12%), inset 0 1px 0 rgb(255 255 255 / 78%);
+  }
+  html[data-dsh-skin="ds-chat-mint"] body[data-ds-dark-theme] {
+    --ds-chat-accent-solid: #3ddb95;
+    --ds-chat-accent-hover: #57e5a7;
+    --ds-chat-on-accent: #04231a;
   }`,
 }, {
   source: 'builtin',
@@ -55,21 +51,14 @@ export const BUILTIN_SKINS: readonly DSChatSkinPackage[] = [{
   },
   css: `html[data-dsh-skin="teamily-soft"] {
     --ds-chat-accent-solid: #6c6ce5;
-    --ds-chat-accent: linear-gradient(180deg, #8585ef, #6262d9);
-    --ds-chat-accent-border: color-mix(in srgb, #7777e7 34%, transparent);
-    --ds-chat-accent-soft: #efefff;
-    --ds-chat-accent-faint: linear-gradient(145deg, #fafaff, #f0efff);
-    --ds-chat-avatar-gradient: radial-gradient(circle at 32% 26%, #fff 0 16%, #dcdcff 42%, #aaaaf1 100%);
-    --ds-chat-focus: #7777e7;
-    --ds-chat-surface: color-mix(in srgb, var(--dsw-alias-bg-base) 97%, #f5f3ff);
-    --ds-chat-surface-raised: linear-gradient(145deg, color-mix(in srgb, var(--dsw-alias-bg-base) 95%, white), color-mix(in srgb, var(--dsw-alias-bg-subtle) 88%, #f0efff));
-    --ds-chat-surface-sunken: color-mix(in srgb, var(--dsw-alias-bg-subtle) 88%, #f0efff);
-    --ds-chat-row-hover: color-mix(in srgb, var(--dsw-alias-bg-hover) 80%, #efefff);
-    --ds-chat-row-selected: color-mix(in srgb, #ededff 82%, var(--dsw-alias-bg-base));
-    --ds-chat-user-bubble: #efefff;
+    --ds-chat-accent-hover: #5a5ad6;
     --ds-chat-radius-control: 13px;
     --ds-chat-radius-lg: 20px;
     --ds-chat-radius-xl: 26px;
-    --ds-chat-shadow: 0 18px 44px rgb(61 57 120 / 13%), inset 0 1px 0 rgb(255 255 255 / 82%);
+  }
+  html[data-dsh-skin="teamily-soft"] body[data-ds-dark-theme] {
+    --ds-chat-accent-solid: #a5a5ff;
+    --ds-chat-accent-hover: #b9b9ff;
+    --ds-chat-on-accent: #14103a;
   }`,
 }] as const

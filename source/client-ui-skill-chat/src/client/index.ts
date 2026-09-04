@@ -264,7 +264,12 @@ export function mergeContacts(
       .filter(skill => !nativeNames.has(skill.name))
       .map(skill => ({
         ...skill,
-        sourceLabel: `WorkBuddy · ${skill.plugin}`,
+        // The label names the root the Skill actually came from; before the
+        // catalog scanned more than one, every entry claimed WorkBuddy.
+        sourceLabel: skill.version === undefined
+          ? `${skill.originLabel} · ${skill.plugin}`
+          : `${skill.originLabel} · ${skill.plugin} ${skill.version}`,
+        sourceShort: skill.originLabel,
         modelInvocable: false,
       })),
   ]

@@ -1,0 +1,7 @@
+# Apply after @deepseek-ai/dsh-web-app. The lower-priority sidebar.workspaces
+# registration replaces the stable Workspace browser while this layer is active.
+- insert:
+    - id: workbuddy-skill-catalog
+      name: '@deepseek-ai/dsh-experimental-workbuddy-skill-catalog'
+    - id: ui-skill-chat
+      name: '@deepseek-ai/dsh-experimental-client-ui-skill-chat'

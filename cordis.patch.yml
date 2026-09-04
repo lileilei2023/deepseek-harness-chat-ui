@@ -1,0 +1,4 @@
+# Loaded after @deepseek-ai/dsh-web-app in the target Web profile.
+- insert:
+    - id: ds-chat
+      name: deepseek-harness-chat-ui

@@ -1,0 +1,298 @@
+import type { Context } from '@deepseek-ai/cordis'
+import type { SkillEntry } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { IWorkspaces, WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
+import workBuddySkillsRemote from '@deepseek-ai/dsh-experimental-workbuddy-skill-catalog/remote'
+import type { WorkBuddySkillContact } from '@deepseek-ai/dsh-experimental-workbuddy-skill-catalog/types'
+import type { SkillsShContact } from '@deepseek-ai/dsh-experimental-workbuddy-skill-catalog/types'
+import type { SkillChatStateDocument } from '@deepseek-ai/dsh-experimental-workbuddy-skill-catalog/types'
+import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type { IConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { InputTriggerServiceContract, InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
+import type { UiWorkspace } from '@deepseek-ai/dsh-client-ui-workspace/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import {
+  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillContactsBrowser,
+} from './SkillContactsBrowser.tsx'
+import type { ChatBinding, ContactGroup, ExternalSkillContact, SkillContact } from './SkillContactsBrowser.tsx'
+import type { SkillChatState } from './model.ts'
+import { DS_CHAT_SHELL_CHILDREN } from './shell/index.ts'
+import { createSkinRuntime, SkinCenter } from './skin/index.ts'
+import { en, NS, type SkillChatKey, zh } from './locales.ts'
+
+export * from './shell/index.ts'
+export * from './skin/index.ts'
+export * from './ui/index.tsx'
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    skillChat: SkillChatKey
+  }
+}
+
+function stateFromRemote(value: SkillChatStateDocument): SkillChatState {
+  return value as unknown as SkillChatState
+}
+
+export const inject = [
+  'slots', 'sessions', 'workspaces', 'uiWorkspace', 'conversation', 'inputTriggers', 'remote', 'locale',
+]
+
+function registerUi(ctx: Context): void {
+  const sessions = ctx.get('sessions') as ISessions
+  const workspaces = ctx.get('workspaces') as IWorkspaces
+  const uiWorkspace = ctx.get('uiWorkspace') as UiWorkspace
+  const conversation = ctx.get('conversation') as IConversation
+  const skinRuntime = createSkinRuntime()
+  ctx.effect(() => () => { skinRuntime.dispose() }, 'skill-chat: skin runtime')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'skill-chat: dictionaries')
+
+  const loadContacts = async (sessionId: SessionId | undefined, signal: AbortSignal): Promise<readonly SkillContact[]> => {
+    const [nativeResult, workBuddyResult] = await Promise.all([
+      sessionId === undefined ? undefined : ctx.remote.skills.list({ sessionId }, signal),
+      ctx.remote.workbuddySkills.list(signal),
+    ])
+    if (nativeResult !== undefined && !nativeResult.ok) throw new Error(nativeResult.error.message)
+    if (!workBuddyResult.ok) throw new Error(workBuddyResult.error.message)
+    return mergeContacts(nativeResult?.value.skills ?? [], workBuddyResult.value.contacts)
+  }
+  const searchExternal = async (query: string, signal: AbortSignal): Promise<readonly ExternalSkillContact[]> => {
+    const result = await ctx.remote.workbuddySkills.searchExternal(query, signal)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value.contacts.map((contact: SkillsShContact) => ({ ...contact }))
+  }
+  const loadState = async (signal: AbortSignal): Promise<SkillChatState> => {
+    const result = await ctx.remote.workbuddySkills.getSkillChatState(signal)
+    if (!result.ok) throw new Error(result.error.message)
+    return stateFromRemote(result.value)
+  }
+  const saveState = async (state: SkillChatState, signal: AbortSignal): Promise<void> => {
+    const result = await ctx.remote.workbuddySkills.putSkillChatState(state, signal)
+    if (!result.ok) throw new Error(result.error.message)
+  }
+  const runAutomation = async (
+    automationId: string,
+    signal: AbortSignal,
+  ): Promise<{ readonly sessionId: SessionId; readonly state: SkillChatState }> => {
+    const result = await ctx.remote.workbuddySkills.runSkillChatAutomation(automationId, signal)
+    if (!result.ok) throw new Error(result.error.message)
+    return {
+      sessionId: result.value.sessionId as unknown as SessionId,
+      state: stateFromRemote(result.value.state),
+    }
+  }
+  const installExternal = async (
+    workspaceId: WorkspaceId,
+    contact: ExternalSkillContact,
+    signal: AbortSignal,
+  ): Promise<SkillContact> => {
+    const result = await ctx.remote.workbuddySkills.installExternal({ workspaceId, ...contact }, signal)
+    if (!result.ok) throw new Error(result.error.message)
+    return result.value.contact
+  }
+
+  const mentionSource: InputTriggerSource = {
+    trigger: '@',
+    name: 'skill-contact',
+    order: -20,
+    showGroupTitle: false,
+    candidates(session, { query, signal }) {
+      signal.throwIfAborted()
+      const binding = readStored<Readonly<Record<string, ChatBinding>>>(CHAT_BINDINGS_KEY, {})[session.sessionId]
+      if (binding === undefined) return Promise.resolve([])
+      const mode = readStored<'persona' | 'raw'>(MODE_KEY, 'persona')
+      const normalized = query.trim().toLocaleLowerCase()
+      return Promise.resolve(binding.members.flatMap((contact) => {
+        const display = displayOf(contact, mode)
+        if (normalized.length > 0 && !`${display.name} ${contact.name} ${contact.description}`.toLocaleLowerCase().includes(normalized)) return []
+        return [{
+          name: display.name,
+          description: contact.description,
+          ...binding.kind === 'group' ? { section: binding.name } : {},
+          value: JSON.stringify({ name: display.name, skill: contact.name, description: contact.description }),
+        }]
+      }))
+    },
+    onPick({ candidate }) {
+      if (candidate.value === undefined) return undefined
+      const value = JSON.parse(candidate.value) as { name: string; skill: string; description: string }
+      return {
+        insert: {
+          source: 'skill-contact',
+          ref: candidate.value,
+          label: value.name,
+          clipboardText: `@${value.name}`,
+        },
+      }
+    },
+    codec: {
+      clipboardText(ref) {
+        const value = JSON.parse(ref) as { name: string }
+        return `@${value.name}`
+      },
+      serialize(ref) {
+        const value = JSON.parse(ref) as { name: string; skill: string; description: string }
+        return Promise.resolve(`@${value.name}（原始 Skill：${value.skill}；能力：${value.description}）`)
+      },
+    },
+  }
+  ctx.effect(() => (ctx.get('inputTriggers') as InputTriggerServiceContract).registerSource(mentionSource), 'skill-chat: @ contacts')
+
+  ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
+    name: 'sidebar.workspaces',
+    priority: -20,
+    locale: NS,
+    children: DS_CHAT_SHELL_CHILDREN,
+    inject: () => ({
+      loadContacts,
+      searchExternal,
+      installExternal,
+      openSession: (sessionId: SessionId) => { sessions.open(sessionId) },
+      renameSession: async (sessionId: SessionId, name: string) => {
+        const session = sessions.binding(sessionId)?.session
+        if (session === undefined) return
+        const result = await session.rename(name)
+        if (!result.ok) throw new Error(result.error.message)
+      },
+      startSession: (workspaceId: WorkspaceId) => sessions.create({ workspaceId }),
+      addWorkspace: async () => {
+        const path = await uiWorkspace.pickDirectory()
+        if (path === null) return null
+        return (await workspaces.create({ path })).workspaceId
+      },
+      chooseContact: async (sessionId: SessionId, contact: SkillContact, displayName: string) => {
+        const actx = sessions.scope(sessionId)
+        if (actx === undefined) throw new Error(`skill-chat: session "${sessionId}" has no client scope`)
+        const draft = contact.invocable
+          ? `/${contact.name} `
+          : `请以「${displayName}」的身份协助我。原始 Skill：${contact.name}。能力：${contact.description}\n\n我的需求是：`
+        conversation.input.for(actx).setDraft(draft)
+        await sessions.binding(sessionId)?.session.rename(displayName)
+      },
+      chooseGroup: async (sessionId: SessionId, group: ContactGroup, displayNames: readonly string[]) => {
+        const actx = sessions.scope(sessionId)
+        if (actx === undefined) throw new Error(`skill-chat: session "${sessionId}" has no client scope`)
+        void displayNames
+        conversation.input.for(actx).setDraft('')
+        await sessions.binding(sessionId)?.session.rename(group.name)
+      },
+      loadState,
+      saveState,
+      runAutomation,
+      browseProject: async (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.browseProject({ workspaceId, ...(path === undefined ? {} : { path }) }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      readProjectFile: async (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.readProjectFile({ workspaceId, path }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      openTerminal: async (sessionId: SessionId, workspaceId: WorkspaceId, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.openSkillChatTerminal({ sessionId, workspaceId }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      sendTerminal: async (sessionId: SessionId, terminalId: string, command: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.sendSkillChatTerminal({ sessionId, terminalId, command }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      closeTerminal: async (sessionId: SessionId, terminalId: string) => {
+        const result = await ctx.remote.workbuddySkills.closeSkillChatTerminal({ sessionId, terminalId })
+        if (!result.ok) throw new Error(result.error.message)
+      },
+      startSidecar: async (request, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.startSkillChatSidecar(request, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      sendSidecar: async (sidecarId: string, message: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.sendSkillChatSidecar({ sidecarId, message }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      closeSidecar: async (sidecarId: string) => {
+        const result = await ctx.remote.workbuddySkills.closeSkillChatSidecar(sidecarId)
+        if (!result.ok) throw new Error(result.error.message)
+      },
+    }),
+  }, SkillContactsBrowser))
+
+  ctx.slots.inject('ds-chat.settings.section', () => ctx.slots.register({
+    name: 'ds-chat.settings.section',
+    id: 'skin-center',
+    order: 10,
+    inject: () => ({ skinRuntime }),
+  }, SkinCenter))
+
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities',
+    id: 'skill-chat-tools',
+    order: 20,
+  }, SkillChatHeaderTools))
+
+  ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({
+    name: 'sidebar.brand.name',
+    priority: -30,
+  }, DSChatBrand))
+}
+
+export function mergeContacts(
+  nativeSkills: readonly SkillEntry[],
+  workBuddySkills: readonly WorkBuddySkillContact[],
+): readonly SkillContact[] {
+  const nativeNames = new Set(nativeSkills.map(skill => skill.name))
+  return [
+    ...nativeSkills.map(skill => ({
+      id: `harness:${skill.name}`,
+      name: skill.name,
+      description: skill.description,
+      ...skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse },
+      source: 'harness' as const,
+      sourceLabel: 'DeepSeek Harness',
+      invocable: true as const,
+      modelInvocable: skill.modelInvocable,
+    })),
+    ...workBuddySkills
+      .filter(skill => !nativeNames.has(skill.name))
+      .map(skill => ({
+        ...skill,
+        sourceLabel: `WorkBuddy · ${skill.plugin}`,
+        modelInvocable: false,
+      })),
+  ]
+}
+
+/** Mount the generated WorkBuddy Remote contribution before registering the UI. */
+export async function mountSkillChatUi(
+  ctx: Context,
+  contribution: TypertRemoteContribution,
+): Promise<() => Promise<void>> {
+  const disposeRemote = await ctx.remote.$mount(contribution)
+  const ui = ctx.inject([
+    'slots', 'sessions', 'workspaces', 'uiWorkspace', 'conversation', 'inputTriggers',
+    'remote.skills', 'remote.workbuddySkills', 'locale',
+  ], registerUi)
+  try {
+    await ui
+  } catch (error) {
+    await ui.dispose()
+    await disposeRemote()
+    throw error
+  }
+  return async () => {
+    await ui.dispose()
+    await disposeRemote()
+  }
+}
+
+export async function apply(ctx: Context): Promise<() => Promise<void>> {
+  return await mountSkillChatUi(ctx, workBuddySkillsRemote)
+}

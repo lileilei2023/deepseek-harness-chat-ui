@@ -1,14 +1,24 @@
 # DeepSeek Harness Chat UI
 
-> 面向 DeepSeek Harness 的社交媒体式 AI 协作界面：把 Skill 拟人化为可发现、可加为联系人、可私聊、可拉群的数字成员。
+> 面向 DeepSeek Harness 的拟人化、社交化 AI 协作界面：把 Skill 变成可发现、可改名换头像、可私聊、可拉群的数字成员。
+
+这**不是又一个 ChatGPT 式单助手套壳**。DS Chat 让每个 Skill 拥有稳定昵称、纯圆动物头像、个人资料和群组职能，像使用社交软件一样建立联系人、恢复私聊并组织长期协作群。
 
 [English](README.md) · [功能](#功能) · [安装](#从-github-直接安装) · [开发](#源码开发)
+
+## 演示
+
+![Skill 拟人化与社交群聊演示](docs/media/deepseek-harness-chat-ui-demo.gif)
+
+Skill 不再只是工具列表，而是拥有昵称、圆形动物头像和资料页的数字成员；你可以像使用社交软件一样找 Skill、私聊、修改身份，并用成员搜索、群组职能和 System Prompt 拉群协作。
+
+[观看 56 秒完整 MP4 演示](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI 主界面](docs/images/deepseek-harness-chat-ui-main.png)
 
 ## 为什么做这个项目
 
-DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Session 和 Workspace。本插件把 Skill 组织成一个社交化协作网络，强调联系人、私聊、群聊和清晰的成员身份：
+DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Session 和 Workspace。本插件把 Skill 组织成一个拟人化、社交化协作网络，强调联系人、私聊、群聊和清晰的成员身份：
 
 - **持久化 Room**：切换群组再回来时恢复原对话，不再隐式创建 Session。
 - **普通对话入口**：不选择 Skill 也能直接和模型交流。

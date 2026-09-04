@@ -1,14 +1,24 @@
 # DeepSeek Harness Chat UI
 
-> A social-network-style AI collaboration interface for DeepSeek Harness — Skills become recognizable digital members that users can discover, message directly, personalize, and bring into persistent group chats.
+> A personified, social AI collaboration interface for DeepSeek Harness — Skills become recognizable digital members that users can discover, personalize, message directly, and bring into persistent group chats.
+
+This is **not another ChatGPT-style single-assistant shell**. DS Chat treats every Skill as a social identity with a friendly name, circular animal avatar, profile, direct-message relationship, and a role inside long-lived group rooms.
 
 [中文说明](README.zh.md) · [Features](#features) · [Install](#install-from-github) · [Development](#development)
+
+## Demo
+
+![Personified Skills social collaboration demo](docs/media/deepseek-harness-chat-ui-demo.gif)
+
+Skills are no longer hidden in a tools menu. Browse them like contacts, open a profile, customize their identity, and assemble a group with a shared role and system prompt.
+
+[Watch the full 56-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI main screen](docs/images/deepseek-harness-chat-ui-main.png)
 
 ## Why this project
 
-DeepSeek Harness provides a powerful agent runtime, but its default interface is organized around sessions and workspaces. This plugin turns Skills into a social collaboration network with contacts, direct conversations, persistent groups, and visible member identities:
+DeepSeek Harness provides a powerful agent runtime, but its default interface is organized around sessions and workspaces. This plugin turns Skills into a personified social collaboration network with contacts, direct conversations, persistent groups, and visible member identities:
 
 - **Persistent rooms** restore the previous conversation instead of silently creating a new session.
 - **Normal chat** works without selecting a Skill.

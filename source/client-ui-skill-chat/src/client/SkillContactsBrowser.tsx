@@ -313,25 +313,6 @@ function useHeaderBridge(): HeaderBridgeValue | null {
  * @param props - the session being displayed.
  * @returns the identity block, or null when this session is not a DS Chat room.
  */
-export function SkillChatHeaderIdentity({ lineageSessionId }: {
-  readonly lineageSessionId: SessionId
-  readonly displayTitle: string
-}): React.JSX.Element | null {
-  const bridge = useHeaderBridge()
-  const room = bridge !== null && bridge.sessionId === lineageSessionId ? bridge.room : undefined
-  // The shell renders its own title next to this slot, so restating it here
-  // printed the room's name twice. What the title cannot say is who is in the
-  // room — that is this block's only job.
-  if (bridge === null || room === undefined) return null
-  const detail = room.type === 'group'
-    ? `${room.memberIds.length} 名成员 · ${bridge.coordinatorName ?? '协调者'} 协调`
-    : `${bridge.workspaceTitle} · 直接对话`
-  return <span className={css.headerIdentity}>
-    <AvatarStack className={css.headerAvatarStack} overlap={9}>{bridge.memberPersonas.slice(0, 4).map((member, index) => <span key={member.id} style={{ zIndex: 5 - index }}><Avatar avatarId={member.avatarId} label={member.name} seed={member.id} size={26}/></span>)}</AvatarStack>
-    <span className={css.headerIdentityCopy}><small>{detail}</small></span>
-  </span>
-}
-
 export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: SessionId }): React.JSX.Element | null {
   const bridge = useHeaderBridge()
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -348,7 +329,14 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
     { tool: 'diff', label: '查看 Diff', icon: <IconBranchOutline16/> },
     { tool: 'browser', label: '浏览器', icon: <IconGlobeOutline14/> },
   ]
+  const detail = room.type === 'group'
+    ? `${room.memberIds.length} 名成员 · ${bridge.coordinatorName ?? '协调者'} 协调`
+    : `${bridge.workspaceTitle} · 直接对话`
   return <div className={css.headerTools}>
+    <span className={css.headerIdentity}>
+      <AvatarStack className={css.headerAvatarStack} overlap={9}>{bridge.memberPersonas.slice(0, 4).map((member, index) => <span key={member.id} style={{ zIndex: 5 - index }}><Avatar avatarId={member.avatarId} label={member.name} seed={member.id} size={24}/></span>)}</AvatarStack>
+      <span className={css.headerIdentityCopy}><strong>{room.title}</strong><small>{detail}</small></span>
+    </span>
       <span className={css.headerActionsCluster}>
       <span className={css.headerMenuWrap}>
         <button className={css.headerTextButton} type="button" aria-expanded={workbenchOpen} onClick={() => { setWorkbenchOpen(open => !open) }}>工作台</button>
@@ -359,7 +347,7 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
         {room.type === 'group' ? <button className={css.headerTextButton} type="button" onClick={bridge.onSettings}>成员与职能</button> : null}
       <span className={css.headerMenuWrap}>
         <button className={css.headerTextButton} type="button" aria-expanded={historyOpen} onClick={() => { setHistoryOpen(open => !open) }}>历史 {history.length}</button>
-        {historyOpen ? <span className={css.headerMenu}>{history.map(item => <button type="button" data-active={item.harnessSessionId === sessionId} key={item.roomSessionId} onClick={() => { bridge.onHistory(item); setHistoryOpen(false) }}><span>{item.title}</span><small>{new Date(item.updatedAt).toLocaleString()}</small></button>)}</span> : null}
+        {historyOpen ? <span className={css.headerMenu}>{history.map(item => { const current = item.harnessSessionId === sessionId; return <button type="button" data-active={current} disabled={current} key={item.roomSessionId} onClick={() => { bridge.onHistory(item); setHistoryOpen(false) }}><span>{item.title}</span><small>{current ? '当前对话' : new Date(item.updatedAt).toLocaleString()}</small></button> })}{history.length <= 1 ? <span className={css.headerMenuHint}>这个房间还只有一段对话。用「＋ 新对话」开始新的一段，旧的会留在这里。</span> : null}</span> : null}
       </span>
       <Button className={css.headerNewButton} variant="primary" size="small" onClick={bridge.onNewSession}>＋ 新对话</Button>
     </span>

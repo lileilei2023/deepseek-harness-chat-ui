@@ -211,7 +211,12 @@
   z-index: 24;
   top: 10px;
   right: 18px;
-  left: min(318px, 30vw);
+  /* Shrink-wrapped, not stretched. Spanning to the sidebar painted a full-width
+   * white band across the top of the conversation and covered the shell's own
+   * header; the dock only ever holds a short row of controls. */
+  left: auto;
+  width: max-content;
+  max-width: calc(100% - 340px);
   min-height: 40px;
   display: flex;
   align-items: center;
@@ -917,26 +922,16 @@
 .projectFileList button { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: 8px; padding: 10px; border: 0; border-radius: 11px; color: inherit; background: transparent; text-align: left; cursor: pointer; font: inherit; font-size: var(--ds-chat-text-footnote); }
 .projectFileList button:hover { background: var(--ds-chat-hover); }
 
+/* The utilities slot is laid out by the shell's own header row. This used to
+ * take itself out of flow — an absolutely positioned card floating at the top
+ * right — which put a shadowed pill on top of the conversation, let its
+ * dropdowns cover the transcript, and left the header bar beside it looking
+ * empty. In flow it is just the right-hand end of the header. */
 .headerTools {
-  position: absolute;
-  z-index: 12;
-  top: 8px;
-  right: 12px;
-  left: auto;
-  width: max-content;
-  max-width: calc(100% - 120px);
-  min-height: 48px;
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  box-sizing: border-box;
-  padding: 5px 8px 5px 12px;
-  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
-  border-radius: 18px;
-  background-color: Canvas;
-  background-image: linear-gradient(var(--ds-chat-surface), var(--ds-chat-surface));
-  box-shadow: var(--ds-chat-shadow-2);
+  gap: 6px;
 }
 
 .headerIdentity,
@@ -2016,3 +2011,17 @@
 .headerMenu button[data-active='true'] { color: var(--ds-chat-accent-text); background: var(--ds-chat-accent-soft); }
 .headerMenu small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); font-variant-numeric: tabular-nums; }
 .headerMenuSep { height: var(--ds-chat-hairline); margin: var(--ds-chat-space-1) 0; background: var(--ds-chat-border); }
+
+/* The room you are already in is listed for orientation, not as a destination:
+ * clicking it did nothing, which read as a broken menu. */
+.headerMenu button[disabled] { cursor: default; opacity: 1; }
+.headerMenu button[disabled] span { color: var(--ds-chat-accent-text); font-weight: var(--ds-chat-weight-semibold); }
+
+.headerMenuHint {
+  display: block;
+  padding: var(--ds-chat-space-2);
+  color: var(--ds-chat-muted);
+  font-size: var(--ds-chat-text-caption);
+  line-height: var(--ds-chat-leading-normal);
+  white-space: normal;
+}

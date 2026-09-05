@@ -314,7 +314,12 @@ body[data-ds-dark-theme] {
  * class, and it only adjusts padding: if a future Harness version changes the
  * footer, the rule stops matching and the row keeps the shell's own spacing.
  */
-[data-slot='sidebar.settings'] button {
+/* Only the trigger row. The settings dialog is portalled into this same slot
+ * subtree, so a plain descendant selector reached every control inside it —
+ * squeezing 打开配置文件 until its label wrapped and stretching 关闭 to the
+ * dialog's full width. The trigger row is the slot's first child; the overlay
+ * is appended after it only while the dialog is open. */
+[data-slot='sidebar.settings'] > :first-child button {
   box-sizing: border-box;
   width: calc(100% - 8px);
   margin-inline: 4px;

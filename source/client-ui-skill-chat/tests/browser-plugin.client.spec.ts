@@ -5,8 +5,7 @@ import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   bindLegacyGroups, CHAT_BINDINGS_KEY, groupsForWorkspace, responderForMessage,
-  SkillContactsBrowser, type ContactGroup, type SkillContact,
-} from '../src/client/SkillContactsBrowser.tsx'
+  SkillContactsBrowser, type ContactGroup, type SkillContact, parseDiff } from '../src/client/SkillContactsBrowser.tsx'
 import {
   activeHarnessSession, defaultPersona, ensurePersonas, migrateLegacyState, roomForSession,
 } from '../src/client/model.ts'
@@ -277,5 +276,43 @@ describe('SkillChat browser plugin', () => {
     })).toMatchObject({ insert: { source: 'skill-contact', label: candidates[0]!.name } })
     await fiber.dispose()
     vi.unstubAllGlobals()
+  })
+})
+
+describe('parseDiff', () => {
+  it('types a unified patch and drops the headers git repeats', () => {
+    const patch = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      'index 1111111..2222222 100644',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,4 +1,5 @@',
+      ' const name = "app"',
+      '-const version = 1',
+      '+const version = 2',
+      '+const built = true',
+      ' export { name }',
+    ].join('\n')
+    const lines = parseDiff(patch)
+    expect(lines.map(line => line.kind)).toEqual(['file', 'hunk', 'context', 'remove', 'add', 'add', 'context'])
+    // The file row keeps the path alone, not the whole `diff --git a/… b/…`.
+    expect(lines[0]).toEqual({ kind: 'file', text: 'src/app.ts' })
+    // The +/- markers are stripped so the gutter can own them.
+    expect(lines.find(line => line.kind === 'add')).toEqual({ kind: 'add', text: 'const version = 2' })
+  })
+
+  it('keeps everything before the first patch as preamble', () => {
+    // The text arrives as raw terminal output: the command echo and the
+    // --stat summary sit above the patch and must not be read as context.
+    const lines = parseDiff('$ git diff\n README.md | 2 +-\n\ndiff --git a/README.md b/README.md\n@@ -1 +1 @@\n-old\n+new')
+    expect(lines.filter(line => line.kind === 'meta').map(line => line.text))
+      .toEqual(['$ git diff', ' README.md | 2 +-'])
+    expect(lines.some(line => line.kind === 'file')).toBe(true)
+  })
+
+  it('reports no patch when git printed something else entirely', () => {
+    const lines = parseDiff('warning: Not a git repository.\nusage: git diff --no-index …')
+    expect(lines.every(line => line.kind === 'meta')).toBe(true)
+    expect(lines.some(line => line.kind === 'file' || line.kind === 'hunk')).toBe(false)
   })
 })

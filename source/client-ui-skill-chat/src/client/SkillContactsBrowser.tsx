@@ -381,6 +381,75 @@ interface WorkbenchDrawerProps {
   readonly onBrowserRefresh: () => void
 }
 
+/** One rendered line of a unified diff. */
+export interface DiffLine {
+  readonly kind: 'file' | 'hunk' | 'add' | 'remove' | 'context' | 'meta'
+  readonly text: string
+}
+
+/**
+ * Split unified-diff text into typed lines.
+ *
+ * The diff arrives as raw terminal output — the command that produced it, a
+ * shell prompt and `git diff --stat` all sit above the patch — so everything
+ * before the first `diff --git` or `@@` is treated as a preamble and kept as
+ * meta rather than being mistaken for context.
+ * @param text - raw terminal output.
+ * @returns the typed lines, in order.
+ */
+export function parseDiff(text: string): readonly DiffLine[] {
+  const lines = text.replace(/\r/gu, '').split('\n')
+  const start = lines.findIndex(line => line.startsWith('diff --git') || line.startsWith('@@'))
+  const body = start < 0 ? [] : lines.slice(start)
+  const preamble = (start < 0 ? lines : lines.slice(0, start)).filter(line => line.trim() !== '')
+  return [
+    ...preamble.map((line): DiffLine => ({ kind: 'meta', text: line })),
+    ...body.flatMap((line): readonly DiffLine[] => {
+      if (line.startsWith('diff --git')) return [{ kind: 'file', text: line.replace(/^diff --git a\/(\S+) b\/\S+$/u, '$1') }]
+      if (line.startsWith('@@')) return [{ kind: 'hunk', text: line }]
+      if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('index ')
+        || line.startsWith('new file') || line.startsWith('deleted file')
+        || line.startsWith('similarity ') || line.startsWith('rename ')) return []
+      if (line.startsWith('+')) return [{ kind: 'add', text: line.slice(1) }]
+      if (line.startsWith('-')) return [{ kind: 'remove', text: line.slice(1) }]
+      return [{ kind: 'context', text: line.startsWith(' ') ? line.slice(1) : line }]
+    }),
+  ]
+}
+
+/**
+ * Render a unified diff.
+ * @param props - the raw diff text.
+ * @returns the coloured patch, or an empty state when there is nothing to show.
+ */
+function DiffView({ text }: { readonly text: string }): React.JSX.Element {
+  const lines = useMemo(() => parseDiff(text), [text])
+  const changes = lines.filter(line => line.kind === 'add' || line.kind === 'remove').length
+  const patched = lines.some(line => line.kind === 'file' || line.kind === 'hunk')
+  if (text.includes('__DSCHAT_NO_REPO__')) {
+    return <EmptyState className={css.drawerEmpty} title="这个项目不在 Git 仓库里">「查看 Diff」比较的是工作区里未提交的改动，需要项目本身是一个 Git 仓库。</EmptyState>
+  }
+  // Without a patch there is nothing to colour, and dumping the raw preamble —
+  // a prompt echo, or git's own usage text — is worse than saying so plainly.
+  if (!patched) return <EmptyState className={css.drawerEmpty} title="没有未提交的改动">当前工作区是干净的。</EmptyState>
+  return <div className={css.diffView}>
+    <div className={css.diffSummary}>{changes} 行改动</div>
+    <div className={css.diffBody}>
+      {lines.map((line, index) => <div className={css.diffLine} data-kind={line.kind} key={index}>
+        <span className={css.diffGutter}>{line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ''}</span>
+        <span className={css.diffText}>{line.text || '\u00a0'}</span>
+      </div>)}
+    </div>
+  </div>
+}
+
+/** Human-readable byte size for a directory listing. */
+function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
 function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
   const title = props.tool === 'files' ? '项目文件' : props.tool === 'terminal' ? '终端' : props.tool === 'diff' ? '代码变更' : '浏览器'
   return <Drawer className={css.workbenchDrawer} label={title} onClose={props.onClose}>
@@ -392,20 +461,36 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
       </header>
       {props.tool === 'files' ? <div className={css.fileWorkbench}>
         <div className={css.fileBrowser}>
-          <div className={css.pathBar}>{props.listing?.path ?? props.workspacePath}</div>
+          <nav className={css.pathBar} aria-label="路径">{(() => {
+            const current = props.listing?.path ?? props.workspacePath
+            const relative = current.startsWith(props.workspacePath) ? current.slice(props.workspacePath.length).replace(/^\//u, '') : current
+            const parts = relative === '' ? [] : relative.split('/')
+            return <>
+              <button type="button" onClick={() => { props.onBrowse(undefined) }}>{props.workspaceTitle}</button>
+              {parts.map((part, index) => <span key={`${part}-${index}`}>
+                <b>/</b>
+                <button type="button" onClick={() => { props.onBrowse(`${props.workspacePath}/${parts.slice(0, index + 1).join('/')}`) }}>{part}</button>
+              </span>)}
+            </>
+          })()}</nav>
           <div className={css.projectFileList}>
             {props.error !== null ? <div className={css.status}>{props.error}</div> : props.listing === null ? <div className={css.status}>正在读取目录…</div> : <>
               {props.listing.parent === undefined ? null : <button type="button" onClick={() => { props.onBrowse(props.listing?.parent) }}><IconFolderOpenOutline16/><span>.. 返回上级</span></button>}
-              {props.listing.entries.filter(entry => !entry.hidden).map(entry => <button type="button" data-selected={props.file?.path === entry.path || undefined} key={entry.path} onClick={() => { if (entry.kind === 'directory') props.onBrowse(entry.path); else props.onPreviewFile(entry.path) }}>{entry.kind === 'directory' ? <IconFolderOpenOutline16/> : <IconCodeOutline16/>}<span>{entry.name}</span></button>)}
+              {props.listing.entries.filter(entry => !entry.hidden).toSorted((left, right) => left.kind === right.kind ? left.name.localeCompare(right.name) : left.kind === 'directory' ? -1 : 1).map(entry => <button type="button" data-selected={props.file?.path === entry.path || undefined} key={entry.path} onClick={() => { if (entry.kind === 'directory') props.onBrowse(entry.path); else props.onPreviewFile(entry.path) }}>{entry.kind === 'directory' ? <IconFolderOpenOutline16/> : <IconCodeOutline16/>}<span>{entry.name}</span></button>)}
             </>}
           </div>
         </div>
         <div className={css.filePreview}>
-          {props.file === null ? <div className={css.drawerEmpty}>选择文件即可在这里预览</div> : <><div className={css.filePreviewMeta}><strong>{props.file.name}</strong><small>{props.file.language} · {Math.max(1, Math.round(props.file.size / 1024))} KB{props.file.truncated ? ' · 已截断' : ''}</small></div>{props.file.binary ? <div className={css.drawerEmpty}>这是二进制文件，无法直接预览。</div> : <pre>{props.file.content}</pre>}</>}
+          {props.file === null ? <div className={css.drawerEmpty}>选择文件即可在这里预览</div> : <><div className={css.filePreviewMeta}><strong>{props.file.name}</strong><small>{props.file.language} · {fileSize(props.file.size)}{props.file.truncated ? ' · 已截断' : ''}</small></div>{props.file.binary ? <div className={css.drawerEmpty}>这是二进制文件，无法直接预览。</div> : <div className={css.filePreviewBody}>{(props.file.content ?? '').split('\n').map((line, index) => <div className={css.codeLine} key={index}><span className={css.codeLineNo}>{index + 1}</span><span className={css.codeLineText}>{line || '\u00a0'}</span></div>)}</div>}</>}
         </div>
       </div> : null}
-      {props.tool === 'terminal' || props.tool === 'diff' ? <div className={css.terminalWorkbench}>
-        <pre className={css.terminalOutput}>{props.error ?? props.terminal?.text ?? (props.terminalBusy ? '正在启动终端…' : '终端尚未启动')}</pre>
+      {props.tool === 'diff' ? <div className={css.diffWorkbench}>
+        {props.error !== null ? <div className={css.status}>{props.error}</div>
+          : props.terminalBusy && props.terminal === null ? <div className={css.status}>正在读取改动…</div>
+          : <DiffView text={props.terminal?.text ?? ''}/>}
+      </div> : null}
+      {props.tool === 'terminal' ? <div className={css.terminalWorkbench}>
+        <pre className={css.terminalOutput} ref={element => { if (element !== null) element.scrollTop = element.scrollHeight }}>{props.error ?? props.terminal?.text ?? (props.terminalBusy ? '正在启动终端…' : '终端尚未启动')}</pre>
         {props.tool === 'terminal' ? <form className={css.terminalComposer} onSubmit={event => { event.preventDefault(); props.onTerminalSubmit() }}><span>$</span><input value={props.terminalCommand} onChange={event => { props.onTerminalCommand(event.target.value) }} placeholder="输入命令，例如 pnpm test…" aria-label="终端命令" autoComplete="off" spellCheck={false} autoFocus/><button type="submit" disabled={props.terminalBusy || props.terminal === null}>运行</button></form> : <div className={css.workbenchFootnote}>显示当前项目的真实 `git diff` 输出。</div>}
       </div> : null}
       {props.tool === 'browser' ? <div className={css.browserWorkbench}>
@@ -936,7 +1021,12 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       setTerminalBusy(true)
       void openTerminal(currentSessionId, activeWorkspace.workspaceId, abort.signal).then(async opened => {
         if (tool !== 'diff') return opened
-        return await sendTerminal(currentSessionId, opened.terminalId, 'git diff --stat && git diff -- .', abort.signal)
+        // Ask git whether this is a work tree first: run bare, a non-repository
+        // answers with its whole usage text, which the panel then had to render.
+        const command = 'if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then '
+          + 'git --no-pager diff --stat -- . && git --no-pager diff -- .; '
+          + 'else echo "__DSCHAT_NO_REPO__"; fi'
+        return await sendTerminal(currentSessionId, opened.terminalId, command, abort.signal)
       }).then(setTerminal, (error: unknown) => {
         if (!abort.signal.aborted) setProjectListingError(error instanceof Error ? error.message : String(error))
       }).finally(() => { if (!abort.signal.aborted) setTerminalBusy(false) })

@@ -2025,3 +2025,107 @@
   line-height: var(--ds-chat-leading-normal);
   white-space: normal;
 }
+
+/* ===========================================================================
+ * Workbench.
+ *
+ * Diff used to share the terminal's panel — raw `git diff` output dumped into a
+ * <pre>, prompt echo and all — which is why it read as noise rather than as a
+ * patch. It now has its own view, and the file browser gained the two things a
+ * browser needs: a path you can walk back up, and line numbers.
+ * ======================================================================== */
+
+.diffWorkbench {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ds-chat-code-bg);
+}
+
+.diffView { min-height: 0; flex: 1; display: flex; flex-direction: column; }
+
+.diffSummary {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border-bottom: var(--ds-chat-hairline) solid var(--ds-chat-code-border);
+  color: var(--ds-chat-code-muted);
+  font-size: var(--ds-chat-text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.diffBody {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: var(--ds-chat-space-2) 0;
+  font: 12px/1.65 var(--ds-chat-font-mono);
+}
+
+.diffLine { display: grid; grid-template-columns: 22px minmax(0, 1fr); }
+.diffGutter { color: var(--ds-chat-code-muted); text-align: center; user-select: none; }
+.diffText { padding-right: var(--ds-chat-space-3); color: var(--ds-chat-code-fg); white-space: pre-wrap; word-break: break-word; }
+
+.diffLine[data-kind='add'] { background: rgb(46 160 67 / 16%); }
+.diffLine[data-kind='add'] .diffText { color: #7ee2a6; }
+.diffLine[data-kind='remove'] { background: rgb(248 81 73 / 14%); }
+.diffLine[data-kind='remove'] .diffText { color: #ff9d97; }
+.diffLine[data-kind='context'] .diffText { color: color-mix(in srgb, var(--ds-chat-code-fg) 72%, transparent); }
+
+.diffLine[data-kind='file'] {
+  margin-top: var(--ds-chat-space-3);
+  padding: 6px 0;
+  border-top: var(--ds-chat-hairline) solid var(--ds-chat-code-border);
+  background: rgb(255 255 255 / 4%);
+}
+
+.diffLine[data-kind='file'] .diffText { color: #cdd9e5; font-weight: var(--ds-chat-weight-semibold); }
+.diffLine[data-kind='hunk'] .diffText { color: #a5b3ff; }
+.diffLine[data-kind='meta'] .diffText { color: var(--ds-chat-code-muted); }
+
+/* A path you can walk back up. */
+.pathBar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  padding: var(--ds-chat-space-2) var(--ds-chat-space-3);
+  border-bottom: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  font-size: var(--ds-chat-text-caption);
+}
+
+.pathBar button {
+  border: 0;
+  border-radius: var(--ds-chat-radius-xs);
+  padding: 2px 5px;
+  color: var(--ds-chat-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pathBar button:hover { color: var(--ds-chat-text-color); background: var(--ds-chat-hover); }
+.pathBar b { color: var(--ds-chat-muted); font-weight: 400; }
+
+/* Line-numbered preview. */
+.filePreviewBody {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: var(--ds-chat-space-2) 0;
+  font: 12px/1.65 var(--ds-chat-font-mono);
+}
+
+.codeLine { display: grid; grid-template-columns: 46px minmax(0, 1fr); }
+.codeLine:hover { background: rgb(255 255 255 / 4%); }
+
+.codeLineNo {
+  padding-right: var(--ds-chat-space-2);
+  color: var(--ds-chat-code-muted);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.codeLineText { padding-right: var(--ds-chat-space-3); color: var(--ds-chat-code-fg); white-space: pre-wrap; word-break: break-word; }

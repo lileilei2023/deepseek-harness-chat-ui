@@ -214,3 +214,94 @@ body[data-ds-dark-theme] {
   --ds-chat-shadow-3: 0 16px 40px rgb(0 0 0 / 55%);
   --ds-chat-scrim: rgb(0 0 0 / 50%);
 }
+
+/*
+ * Avatar internals.
+ *
+ * Scoped to the portrait itself through the species attribute the generator
+ * stamps, so these plain names cannot leak into the rest of the document.
+ * Colours come from the three custom properties the generator sets per avatar.
+ */
+[data-avatar-species] svg { width: 92%; height: 92%; overflow: visible; }
+[data-avatar-species] .avatarEars {
+  fill: color-mix(in srgb, var(--avatar-main) 78%, var(--avatar-ink));
+  color: var(--avatar-ink);
+}
+[data-avatar-species] .avatarFace { fill: var(--avatar-main); }
+[data-avatar-species] .avatarInner { fill: color-mix(in srgb, var(--avatar-bg) 70%, var(--avatar-main)); }
+[data-avatar-species] .avatarPatch { fill: var(--avatar-ink); opacity: .42; }
+[data-avatar-species] .avatarInk { color: var(--avatar-ink); fill: var(--avatar-ink); }
+[data-avatar-species] .avatarEye { fill: var(--avatar-ink); color: var(--avatar-ink); }
+[data-avatar-species] .avatarGlint { fill: var(--avatar-bg); }
+[data-avatar-species] .avatarNose { fill: var(--avatar-ink); }
+[data-avatar-species] .avatarBeak { fill: #f0a63c; }
+[data-avatar-species] .avatarMuzzle {
+  fill: none;
+  stroke: var(--avatar-ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+[data-avatar-species] .avatarGear { fill: var(--avatar-ink); color: var(--avatar-ink); }
+
+/* ===========================================================================
+ * Conversation: make the transcript read as a chat.
+ *
+ * The shell lays every flow node out at the same level and the same weight, so
+ * a single question followed by twenty-two thinking steps and twenty-two tool
+ * calls renders as one bubble on top of forty-four rows of terminal log. The
+ * left column is a messaging app and the right column is a console; that seam
+ * is what makes the product feel like two different products.
+ *
+ * The agent's working steps are subordinate to the conversation, not peers of
+ * it. Here they are indented under a shared rail, quietened, and tightened, so
+ * a run of them reads as one block of working notes between two messages.
+ *
+ * These rules hook the shell's semantic `data-chat-flow-*` attributes rather
+ * than its CSS-module class names, which are content-hashed and change on
+ * every Harness build. The attributes are still the host's, so this styling is
+ * coupled to the Harness version the plugin targets; if a future version
+ * renames them, these rules stop applying and the transcript falls back to the
+ * shell's own presentation rather than breaking.
+ * ======================================================================== */
+
+[data-chat-flow-kind='assistant-step'],
+[data-chat-flow-kind='tool-call'] {
+  position: relative;
+  margin-left: 34px;
+  padding-left: var(--ds-chat-space-3);
+  border-left: 2px solid var(--ds-chat-accent-border);
+  background: var(--ds-chat-accent-soft);
+  font-size: var(--ds-chat-text-footnote);
+}
+
+/* A run of steps is one block, so the gaps inside it close up. */
+[data-chat-flow-kind='assistant-step'] + [data-chat-flow-kind='assistant-step'],
+[data-chat-flow-kind='assistant-step'] + [data-chat-flow-kind='tool-call'],
+[data-chat-flow-kind='tool-call'] + [data-chat-flow-kind='tool-call'],
+[data-chat-flow-kind='tool-call'] + [data-chat-flow-kind='assistant-step'] {
+  margin-top: 0;
+}
+
+/* Working notes sit behind the conversation until you look at them. */
+[data-chat-flow-kind='assistant-step'] > *,
+[data-chat-flow-kind='tool-call'] > * { opacity: .62; }
+
+[data-chat-flow-kind='assistant-step']:hover > *,
+[data-chat-flow-kind='tool-call']:hover > *,
+[data-chat-flow-kind='assistant-step']:focus-within > *,
+[data-chat-flow-kind='tool-call']:focus-within > * { opacity: 1; }
+
+/* The rail opens where a run starts, so the block has a visible top. */
+[data-chat-flow-kind='user'] + [data-chat-flow-kind='assistant-step'],
+[data-chat-flow-kind='user'] + [data-chat-flow-kind='tool-call'] {
+  margin-top: var(--ds-chat-space-2);
+  border-top-left-radius: var(--ds-chat-radius-sm);
+}
+
+/* The person's own turn keeps full weight and reads as a message. */
+[data-chat-flow-kind='user'] { margin-block: var(--ds-chat-space-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-chat-flow-kind='assistant-step'] > *,
+  [data-chat-flow-kind='tool-call'] > * { transition: none; }
+}

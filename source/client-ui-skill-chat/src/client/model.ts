@@ -1,6 +1,7 @@
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ChatBinding, ContactGroup, SkillContact } from './SkillContactsBrowser.tsx'
+import { AVATAR_LIBRARY } from './ui/avatar.tsx'
 
 export type RoomType = 'general' | 'direct' | 'group'
 
@@ -93,12 +94,9 @@ export const EMPTY_SKILL_CHAT_STATE: SkillChatState = {
   automations: [],
 }
 
-export const ANIMAL_AVATARS = [
-  'fox-coral', 'fox-mint', 'cat-cream', 'cat-lilac', 'bear-honey', 'bear-sky',
-  'rabbit-rose', 'rabbit-leaf', 'owl-plum', 'owl-sand', 'panda-moss', 'panda-peach',
-  'otter-ocean', 'otter-sun', 'deer-sage', 'deer-dawn', 'seal-ice', 'seal-berry',
-  'dog-cocoa', 'dog-blue', 'mouse-lemon', 'mouse-pink', 'tiger-apricot', 'tiger-jade',
-] as const
+// From the generator, so the picker and the portraits can never disagree
+// about what identities exist. 24 species × 16 palettes.
+export const ANIMAL_AVATARS = AVATAR_LIBRARY
 
 /**
  * The given-name pool. Sized against a real Skill directory rather than a demo
@@ -144,7 +142,7 @@ export function defaultPersona(contact: SkillContact, now = Date.now()): SkillPe
   return {
     skillId: contact.id,
     displayName: FRIENDLY_NAMES[hash % FRIENDLY_NAMES.length] ?? '小满',
-    avatarId: ANIMAL_AVATARS[(hash >>> 5) % ANIMAL_AVATARS.length] ?? 'fox-coral',
+    avatarId: ANIMAL_AVATARS[(hash >>> 5) % ANIMAL_AVATARS.length] ?? 'fox-0',
     originalName: contact.name,
     roleLabel: contact.source === 'harness' ? '项目内 AI 同事' : contact.source === 'workbuddy' ? 'WorkBuddy 专家' : '社区 Skill 专家',
     bio: contact.description,
@@ -182,8 +180,14 @@ export function ensurePersonas(
       changed = true
       continue
     }
+    // An avatar the user never chose is generated data, so it follows the
+    // library. Without this, personas minted against an older, smaller library
+    // keep its silhouettes forever and the new species are never seen. A
+    // customised avatar is the user's and is left alone.
+    const staleAvatar = current.customizedAvatar !== true && !ANIMAL_AVATARS.includes(current.avatarId)
     const refreshed = {
       ...current,
+      ...staleAvatar ? { avatarId: generated.avatarId } : {},
       ...current.customizedName ? {} : { displayName: generatedName },
       originalName: contact.name,
       bio: contact.description,

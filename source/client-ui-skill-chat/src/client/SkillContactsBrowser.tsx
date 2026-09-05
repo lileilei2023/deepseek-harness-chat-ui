@@ -9,7 +9,6 @@ import {
   IconFolderOpenOutline16,
   IconGlobeOutline14,
   IconNewChatOutline16,
-  Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
@@ -307,31 +306,35 @@ function useHeaderBridge(): HeaderBridgeValue | null {
 export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: SessionId }): React.JSX.Element | null {
   const bridge = useHeaderBridge()
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [workbenchOpen, setWorkbenchOpen] = useState(false)
   if (bridge === null || bridge.sessionId !== sessionId) return null
   const room = bridge.room
   const history = room.sessionIds.toReversed().flatMap(id => bridge.roomSessions.find(item => item.roomSessionId === id) ?? [])
-  const toolButton = (tool: ProjectToolKind, label: string, icon: React.JSX.Element): React.JSX.Element => (
-    <Tooltip label={label} side="bottom">
-      <IconButton className={css.headerIconButton} variant="ghost" aria-label={label} onClick={() => { bridge.onProjectTool(tool) }}>{icon}</IconButton>
-    </Tooltip>
-  )
+  // Files, terminal, diff and browser are a workbench, not chat actions. Four
+  // unlabelled glyphs competing with three text buttons made the room header
+  // read as a toolbar; behind one labelled entry they read as what they are.
+  const workbenchItems: readonly { readonly tool: ProjectToolKind, readonly label: string, readonly icon: React.JSX.Element }[] = [
+    { tool: 'files', label: '项目文件', icon: <IconFolderOpenOutline16/> },
+    { tool: 'terminal', label: '终端', icon: <IconCodeOutline16/> },
+    { tool: 'diff', label: '查看 Diff', icon: <IconBranchOutline16/> },
+    { tool: 'browser', label: '浏览器', icon: <IconGlobeOutline14/> },
+  ]
   return <div className={css.headerTools}>
     <span className={css.headerIdentity}>
       <AvatarStack className={css.headerAvatarStack} overlap={9}>{bridge.memberPersonas.slice(0, 4).map((member, index) => <span key={member.id} style={{ zIndex: 5 - index }}><Avatar avatarId={member.avatarId} label={member.name} size={30}/></span>)}</AvatarStack>
       <span className={css.headerIdentityCopy}><strong>{room.title}</strong><small>{room.type === 'group' ? `${room.memberIds.length} 名成员 · ${bridge.coordinatorName ?? '协调者'} 协调` : `${bridge.workspaceTitle} · 直接对话`}</small></span>
     </span>
       <span className={css.headerActionsCluster}>
-      {toolButton('files', '项目文件', <IconFolderOpenOutline16/>)}
-      {toolButton('terminal', '终端', <IconCodeOutline16/>)}
-      {toolButton('diff', '查看 Diff', <IconBranchOutline16/>)}
-      {toolButton('browser', '浏览器', <IconGlobeOutline14/>)}
-      <Tooltip label="临时对话" side="bottom"><IconButton className={css.headerIconButton} variant="ghost" aria-label="临时对话" onClick={bridge.onTemporaryChat}><IconNewChatOutline16/></IconButton></Tooltip>
+      <span className={css.headerMenuWrap}>
+        <button className={css.headerTextButton} type="button" aria-expanded={workbenchOpen} onClick={() => { setWorkbenchOpen(open => !open) }}>工作台</button>
+        {workbenchOpen ? <span className={css.headerMenu}>{workbenchItems.map(item => <button type="button" key={item.tool} onClick={() => { setWorkbenchOpen(false); bridge.onProjectTool(item.tool) }}>{item.icon}<span>{item.label}</span></button>)}<span className={css.headerMenuSep}/><button type="button" onClick={() => { setWorkbenchOpen(false); bridge.onTemporaryChat() }}><IconNewChatOutline16/><span>临时对话</span></button></span> : null}
+      </span>
         <span className={css.headerDivider}/>
         {bridge.headerActions}
         {room.type === 'group' ? <button className={css.headerTextButton} type="button" onClick={bridge.onSettings}>成员与职能</button> : null}
       <span className={css.headerMenuWrap}>
         <button className={css.headerTextButton} type="button" aria-expanded={historyOpen} onClick={() => { setHistoryOpen(open => !open) }}>历史 {history.length}</button>
-        {historyOpen ? <span className={css.headerHistoryMenu}>{history.map(item => <button type="button" data-active={item.harnessSessionId === sessionId} key={item.roomSessionId} onClick={() => { bridge.onHistory(item); setHistoryOpen(false) }}><span>{item.title}</span><small>{new Date(item.updatedAt).toLocaleString()}</small></button>)}</span> : null}
+        {historyOpen ? <span className={css.headerMenu}>{history.map(item => <button type="button" data-active={item.harnessSessionId === sessionId} key={item.roomSessionId} onClick={() => { bridge.onHistory(item); setHistoryOpen(false) }}><span>{item.title}</span><small>{new Date(item.updatedAt).toLocaleString()}</small></button>)}</span> : null}
       </span>
       <Button className={css.headerNewButton} variant="primary" size="small" onClick={bridge.onNewSession}>＋ 新对话</Button>
     </span>

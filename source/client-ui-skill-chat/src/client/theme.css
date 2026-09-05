@@ -247,61 +247,75 @@ body[data-ds-dark-theme] {
  * Conversation: make the transcript read as a chat.
  *
  * The shell lays every flow node out at the same level and the same weight, so
- * a single question followed by twenty-two thinking steps and twenty-two tool
- * calls renders as one bubble on top of forty-four rows of terminal log. The
- * left column is a messaging app and the right column is a console; that seam
- * is what makes the product feel like two different products.
+ * a running turn — one question followed by twenty-two thinking steps and
+ * twenty-two tool calls — renders as a single bubble on top of forty-four rows
+ * of terminal log. The left column is a messaging app and the right column is
+ * a console; that seam is what makes the product feel like two products.
  *
- * The agent's working steps are subordinate to the conversation, not peers of
- * it. Here they are indented under a shared rail, quietened, and tightened, so
- * a run of them reads as one block of working notes between two messages.
+ * The treatment goes on the *disclosure row*, not on the flow node. A single
+ * `assistant-step` node carries both the collapsed 思考 row and the answer
+ * markdown as siblings, so dimming the node dims the reply itself — which is
+ * the one thing the conversation exists to show.
  *
- * These rules hook the shell's semantic `data-chat-flow-*` attributes rather
- * than its CSS-module class names, which are content-hashed and change on
- * every Harness build. The attributes are still the host's, so this styling is
- * coupled to the Harness version the plugin targets; if a future version
- * renames them, these rules stop applying and the transcript falls back to the
- * shell's own presentation rather than breaking.
+ * The shell already folds a finished turn into one 已思考 summary on its own
+ * (`foldable` in ui-chat), so this only shapes the in-progress state and any
+ * turn the reader has expanded.
+ *
+ * The hooks are the shell's semantic `data-*` attributes rather than its
+ * content-hashed CSS-module class names, which change on every Harness build.
+ * They are still the host's, so this is coupled to the targeted Harness
+ * version; if a later version renames them the rules simply stop matching and
+ * the transcript falls back to the shell's own presentation.
  * ======================================================================== */
 
-[data-chat-flow-kind='assistant-step'],
-[data-chat-flow-kind='tool-call'] {
-  position: relative;
-  margin-left: 34px;
+/* Working notes: indented under a shared rail, quieter, and tight, so a run of
+ * them reads as one block between two messages. */
+[data-chat-flow-kind='assistant-step'] [data-disclosure-row],
+[data-chat-flow-kind='tool-call'] [data-disclosure-row] {
+  margin-left: 26px;
   padding-left: var(--ds-chat-space-3);
   border-left: 2px solid var(--ds-chat-accent-border);
   background: var(--ds-chat-accent-soft);
   font-size: var(--ds-chat-text-footnote);
+  opacity: .66;
+  transition: opacity var(--ds-chat-duration-fast) var(--ds-chat-ease);
 }
+
+[data-chat-flow-kind='assistant-step'] [data-disclosure-row]:hover,
+[data-chat-flow-kind='tool-call'] [data-disclosure-row]:hover,
+[data-chat-flow-kind='assistant-step'] [data-disclosure-row]:focus-visible,
+[data-chat-flow-kind='tool-call'] [data-disclosure-row]:focus-visible { opacity: 1; }
 
 /* A run of steps is one block, so the gaps inside it close up. */
 [data-chat-flow-kind='assistant-step'] + [data-chat-flow-kind='assistant-step'],
 [data-chat-flow-kind='assistant-step'] + [data-chat-flow-kind='tool-call'],
 [data-chat-flow-kind='tool-call'] + [data-chat-flow-kind='tool-call'],
-[data-chat-flow-kind='tool-call'] + [data-chat-flow-kind='assistant-step'] {
-  margin-top: 0;
-}
+[data-chat-flow-kind='tool-call'] + [data-chat-flow-kind='assistant-step'] { margin-top: 0; }
 
-/* Working notes sit behind the conversation until you look at them. */
-[data-chat-flow-kind='assistant-step'] > *,
-[data-chat-flow-kind='tool-call'] > * { opacity: .62; }
+/* The reply keeps full weight and sits clear of the rail above it. */
+[data-chat-flow-kind='assistant-step'] [class*='markdown'] { margin-top: var(--ds-chat-space-2); }
 
-[data-chat-flow-kind='assistant-step']:hover > *,
-[data-chat-flow-kind='tool-call']:hover > *,
-[data-chat-flow-kind='assistant-step']:focus-within > *,
-[data-chat-flow-kind='tool-call']:focus-within > * { opacity: 1; }
-
-/* The rail opens where a run starts, so the block has a visible top. */
-[data-chat-flow-kind='user'] + [data-chat-flow-kind='assistant-step'],
-[data-chat-flow-kind='user'] + [data-chat-flow-kind='tool-call'] {
-  margin-top: var(--ds-chat-space-2);
-  border-top-left-radius: var(--ds-chat-radius-sm);
-}
-
-/* The person's own turn keeps full weight and reads as a message. */
+/* The person's own turn reads as a message. */
 [data-chat-flow-kind='user'] { margin-block: var(--ds-chat-space-3); }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-chat-flow-kind='assistant-step'] > *,
-  [data-chat-flow-kind='tool-call'] > * { transition: none; }
+  [data-chat-flow-kind='assistant-step'] [data-disclosure-row],
+  [data-chat-flow-kind='tool-call'] [data-disclosure-row] { transition: none; }
+}
+
+/*
+ * The shell's settings row sits on a 10 / 270 gutter while its 新会话 button —
+ * the column's most prominent element, and the one the eye reads the edge
+ * from — sits on 14 / 266. The plugin's own rows are aligned to 新会话; this
+ * brings the one remaining outlier onto the same line so the column has a
+ * single edge instead of three.
+ *
+ * Targeted through the shell's stable `data-slot` name rather than its hashed
+ * class, and it only adjusts padding: if a future Harness version changes the
+ * footer, the rule stops matching and the row keeps the shell's own spacing.
+ */
+[data-slot='sidebar.settings'] button {
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin-inline: 4px;
 }

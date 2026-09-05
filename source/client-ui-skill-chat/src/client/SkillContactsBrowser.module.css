@@ -1973,3 +1973,42 @@
 .searchWrap { padding-bottom: var(--ds-chat-space-2); }
 .subtabs { padding-bottom: var(--ds-chat-space-2); }
 .modeBar { margin-bottom: var(--ds-chat-space-2); }
+
+/* Room-header menus. The workbench and the history list share one popover
+ * shape so the header reads as two menus plus one primary action, rather than
+ * eight peer controls. */
+.headerMenu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 184px;
+  display: grid;
+  gap: 2px;
+  padding: var(--ds-chat-space-1);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-md);
+  background: var(--ds-chat-surface);
+  box-shadow: var(--ds-chat-shadow-3);
+}
+
+.headerMenu button {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-chat-space-2);
+  padding: 7px var(--ds-chat-space-2);
+  border: 0;
+  border-radius: var(--ds-chat-radius-sm);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-chat-text-body);
+  white-space: nowrap;
+}
+
+.headerMenu button:hover { background: var(--ds-chat-hover); }
+.headerMenu button[data-active='true'] { color: var(--ds-chat-accent-text); background: var(--ds-chat-accent-soft); }
+.headerMenu small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); font-variant-numeric: tabular-nums; }
+.headerMenuSep { height: var(--ds-chat-hairline); margin: var(--ds-chat-space-1) 0; background: var(--ds-chat-border); }

@@ -75,6 +75,7 @@ export const BUILTIN_SKINS: readonly DSChatSkinPackage[] = [{
     description: '参考 Discord 的社群聊天观感：无论系统明暗都保持深色底，强调色为蓝紫，圆角更大、层级靠明度而非描边。',
     tags: ['builtin', 'dark', 'community'],
     accent: '#5865f2',
+    preview: { light: '#2b2d31', dark: '#2b2d31' },
     order: 20,
     contributes: { stylesheet: 'skin.css' },
   },

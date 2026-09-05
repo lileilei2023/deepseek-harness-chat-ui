@@ -9287,6 +9287,10 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 						"community"
 					],
 					accent: "#5865f2",
+					preview: {
+						light: "#2b2d31",
+						dark: "#2b2d31"
+					},
 					order: 20,
 					contributes: { stylesheet: "skin.css" }
 				},
@@ -9570,7 +9574,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		}
 		//#endregion
 		//#region \0dsh-css:/Users/lileilei/workspace/deepseek-harness/packages/experimental/client-ui-skill-chat/src/client/skin/SkinCenter.module.css.mjs
-		const css = ".J1eEvW_trigger{justify-content:flex-start;width:calc(100% - 24px);margin:0 12px 10px}.J1eEvW_panel{padding:18px}.J1eEvW_header{justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;display:flex}.J1eEvW_header span{gap:3px;display:grid}.J1eEvW_header strong{font-size:var(--ds-chat-text-title2)}.J1eEvW_header small{color:var(--ds-chat-muted);font-size:var(--ds-chat-text-caption);line-height:1.45}.J1eEvW_grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;display:grid}.J1eEvW_card{border:var(--ds-chat-hairline) solid var(--ds-chat-border);border-radius:var(--ds-chat-radius-lg);min-width:0;color:inherit;background:var(--ds-chat-surface-raised,var(--ds-chat-surface));box-shadow:var(--ds-chat-shadow-1);text-align:left;cursor:pointer;font:inherit;gap:10px;padding:12px;display:grid}.J1eEvW_card[data-active=true]{border-color:var(--ds-chat-accent-border);box-shadow:0 10px 25px color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent)}.J1eEvW_preview{background:color-mix(in srgb, var(--skin-accent) 8%, var(--ds-chat-fill-quaternary));border-radius:13px;grid-template-columns:32% 1fr;gap:8px;height:112px;padding:9px;display:grid;overflow:hidden}.J1eEvW_preview aside{background:color-mix(in srgb, var(--skin-accent) 16%, var(--ds-chat-surface));border-radius:9px}.J1eEvW_preview main{align-content:center;gap:7px;display:grid}.J1eEvW_preview i{background:color-mix(in srgb, var(--skin-accent) 22%, var(--ds-chat-surface));border-radius:999px;height:12px;display:block}.J1eEvW_preview i:nth-child(2){width:74%}.J1eEvW_preview i:nth-child(3){background:var(--skin-accent);width:52%}.J1eEvW_copy{gap:3px;display:grid}.J1eEvW_copy strong{font-size:var(--ds-chat-text-body)}.J1eEvW_copy small{color:var(--ds-chat-muted);font-size:var(--ds-chat-text-caption);line-height:1.45}.J1eEvW_footer{justify-content:space-between;align-items:center;gap:12px;margin-top:16px;display:flex}.J1eEvW_diagnostic{color:var(--ds-chat-warning);font-size:var(--ds-chat-text-caption)}@media (width<=620px){.J1eEvW_grid{grid-template-columns:1fr}}";
+		const css = ".J1eEvW_trigger{justify-content:flex-start;width:calc(100% - 24px);margin:0 12px 10px}.J1eEvW_panel{padding:18px}.J1eEvW_header{justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:16px;display:flex}.J1eEvW_header span{gap:3px;display:grid}.J1eEvW_header strong{font-size:var(--ds-chat-text-title2)}.J1eEvW_header small{color:var(--ds-chat-muted);font-size:var(--ds-chat-text-caption);line-height:1.45}.J1eEvW_grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;display:grid}.J1eEvW_card{border:var(--ds-chat-hairline) solid var(--ds-chat-border);border-radius:var(--ds-chat-radius-lg);min-width:0;color:inherit;background:var(--ds-chat-surface-raised,var(--ds-chat-surface));box-shadow:var(--ds-chat-shadow-1);text-align:left;cursor:pointer;font:inherit;gap:10px;padding:12px;display:grid}.J1eEvW_card[data-active=true]{border-color:var(--ds-chat-accent-border);box-shadow:0 10px 25px color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent)}.J1eEvW_preview{background:color-mix(in srgb, var(--skin-accent) 8%, var(--skin-ground,var(--ds-chat-fill-quaternary)));border-radius:13px;grid-template-columns:32% 1fr;gap:8px;height:112px;padding:9px;display:grid;overflow:hidden}.J1eEvW_preview aside{background:color-mix(in srgb, var(--skin-accent) 16%, var(--skin-ground,var(--ds-chat-surface)));border-radius:9px}.J1eEvW_preview main{align-content:center;gap:7px;display:grid}.J1eEvW_preview i{background:color-mix(in srgb, var(--skin-accent) 22%, var(--skin-ground,var(--ds-chat-surface)));border-radius:999px;height:12px;display:block}.J1eEvW_preview i:nth-child(2){width:74%}.J1eEvW_preview i:nth-child(3){background:var(--skin-accent);width:52%}.J1eEvW_copy{gap:3px;display:grid}.J1eEvW_copy strong{font-size:var(--ds-chat-text-body)}.J1eEvW_copy small{color:var(--ds-chat-muted);font-size:var(--ds-chat-text-caption);line-height:1.45}.J1eEvW_footer{justify-content:space-between;align-items:center;gap:12px;margin-top:16px;display:flex}.J1eEvW_diagnostic{color:var(--ds-chat-warning);font-size:var(--ds-chat-text-caption)}@media (width<=620px){.J1eEvW_grid{grid-template-columns:1fr}}.J1eEvW_preview[data-grounded]{background:var(--skin-ground)}.J1eEvW_preview[data-grounded] aside{background:color-mix(in srgb, #fff 10%, var(--skin-ground))}.J1eEvW_preview[data-grounded] i{background:color-mix(in srgb, #fff 22%, var(--skin-ground))}.J1eEvW_preview[data-grounded] i:nth-child(3){background:var(--skin-accent)}";
 		const tagId = "deepseek-harness-chat-ui/SkinCenter.module.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId) + "]") === null) {
 			const tag = document.createElement("style");
@@ -9642,10 +9646,14 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 							onClick: () => {
 								skinRuntime.apply(skin.manifest.id);
 							},
-							style: { "--skin-accent": skin.manifest.accent },
+							style: {
+								"--skin-accent": skin.manifest.accent,
+								...skin.manifest.preview?.light === void 0 ? {} : { "--skin-ground": skin.manifest.preview.light }
+							},
 							children: [(0, react_jsx_runtime.jsxs)(Surface, {
 								level: "sunken",
 								className: SkinCenter_module_css_default.preview,
+								"data-grounded": skin.manifest.preview?.light === void 0 ? void 0 : true,
 								children: [(0, react_jsx_runtime.jsx)("aside", {}), (0, react_jsx_runtime.jsxs)("main", { children: [
 									(0, react_jsx_runtime.jsx)("i", {}),
 									(0, react_jsx_runtime.jsx)("i", {}),

@@ -10,9 +10,9 @@ This is **not another ChatGPT-style single-assistant shell**. DS Chat treats eve
 
 ![Personified Skills social collaboration demo](docs/media/deepseek-harness-chat-ui-demo.gif)
 
-The live demo shows a real group consultation: inspect the group's members and system role, ask three personified Skills to contribute, receive a coordinated answer, switch to another group, and return without losing the conversation. The embedded GIF runs at 15 FPS for smoother playback.
+The demo walks the room list, opens a Skill group, inspects its members and system role, switches rooms and returns with the conversation intact, then scrolls the contact directory — several hundred Skills, each with its own generated identity.
 
-[Watch the full 48-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
+[Watch the 26-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI main screen](docs/images/deepseek-harness-chat-ui-main.png)
 
@@ -29,8 +29,6 @@ DeepSeek Harness provides a powerful agent runtime, but its default interface is
 - **Skin support** allows declarative visual themes without touching Room or automation data.
 
 ## Screenshots
-
-> The images below predate the interface rework in [`docs/UI设计评审与优化方案.md`](docs/UI设计评审与优化方案.md) — the avatars, the sidebar layout and the room header have all changed since. They have not been retaken because a screenshot of a running instance captures whatever conversation is on screen.
 
 ### Create a group with personified Skills
 

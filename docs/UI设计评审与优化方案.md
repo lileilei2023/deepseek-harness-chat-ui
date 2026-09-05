@@ -392,3 +392,15 @@ processHidden = controllerInactive || foldable && processMember && !processOpen
 
 - 房间头部的身份区（头像堆叠 + 标题 + 成员行）在当前布局下未显示，未追查原因。
 - 「夜航」皮肤映射宿主别名的做法耦合宿主令牌命名；失效时会退化为「深色侧栏 + 浅色会话区」，比整体失效更难察觉。
+
+### 12.7 房间头部身份区（本轮补完）
+
+原实现里 `.headerIdentity { display: none; }` —— 身份区被显式隐藏，因为 `.headerTools` 是右上角的**浮动药丸**（绝对定位、`width: max-content`），装不下头像堆叠与成员行。
+
+宿主开放了 `conversation.session.header.lineage`（`kind: 'single'`, `scope: 'session'`），随会话标题一同渲染。把身份区拆成独立组件注册到该槽：
+
+- 该槽已被另一注册方以 priority 0 占用，**single 槽渲染 priority 最低者**，因此以 `priority: -10` 遮蔽。首次注册未设 priority 直接导致插件加载失败（`Failed to load plugins`），错误信息本身给出了解法。
+- 该槽的 owner props 是 `lineageSessionId` / `displayTitle`，不是 `sessionId`。
+- 第一版把标题也渲染进去，结果**标题出现两次**——宿主在这个分支里自己已经渲染标题。改为只渲染标题说不出的部分：成员面孔与成员行。
+
+最终头部：`群名 · [4 张成员头像] · 15 名成员 · 滴滴2 协调 · 极简模式`。

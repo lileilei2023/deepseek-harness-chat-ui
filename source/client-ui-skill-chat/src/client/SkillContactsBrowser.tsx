@@ -303,6 +303,35 @@ function useHeaderBridge(): HeaderBridgeValue | null {
   )
 }
 
+/**
+ * Who this room is, for the conversation header.
+ *
+ * Registered on the shell's `conversation.session.header.lineage` slot, which
+ * the shell renders in place of the plain text title. A chat client answers
+ * "who am I talking to" at the top of the room — the members' faces and how
+ * many there are — and the plugin already knows all of it.
+ * @param props - the session being displayed.
+ * @returns the identity block, or null when this session is not a DS Chat room.
+ */
+export function SkillChatHeaderIdentity({ lineageSessionId }: {
+  readonly lineageSessionId: SessionId
+  readonly displayTitle: string
+}): React.JSX.Element | null {
+  const bridge = useHeaderBridge()
+  const room = bridge !== null && bridge.sessionId === lineageSessionId ? bridge.room : undefined
+  // The shell renders its own title next to this slot, so restating it here
+  // printed the room's name twice. What the title cannot say is who is in the
+  // room — that is this block's only job.
+  if (bridge === null || room === undefined) return null
+  const detail = room.type === 'group'
+    ? `${room.memberIds.length} 名成员 · ${bridge.coordinatorName ?? '协调者'} 协调`
+    : `${bridge.workspaceTitle} · 直接对话`
+  return <span className={css.headerIdentity}>
+    <AvatarStack className={css.headerAvatarStack} overlap={9}>{bridge.memberPersonas.slice(0, 4).map((member, index) => <span key={member.id} style={{ zIndex: 5 - index }}><Avatar avatarId={member.avatarId} label={member.name} seed={member.id} size={26}/></span>)}</AvatarStack>
+    <span className={css.headerIdentityCopy}><small>{detail}</small></span>
+  </span>
+}
+
 export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: SessionId }): React.JSX.Element | null {
   const bridge = useHeaderBridge()
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -320,10 +349,6 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
     { tool: 'browser', label: '浏览器', icon: <IconGlobeOutline14/> },
   ]
   return <div className={css.headerTools}>
-    <span className={css.headerIdentity}>
-      <AvatarStack className={css.headerAvatarStack} overlap={9}>{bridge.memberPersonas.slice(0, 4).map((member, index) => <span key={member.id} style={{ zIndex: 5 - index }}><Avatar avatarId={member.avatarId} label={member.name} size={30}/></span>)}</AvatarStack>
-      <span className={css.headerIdentityCopy}><strong>{room.title}</strong><small>{room.type === 'group' ? `${room.memberIds.length} 名成员 · ${bridge.coordinatorName ?? '协调者'} 协调` : `${bridge.workspaceTitle} · 直接对话`}</small></span>
-    </span>
       <span className={css.headerActionsCluster}>
       <span className={css.headerMenuWrap}>
         <button className={css.headerTextButton} type="button" aria-expanded={workbenchOpen} onClick={() => { setWorkbenchOpen(open => !open) }}>工作台</button>

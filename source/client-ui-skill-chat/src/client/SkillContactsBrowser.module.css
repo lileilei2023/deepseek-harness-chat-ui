@@ -941,7 +941,9 @@
 
 .headerIdentity,
 .headerActionsCluster { display: flex; align-items: center; min-width: 0; }
-.headerIdentity { display: none; }
+.headerIdentity { gap: var(--ds-chat-space-2); align-items: center; }
+.headerIdentity .animalAvatar,
+.headerAvatarStack span > span { box-shadow: 0 0 0 2px var(--ds-chat-surface); }
 .headerActionsCluster { gap: 6px; flex: 0 0 auto; }
 .headerAvatarStack { min-width: 42px; display: flex; align-items: center; padding-left: 3px; }
 .headerAvatarStack > span { display: inline-flex; margin-left: -8px; }
@@ -1089,7 +1091,9 @@
 @media (max-width: 1120px) {
   .headerRoomMeta { display: none; }
   .headerTools { max-width: calc(100% - 140px); gap: 3px; }
-  .headerIdentity { display: none; }
+  .headerIdentity { gap: var(--ds-chat-space-2); align-items: center; }
+.headerIdentity .animalAvatar,
+.headerAvatarStack span > span { box-shadow: 0 0 0 2px var(--ds-chat-surface); }
   .headerDivider:first-of-type { display: none; }
   .headerTextButton { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

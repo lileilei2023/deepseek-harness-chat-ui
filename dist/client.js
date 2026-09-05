@@ -4,6 +4,18 @@ window.__ModuleLoader__.load({
 		var module = { exports: {} };
 		var exports = module.exports;
 		Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
+		//#region \0rolldown/runtime.js
+		var __defProp = Object.defineProperty;
+		var __exportAll = (all, no_symbols) => {
+			let target = {};
+			for (var name in all) __defProp(target, name, {
+				get: all[name],
+				enumerable: true
+			});
+			if (!no_symbols) __defProp(target, Symbol.toStringTag, { value: "Module" });
+			return target;
+		};
+		//#endregion
 		let react_jsx_runtime = require("react/jsx-runtime");
 		let react = require("react");
 		let _deepseek_ai_dsh_client_ui_primitives = require("@deepseek-ai/dsh-client-ui-primitives");
@@ -208,7 +220,7 @@ window.__ModuleLoader__.load({
 			float32: [-34028234663852886e22, 34028234663852886e22],
 			float64: [-Number.MAX_VALUE, Number.MAX_VALUE]
 		};
-		function pick$1(schema, mask) {
+		function pick(schema, mask) {
 			const currDef = schema._zod.def;
 			const checks = currDef.checks;
 			if (checks && checks.length > 0) throw new Error(".pick() cannot be used on object schemas containing refinements");
@@ -271,7 +283,7 @@ window.__ModuleLoader__.load({
 				return _shape;
 			} }));
 		}
-		function merge(a, b) {
+		function merge$1(a, b) {
 			if (a._zod.def.checks?.length) throw new Error(".merge() cannot be used on object schemas containing refinements. Use .safeExtend() instead.");
 			return clone(a, mergeDefs(a._zod.def, {
 				get shape() {
@@ -3951,10 +3963,10 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					return safeExtend(this, incoming);
 				},
 				merge(other) {
-					return merge(this, other);
+					return merge$1(this, other);
 				},
 				pick(mask) {
-					return pick$1(this, mask);
+					return pick(this, mask);
 				},
 				omit(mask) {
 					return omit(this, mask);
@@ -5112,119 +5124,1132 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 		}
 		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/utils/escape.js
+		function xml$1(content) {
+			return content.replace(/&/g, "&amp;").replace(/'/g, "&apos;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/utils/license.js
+		function xml(style) {
+			var _a, _b, _c, _d, _e, _f, _g;
+			const title = (_a = style.meta) === null || _a === void 0 ? void 0 : _a.title;
+			const creator = (_b = style.meta) === null || _b === void 0 ? void 0 : _b.creator;
+			const source = (_c = style.meta) === null || _c === void 0 ? void 0 : _c.source;
+			const license = (_e = (_d = style.meta) === null || _d === void 0 ? void 0 : _d.license) === null || _e === void 0 ? void 0 : _e.url;
+			const rights = text(style);
+			if (!title && !creator && !source && !license && !rights) return "";
+			return "<metadata xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\"><rdf:RDF><rdf:Description>" + (title ? `<dc:title>${xml$1(title)}</dc:title>` : "") + (creator ? `<dc:creator>${xml$1(creator)}</dc:creator>` : "") + (source ? `<dc:source xsi:type="dcterms:URI">${xml$1((_g = (_f = style.meta) === null || _f === void 0 ? void 0 : _f.source) !== null && _g !== void 0 ? _g : "")}</dc:source>` : "") + (license ? `<dcterms:license xsi:type="dcterms:URI">${xml$1(license)}</dcterms:license>` : "") + (rights ? `<dc:rights>${xml$1(rights)}</dc:rights>` : "") + "</rdf:Description></rdf:RDF></metadata>";
+		}
+		function text(style) {
+			var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
+			let title = ((_a = style.meta) === null || _a === void 0 ? void 0 : _a.title) ? `„${(_b = style.meta) === null || _b === void 0 ? void 0 : _b.title}”` : "Design";
+			let creator = `„${(_d = (_c = style.meta) === null || _c === void 0 ? void 0 : _c.creator) !== null && _d !== void 0 ? _d : "Unknown"}”`;
+			if ((_e = style.meta) === null || _e === void 0 ? void 0 : _e.source) title += ` (${style.meta.source})`;
+			let result = "";
+			if (((_g = (_f = style.meta) === null || _f === void 0 ? void 0 : _f.license) === null || _g === void 0 ? void 0 : _g.name) !== "MIT" && ((_h = style.meta) === null || _h === void 0 ? void 0 : _h.creator) !== "DiceBear" && ((_j = style.meta) === null || _j === void 0 ? void 0 : _j.title)) result += "Remix of ";
+			result += `${title} by ${creator}`;
+			if ((_l = (_k = style.meta) === null || _k === void 0 ? void 0 : _k.license) === null || _l === void 0 ? void 0 : _l.name) {
+				result += `, licensed under „${(_o = (_m = style.meta) === null || _m === void 0 ? void 0 : _m.license) === null || _o === void 0 ? void 0 : _o.name}”`;
+				if ((_q = (_p = style.meta) === null || _p === void 0 ? void 0 : _p.license) === null || _q === void 0 ? void 0 : _q.url) result += ` (${style.meta.license.url})`;
+			}
+			return result;
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/utils/prng.js
+		const MIN = -2147483648;
+		const MAX = 2147483647;
+		const MAX_SEED_LENGTH = 1024;
+		function xorshift(value) {
+			value ^= value << 13;
+			value ^= value >> 17;
+			value ^= value << 5;
+			return value;
+		}
+		function hashSeed(seed) {
+			let hash = 0;
+			for (let i = 0; i < seed.length; i++) {
+				hash = (hash << 5) - hash + seed.charCodeAt(i) | 0;
+				hash = xorshift(hash);
+			}
+			return hash;
+		}
+		function create$1(seed = "") {
+			seed = seed.toString().slice(0, MAX_SEED_LENGTH);
+			let value = hashSeed(seed) || 1;
+			const next = () => value = xorshift(value);
+			const integer = (min, max) => {
+				return Math.floor((next() - MIN) / (MAX - MIN) * (max + 1 - min) + min);
+			};
+			return {
+				seed,
+				next,
+				bool(likelihood = 50) {
+					return integer(1, 100) <= likelihood;
+				},
+				integer(min, max) {
+					return integer(min, max);
+				},
+				pick(arr, fallback) {
+					var _a;
+					if (arr.length === 0) {
+						next();
+						return fallback;
+					}
+					return (_a = arr[integer(0, arr.length - 1)]) !== null && _a !== void 0 ? _a : fallback;
+				},
+				shuffle(arr) {
+					const internalPrng = create$1(next().toString());
+					const workingArray = [...arr];
+					for (let i = workingArray.length - 1; i > 0; i--) {
+						const j = internalPrng.integer(0, i);
+						[workingArray[i], workingArray[j]] = [workingArray[j], workingArray[i]];
+					}
+					return workingArray;
+				},
+				string(length, characters = "abcdefghijklmnopqrstuvwxyz1234567890") {
+					const internalPrng = create$1(next().toString());
+					let str = "";
+					for (let i = 0; i < length; i++) str += characters[internalPrng.integer(0, characters.length - 1)];
+					return str;
+				}
+			};
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/utils/svg.js
+		function getViewBox(result) {
+			let viewBox = result.attributes["viewBox"].split(" ");
+			return {
+				x: parseInt(viewBox[0]),
+				y: parseInt(viewBox[1]),
+				width: parseInt(viewBox[2]),
+				height: parseInt(viewBox[3])
+			};
+		}
+		function addBackground(result, primaryColor, secondaryColor, type, rotation) {
+			let { width, height, x, y } = getViewBox(result);
+			const solidBackground = `<rect fill="${xml$1(primaryColor)}" width="${width}" height="${height}" x="${x}" y="${y}" />`;
+			switch (type) {
+				case "solid": return solidBackground + result.body;
+				case "gradientLinear": return `<rect fill="url(#backgroundLinear)" width="${width}" height="${height}" x="${x}" y="${y}" /><defs><linearGradient id="backgroundLinear" gradientTransform="rotate(${rotation} 0.5 0.5)"><stop stop-color="${xml$1(primaryColor)}"/><stop offset="1" stop-color="${xml$1(secondaryColor)}"/></linearGradient></defs>` + result.body;
+			}
+		}
+		function addScale(result, scale) {
+			let { width, height, x, y } = getViewBox(result);
+			let percent = scale ? (scale - 100) / 100 : 0;
+			return `<g transform="translate(${(width / 2 + x) * percent * -1} ${(height / 2 + y) * percent * -1}) scale(${scale / 100})">${result.body}</g>`;
+		}
+		function addTranslate(result, x, y) {
+			let viewBox = getViewBox(result);
+			return `<g transform="translate(${(viewBox.width + viewBox.x * 2) * ((x !== null && x !== void 0 ? x : 0) / 100)} ${(viewBox.height + viewBox.y * 2) * ((y !== null && y !== void 0 ? y : 0) / 100)})">${result.body}</g>`;
+		}
+		function addRotate(result, rotate) {
+			let { width, height, x, y } = getViewBox(result);
+			return `<g transform="rotate(${xml$1(`${rotate}`)}, ${width / 2 + x}, ${height / 2 + y})">${result.body}</g>`;
+		}
+		function addFlip(result) {
+			let { width, x } = getViewBox(result);
+			return `<g transform="scale(-1 1) translate(${width * -1 - x * 2} 0)">${result.body}</g>`;
+		}
+		function addViewboxMask(result, radius) {
+			let { width, height, x, y } = getViewBox(result);
+			return `<mask id="viewboxMask"><rect width="${width}" height="${height}" rx="${radius ? width * radius / 100 : 0}" ry="${radius ? height * radius / 100 : 0}" x="${x}" y="${y}" fill="#fff" /></mask><g mask="url(#viewboxMask)">${result.body}</g>`;
+		}
+		function createAttrString(result) {
+			const attributes = {
+				xmlns: "http://www.w3.org/2000/svg",
+				...result.attributes
+			};
+			return Object.keys(attributes).map((attr) => `${xml$1(attr)}="${xml$1(attributes[attr])}"`).join(" ");
+		}
+		function randomizeIds(result) {
+			const prng = create$1(Math.random().toString());
+			const ids = {};
+			return result.body.replace(/(id="|url\(#)([a-z0-9-_]+)([")])/gi, (match, m1, m2, m3) => {
+				ids[m2] = ids[m2] || prng.string(8);
+				return `${m1}${ids[m2]}${m3}`;
+			});
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/schema.js
+		const schema$1 = {
+			type: "object",
+			$schema: "http://json-schema.org/draft-07/schema#",
+			properties: {
+				seed: { type: "string" },
+				flip: {
+					type: "boolean",
+					default: false
+				},
+				rotate: {
+					type: "integer",
+					minimum: 0,
+					maximum: 360,
+					default: 0
+				},
+				scale: {
+					type: "integer",
+					minimum: 0,
+					maximum: 200,
+					default: 100
+				},
+				radius: {
+					type: "integer",
+					minimum: 0,
+					maximum: 50,
+					default: 0
+				},
+				size: {
+					type: "integer",
+					minimum: 1
+				},
+				backgroundColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					}
+				},
+				backgroundType: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: ["solid", "gradientLinear"]
+					},
+					default: ["solid"]
+				},
+				backgroundRotation: {
+					type: "array",
+					items: {
+						type: "integer",
+						minimum: -360,
+						maximum: 360
+					},
+					default: [0, 360]
+				},
+				translateX: {
+					type: "integer",
+					minimum: -100,
+					maximum: 100,
+					default: 0
+				},
+				translateY: {
+					type: "integer",
+					minimum: -100,
+					maximum: 100,
+					default: 0
+				},
+				clip: {
+					type: "boolean",
+					default: true
+				},
+				randomizeIds: {
+					type: "boolean",
+					default: false
+				}
+			}
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/utils/options.js
+		function defaults(schema) {
+			var _a;
+			let result = {};
+			let props = (_a = schema.properties) !== null && _a !== void 0 ? _a : {};
+			Object.keys(props).forEach((key) => {
+				let val = props[key];
+				if (typeof val === "object" && void 0 !== val.default) if (Array.isArray(val.default)) result[key] = [...val.default];
+				else if (typeof val.default === "object") result[key] = { ...val.default };
+				else result[key] = val.default;
+			});
+			return result;
+		}
+		function merge(style, options) {
+			var _a;
+			let result = {
+				...defaults(schema$1),
+				...defaults((_a = style.schema) !== null && _a !== void 0 ? _a : {}),
+				...options
+			};
+			return JSON.parse(JSON.stringify(result));
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/utils/color.js
+		function convertColor$1(color) {
+			return "transparent" === color ? color : `#${color}`;
+		}
+		function getBackgroundColors(prng, backgroundColor, backgroundType) {
+			var _a;
+			let shuffledBackgroundColors = prng.shuffle(backgroundColor);
+			if (shuffledBackgroundColors.length <= 1) {
+				shuffledBackgroundColors = backgroundColor;
+				prng.next();
+			} else if (backgroundColor.length == 2 && backgroundType == "gradientLinear") {
+				shuffledBackgroundColors = backgroundColor;
+				prng.next();
+			} else shuffledBackgroundColors = prng.shuffle(backgroundColor);
+			if (shuffledBackgroundColors.length === 0) shuffledBackgroundColors = ["transparent"];
+			const primary = shuffledBackgroundColors[0];
+			const secondary = (_a = shuffledBackgroundColors[1]) !== null && _a !== void 0 ? _a : shuffledBackgroundColors[0];
+			return {
+				primary: convertColor$1(primary),
+				secondary: convertColor$1(secondary)
+			};
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+core@9.4.3/node_modules/@dicebear/core/lib/core.js
+		function createAvatar(style, options = {}) {
+			var _a, _b, _c, _d, _e;
+			options = merge(style, options);
+			const prng = create$1(options.seed);
+			const result = style.create({
+				prng,
+				options
+			});
+			const backgroundType = prng.pick((_a = options.backgroundType) !== null && _a !== void 0 ? _a : [], "solid");
+			const { primary: primaryBackgroundColor, secondary: secondaryBackgroundColor } = getBackgroundColors(prng, (_b = options.backgroundColor) !== null && _b !== void 0 ? _b : [], backgroundType);
+			const backgroundRotation = prng.integer(((_c = options.backgroundRotation) === null || _c === void 0 ? void 0 : _c.length) ? Math.min(...options.backgroundRotation) : 0, ((_d = options.backgroundRotation) === null || _d === void 0 ? void 0 : _d.length) ? Math.max(...options.backgroundRotation) : 0);
+			if (options.size) {
+				result.attributes.width = options.size.toString();
+				result.attributes.height = options.size.toString();
+			}
+			if (options.scale !== void 0 && options.scale !== 100) result.body = addScale(result, options.scale);
+			if (options.flip) result.body = addFlip(result);
+			if (options.rotate) result.body = addRotate(result, options.rotate);
+			if (options.translateX || options.translateY) result.body = addTranslate(result, options.translateX, options.translateY);
+			if (primaryBackgroundColor !== "transparent" && secondaryBackgroundColor !== "transparent") result.body = addBackground(result, primaryBackgroundColor, secondaryBackgroundColor, backgroundType, backgroundRotation);
+			if (options.radius || options.clip) result.body = addViewboxMask(result, (_e = options.radius) !== null && _e !== void 0 ? _e : 0);
+			if (options.randomizeIds) result.body = randomizeIds(result);
+			const svg = `<svg ${createAttrString(result)}>${xml(style)}${result.body}</svg>`;
+			return {
+				toString: () => svg,
+				toJson: () => {
+					var _a;
+					return {
+						svg,
+						extra: {
+							primaryBackgroundColor,
+							secondaryBackgroundColor,
+							backgroundType,
+							backgroundRotation,
+							...(_a = result.extra) === null || _a === void 0 ? void 0 : _a.call(result)
+						}
+					};
+				},
+				toDataUri: () => {
+					return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+				}
+			};
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/base.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const base = { standard: (components, colors) => {
+			var _a, _b;
+			return `<path d="M154 319.5c-14.4-20-25.67-58.67-27-78L58.5 212 30 319.5h124Z" fill="${xml$1(`${colors.base}`)}" stroke="#000" stroke-width="4"/><path d="M130.37 263.69c-2.1.2-4.22.31-6.37.31-30.78 0-56.05-21.57-58.76-49.1L127 241.5c.38 5.48 1.55 13.32 3.37 22.19Z" fill="#000" style="mix-blend-mode:multiply"/><path d="M181.94 151.37v.01l.1.4.14.65A75.72 75.72 0 0 1 34.93 187.7l-.2-.74L18 117.13l-.06-.29A75.72 75.72 0 0 1 165.2 81.55l.05.21.02.08.05.2.05.2v.01l16.4 68.44.08.34.08.34Z" fill="${xml$1(`${colors.base}`)}" stroke="#000" stroke-width="4"/><g transform="translate(34 102.3)">${(_b = (_a = components.facialHair) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+		} };
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/mouth.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const mouth = {
+			surprised: (components, colors) => `<path d="M36.37 56.66c12.1-2.2 18.75-15.38 16.42-28.23C50.47 15.6 39.63 5.57 27.52 7.76 15.4 9.95 8.77 23.13 11.09 35.98c2.33 12.85 13.17 22.87 25.28 20.68Z" fill="${xml$1(`${colors.mouth}`)}"/><path d="M17.14 42.66c2.78-5.21 8.14-9.25 14.8-10.45 6.66-1.2 13.1.7 17.53 4.6-1.09 8.3-6.37 15-13.74 16.33-7.37 1.33-14.67-3.1-18.6-10.47Z" fill="#FC909F"/>`,
+			laughing: (components, colors) => `<path d="M64.73 25.7a36 36 0 0 0 1.18-12.54 4.98 4.98 0 0 0-6.8-4.2c-4.26 1.67-18.03 6.88-27.62 8.2-10.52 1.44-26.66-.32-31.44-.91a4.98 4.98 0 0 0-5.53 5.74 36 36 0 0 0 70.21 3.7Z" fill="${xml$1(`${colors.mouth}`)}"/><path d="M51.83 39.55a32 32 0 0 1-37.2 4.62 21.5 21.5 0 0 1 37.2-4.62Z" fill="#FC909F"/>`,
+			nervous: (components, colors) => `<path d="M68.42 31.57 67.4 17a8.06 8.06 0 0 0-9.74-7.3c-6.95 1.49-20.1 4.1-29.54 4.76-9.43.66-22.82-.1-29.9-.6a8.06 8.06 0 0 0-8.63 8.58L-9.4 37a8.06 8.06 0 0 0 9.73 7.3c6.95-1.48 20.1-4.1 29.54-4.76 9.44-.66 22.82.1 29.91.61a8.06 8.06 0 0 0 8.63-8.58Z" fill="${xml$1(`${colors.mouth}`)}"/><path d="m-.25 17.97 1.6 6.07a6 6 0 0 0 6.22 4.46 6 6 0 0 0-5.54 5.28l-.74 6.23c7.28-1.52 19.34-3.83 28.3-4.46 8.98-.63 21.24-.02 28.66.48l-1.6-6.07a6 6 0 0 0-6.21-4.46 6 6 0 0 0 5.54-5.28l.73-6.24c-7.27 1.53-19.33 3.84-28.3 4.47-8.97.62-21.23.01-28.65-.48Z" fill="#fff"/>`,
+			smile: (components, colors) => `<path d="M-.5 17.5c2.5 17 31 25 57 5.5" stroke="${xml$1(`${colors.mouth}`)}" stroke-width="4"/>`,
+			sad: (components, colors) => `<path d="M13 46c1.72-7.96 8.07-24.77 19.77-28.35 11.7-3.58 17.7 8.46 19.23 14.92" stroke="${xml$1(`${colors.mouth}`)}" stroke-width="4"/>`,
+			pucker: (components, colors) => `<path d="M26 16.7c4.17-2.34 21-5.3 21 1.5 0 8.5-11.5 8-11.5 8s13.04-3.16 10.5 6c-2.5 9-9.5 5.5-11.5 4.5" stroke="${xml$1(`${colors.mouth}`)}" stroke-width="4"/>`,
+			frown: (components, colors) => `<path d="M-5 41c3.21-7.96 15.1-24.77 37-28.35 21.9-3.58 33.13 8.46 36 14.92" stroke="${xml$1(`${colors.mouth}`)}" stroke-width="4"/>`,
+			smirk: (components, colors) => `<path d="M10 24.16c4.94 6.45 12.43 13.6 23.98 11.96 11.55-1.62 16.68-9.6 15.17-16.04" stroke="${xml$1(`${colors.mouth}`)}" stroke-width="4"/>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/eyebrows.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const eyebrows = {
+			up: (components, colors) => `<path d="M99 10.21c5.67-2.66 19-5.1 27 6.5M23.58 35.52c2.07-5.9 9.68-17.12 23.56-14.7" stroke="${xml$1(`${colors.eyebrows}`)}" stroke-width="4" stroke-linecap="round"/>`,
+			down: (components, colors) => `<path d="M27 26.5c6.17 2.5 21.1 3 31.5-15M94 4c5.17 5.33 18.1 12.8 28.5 0" stroke="${xml$1(`${colors.eyebrows}`)}" stroke-width="4" stroke-linecap="round"/>`,
+			eyelashesUp: (components, colors) => `<path d="M99 10.21c5.67-2.66 19-5.1 27 6.5M23.58 35.52c2.07-5.9 9.68-17.12 23.56-14.7M26.07 29.46l-6.14-5.43M122.96 11.16l6.15-5.43M32.52 23.81l-4.04-7.13M115.51 7.51l4.05-7.13M40.6 20.2l-2.2-7.9M106.44 6.9l2.2-7.9" stroke="${xml$1(`${colors.eyebrows}`)}" stroke-width="4" stroke-linecap="round"/>`,
+			eyelashesDown: (components, colors) => `<path d="M27 26.5c6.17 2.5 21.1 3 31.5-15M94 4c5.17 5.33 18.1 12.8 28.5 0M37.15 26.46 31 21.03M116.22 9.44l1.78-8M45.6 22.81l-4.05-7.13M108.14 9.02l.94-8.15M52.67 17.2l-2.2-7.9M100 8.03l-.78-8.16" stroke="${xml$1(`${colors.eyebrows}`)}" stroke-width="4" stroke-linecap="round"/>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/hair.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const hair = {
+			fonze: (components, colors) => `<path d="M210.18 49.4c-1.27 6.05-4.6 11.32-9.43 15.9 9.4 34.06 9.6 53.87 4.38 57.65l-14.8-49.99C158.4 91.7 98.65 94.9 83.69 94.9c-1.55.17-3.02.4-4.43.67-14.65 9-2.6 52.12 11.75 70.43l-11 2c-5.14-24.97-17.41-22.92-26.61-21.38l-.32.05c2.2 13.63 6.72 27.74 10.45 39.32.95 2.99 1.86 5.8 2.66 8.4-.79.1-1.48.3-2.12.47-5.5 1.53-7.41 2.06-33.38-61.97-6.47-15.95-6.03-30.16-.97-42.62-4.78-4.8-14.37-7.14-19.71-7.78 10.44-6.12 20.58-4.87 25.54-3.1.5-.75 1.02-1.49 1.56-2.22-.97-4.41-7.96-9.46-12.11-11.82 8.55-4.3 18.6-2.03 22.98-.2C67.63 47.13 97.03 35.05 122 29 170.81 17.17 189.5.5 189.5.5c20.68 8.5 25.62 25.22 20.68 48.9Z" fill="${xml$1(`${colors.hair}`)}" stroke="#000" stroke-width="4"/>`,
+			mrT: (components, colors) => `<g fill="${xml$1(`${colors.hair}`)}"><path opacity=".1" d="M187.99 77.18c-8-6.4-21.84-7-27.5-6.5l-8-26.5c13.6 3.2 32 24 35.5 33Z"/><path d="M85.8 11.76S91.52 7.8 115.74 1.7c24.21-6.1 33.04-3.72 33.04-3.72l11.8 72.84s-8.05-.18-28.04 4.19c-20 4.38-29.56 9.67-29.56 9.67l-17.2-72.9Z"/><path d="M48.99 86.68c-6.8-41.6 23.33-68.17 37-75.5l16.98 73.5c-19.2-39.6-45.33-15.17-54 2Z"/><path opacity=".1" d="M67.49 130.68c-7.2-27.2 22-41.84 35.5-46-7-16.34-23-31-42.5-13-18 30.5-11 54-5.5 72l12.5-13Z"/></g>`,
+			dougFunny: (components, colors) => `<path d="M140 56c14.67-.67 40.4-8.8 26-36M114 54c14.67-.67 40.4-8.8 26-36M78 65c14.67-.67 40.4-8.8 26-36" stroke="${xml$1(`${colors.hair}`)}" stroke-width="4"/>`,
+			mrClean: (components, colors) => `<ellipse cx="147.85" cy="58.18" rx="6.86" ry="18.44" transform="rotate(117 147.85 58.18)" fill="#FCFDFF"/>`,
+			dannyPhantom: (components, colors) => `<path d="M123.79 17.49H123.94a96.78 96.78 0 0 1 62.07 24.36c14.06 12.4 22.45 26.87 25.19 36.73-4.06 2.32-11.01 4.31-19.88 5.95-9.68 1.78-21.3 3.08-33.15 4.01-23.7 1.86-48.2 2.2-59.63 1.96l-6.07-.13 4.8 3.71c2.5 1.93 5.83 3.28 9.34 4.22 3.55.95 7.42 1.54 11.14 1.87 3.82.34 7.55.42 10.64.34-10.59 8.16-24.06 14.44-37.35 19.09a225.88 225.88 0 0 1-39.83 9.92l-2.15.32.5 2.11c3.34 14.43 9.5 39.65 13.62 56.57 1.83 7.5 3.26 13.38 3.87 15.94 1.09 4.56 4.5 11.05 8.4 17.03 3.6 5.52 7.78 10.89 11.32 14.2l-7.84 31.81H49.37c8.34-12.71 10.1-27.4 8.4-42.98-1.84-16.87-7.76-35-14-53.17l-1.85-5.36c-5.69-16.46-11.36-32.88-14.43-48.6-3.4-17.44-3.56-33.75 2.83-48.09 10.34-23.21 28.66-36.7 47-44.12 18.37-7.45 36.61-8.76 46.46-7.71Z" fill="${xml$1(`${colors.hair}`)}" stroke="#000" stroke-width="4"/>`,
+			full: (components, colors) => `<path d="m-13.4 312.86-.62-1.64c-.56-1.55-1.35-3.84-2.23-6.74a163.21 163.21 0 0 1-5.28-23.98c-2.81-19.77-2.8-45.8 8.4-71.12 1.8-4.09 4.07-8.3 6.52-12.85 9.47-17.6 21.77-40.46 21.77-82.45 0-30.59 14.84-56.35 36.7-74.51 21.88-18.18 50.7-28.66 78.38-28.66 15.13 0 27.3 1.73 37.07 7.64 9.72 5.87 17.37 16.05 23.05 33.58a3.47 3.47 0 0 0 4.36 2.27c11.31-3.67 28.47.04 42.95 9.5 14.42 9.4 25.62 24.15 25.62 41.91 0 15.43-2.64 25.85-5.22 36-3.12 12.3-6.13 24.16-4 43.5.7 6.45 2.15 11.03 4.16 14.82 1.98 3.73 4.48 6.62 7.12 9.66l.05.07c6.28 7.25 9.13 13.22 10.06 18.47.92 5.23-.05 9.98-1.84 14.9-.9 2.48-2 4.97-3.15 7.59l-.1.22c-1.12 2.53-2.3 5.19-3.35 7.98-2.18 5.77-3.89 12.2-3.72 19.83.15 6.48 1.3 10.91 3.01 14.27 1.7 3.32 3.89 5.44 5.8 7.3l.05.05c1.74 1.68 3.2 3.1 4.27 5.1.96 1.78 1.67 4.13 1.79 7.66a172.14 172.14 0 0 1-87.4 23.9 110.86 110.86 0 0 1-7.28-.28c-6.15-9.4-11.75-24.88-16.1-40.8-4.21-15.46-7.18-31.08-8.3-41.4 37.08-10.72 60.32-48.98 54.73-88.46l-.01-.12a5.97 5.97 0 0 0-.08-.47 76.68 76.68 0 0 0-.43-2.25 486.97 486.97 0 0 0-6.53-28.2 276.64 276.64 0 0 0-7.45-24.2c-2.76-7.5-5.83-14.15-9.1-18.24l-.3-.37-.44-.2c-1.93-.83-3.94-1.77-6.03-2.74-9.93-4.62-21.84-10.17-37.26-10.78-18.78-.74-42.56 5.78-74.7 29.09l-2.02 1.46 1.95 1.57c15.92 12.83 19.37 29.86 18.63 44.3a89.2 89.2 0 0 1-5.24 25.1c-1.16-1.69-1.9-3.82-2.45-6.33a85.19 85.19 0 0 1-.96-5.45l-.05-.3c-.3-2-.63-4.08-1.1-6.09-.96-4.01-2.57-8.02-6.14-10.86-3.58-2.84-8.8-4.25-16.4-3.83l-2.22.13.46 2.18 11.36 53.31.02.08.03.09a79.8 79.8 0 0 0 19.91 32.81 65.49 65.49 0 0 1 1.54 2.68c1.01 1.82 2.37 4.38 3.76 7.33 2.82 5.94 5.66 13.24 6.2 19.2.57 6.05-.96 13.86-2.7 20.31a129.63 129.63 0 0 1-2.84 9.14c-5.03-2.4-9.53-2.23-13.38.01-4.16 2.43-7.21 7.06-9.48 12.22-4.15 9.42-6.14 21.64-7.06 29.22A601.65 601.65 0 0 1 6.2 320.1 353.85 353.85 0 0 1-9 314.64a190.8 190.8 0 0 1-4.4-1.77Z" fill="${xml$1(`${colors.hair}`)}" stroke="#000" stroke-width="3.82"/>`,
+			turban: (components, colors) => `<g stroke="#000" stroke-width="4"><path d="M222.73 100.8c0-66.1-36.46-110.8-80.87-110.8C84.96-10 27 11.34 27 112.25c0 24.97 10.66 43.58 25.56 57.29a42.88 42.88 0 0 1-3.5-4.92c-2.88-26.98 29.17-47.7 60.54-67.96 16.65-10.75 33.11-21.39 44.05-32.76 9.6 5.43 37.79 28.2 43.16 37.42 2.88 4.94 7.51 21.87 10.67 41.63 10.34-12.42 15.25-24.84 15.25-42.16Z" fill="${xml$1(`${colors.hair}`)}"/><path d="M154.26 63.25c13.18-11.95 32.89-39.21 31.62-56.92"/></g>`,
+			pixie: (components, colors) => `<g stroke="#000"><path d="m105.84 88.82 1.88.3v.08l-.04.16-.12.52c-.12.45-.3 1.09-.6 1.9a41.7 41.7 0 0 1-3.4 6.92c-3.17 5.32-8.7 12.66-18.31 21.6 29.97.74 55-8.92 72.82-19.04a156.35 156.35 0 0 0 21.71-14.87 118.43 118.43 0 0 0 7.5-6.7l.1-.1.01-.01 2.29-2.38.93 3.16-1.84.54 1.84-.54v.05l.05.13.15.52a817.06 817.06 0 0 1 2.69 9.28c1.75 6.14 4.14 14.58 6.66 23.77 5.03 18.35 10.6 39.81 12.7 51.97 3.49 20.32-1.91 35.74-5.1 44.87-.63 1.77-1.17 3.3-1.54 4.6.06.04.12.1.22.16.6.42 1.65.91 3.18 1.4 3.02.96 7.32 1.74 11.92 2.19 4.6.44 9.38.53 13.34.14 1.98-.2 3.7-.5 5.08-.92a6.85 6.85 0 0 0 2.58-1.27c.02-.08.03-.29-.02-.68-.1-.78-.4-1.87-.93-3.32-.8-2.15-1.97-4.8-3.35-7.88l-1.46-3.3c-3.93-8.94-8.65-20.56-9.68-32.4-1.15-13.16 1.45-24.42 3.79-34.54l.11-.48c2.39-10.34 4.38-19.32 2.34-28.42-3.1-13.8-7.32-25.3-13.8-33.57-6.42-8.17-15.13-13.27-27.5-14.21l-1.28-.1-.4-1.22c-5.7-17.57-13.38-29.05-23.18-36.17-9.8-7.12-21.96-10.05-36.94-10.05-27.7 0-57.5 10.52-79.88 28.72-22.35 18.18-37.14 43.9-35.2 74.33 2.13 33.6-.3 59.06-5.8 77.72-5 17-12.59 28.46-21.68 35.14 1.19.61 2.78 1.39 4.77 2.27 5.02 2.24 12.59 5.2 22.67 8.03 19.34 5.43 47.95 10.38 85.71 8.89-8.32-7.15-16.72-15.83-23.37-25-7.63-10.53-13.14-21.94-13.3-32.58-.19-12.62.67-45.67.93-52.5.62-15.9 10.82-28.15 20.54-36.3a96.6 96.6 0 0 1 18.96-12.34l.2-.1.13-.06.1-.05h.02v-.01l.8 1.74Zm0 0 1.88.3.56-3.5-3.23 1.46.79 1.74Zm100.23 126.57.03.04-.03-.04Z" fill="${xml$1(`${colors.hair}`)}" stroke-width="3.82"/><path d="M191 58c.5 4.5-.3 13.5-1.5 19.5" stroke-width="4"/></g>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/eyes.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const eyes = {
+			eyes: (components, colors) => {
+				var _a, _b;
+				return `<g fill="${xml$1(`${colors.eyes}`)}"><ellipse cx="16.53" cy="29.4" rx="9" ry="13.5" transform="rotate(-6.78 16.53 29.4)"/><ellipse cx="80.53" cy="19.4" rx="9" ry="13.5" transform="rotate(-6.28 80.53 19.4)"/></g><g transform="translate(-40 -8)">${(_b = (_a = components.glasses) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+			},
+			round: (components, colors) => {
+				var _a, _b;
+				return `<g fill="${xml$1(`${colors.eyes}`)}"><ellipse cx="16.12" cy="28.93" rx="9" ry="10" transform="rotate(-6.78 16.12 28.93)"/><ellipse cx="80.15" cy="18.92" rx="9" ry="10" transform="rotate(-6.28 80.15 18.92)"/></g><g transform="translate(-40 -8)">${(_b = (_a = components.glasses) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+			},
+			eyesShadow: (components, colors) => {
+				var _a, _b;
+				return `<circle cx="15.24" cy="20.24" r="12" transform="rotate(-6.28 15.24 20.24)" fill="${xml$1(`${colors.eyeShadow}`)}"/><ellipse cx="16.53" cy="29.4" rx="9" ry="13.5" transform="rotate(-6.78 16.53 29.4)" fill="${xml$1(`${colors.eyes}`)}"/><circle cx="79.02" cy="11.61" r="12" transform="rotate(-6.28 79.02 11.61)" fill="${xml$1(`${colors.eyeShadow}`)}"/><ellipse cx="80.53" cy="19.4" rx="9" ry="13.5" transform="rotate(-6.28 80.53 19.4)" fill="${xml$1(`${colors.eyes}`)}"/><g transform="translate(-40 -8)">${(_b = (_a = components.glasses) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+			},
+			smiling: (components, colors) => {
+				var _a, _b;
+				return `<path d="M5.29 34.07c.11.82 1.14 1 1.72.41 2.46-2.52 6.25-4.36 10.65-4.89 2.6-.3 5.1-.12 7.32.48.75.2 1.5-.44 1.23-1.17A10.84 10.84 0 0 0 5.3 34.07ZM69.38 24.07c.12.82 1.15 1 1.73.41 2.44-2.48 6.19-4.3 10.54-4.83 2.56-.3 5.03-.12 7.23.47.75.2 1.5-.44 1.23-1.17a10.74 10.74 0 0 0-20.73 5.12Z" fill="${xml$1(`${colors.eyes}`)}"/><g transform="translate(-40 -8)">${(_b = (_a = components.glasses) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+			},
+			smilingShadow: (components, colors) => {
+				var _a, _b;
+				return `<path d="M26.47 24.36c1.86 6.36-5.04 1.48-11.4 3.33-6.36 1.86-9.78 9.76-11.64 3.4a12 12 0 0 1 23.04-6.73ZM90.26 15.17c1.64 6.42-4.7 1.52-11.11 3.15-6.43 1.64-10.51 9.19-12.15 2.77a12 12 0 1 1 23.26-5.92Z" fill="${xml$1(`${colors.eyeShadow}`)}"/><path d="M5.29 34.07c.11.82 1.14 1 1.72.41 2.46-2.52 6.25-4.36 10.65-4.89 2.6-.3 5.1-.12 7.32.48.75.2 1.5-.44 1.23-1.17A10.84 10.84 0 0 0 5.3 34.07ZM69.38 24.07c.12.82 1.15 1 1.73.41 2.44-2.48 6.19-4.3 10.54-4.83 2.56-.3 5.03-.12 7.23.47.75.2 1.5-.44 1.23-1.17a10.74 10.74 0 0 0-20.73 5.12Z" fill="${xml$1(`${colors.eyes}`)}"/><g transform="translate(-40 -8)">${(_b = (_a = components.glasses) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+			}
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/nose.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const nose = {
+			curve: (components, colors) => `<path d="M16.5 7c-.33 3.83 0 12.2 4 15 5 3.5-.5 12-10.5 10" stroke="#000" stroke-width="4"/>`,
+			pointed: (components, colors) => `<path d="M16.5 3c0 14 7 25 7 25S20 34 10 32" stroke="#000" stroke-width="4"/>`,
+			tound: (components, colors) => `<path d="M12.3 12.34c5.45-1.24 14.38.62 12.42 10.54-1.74 8.82-11.1 9.3-13.72 6.82" stroke="#000" stroke-width="4"/>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/ears.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const ears = {
+			attached: (components, colors) => {
+				var _a, _b;
+				return `<path d="M30.5 6.18A23.78 23.78 0 0 0 23.08 5c-10.5 0-19 6.5-18 18.5 1.04 12.5 8.5 17 19 17A19.6 19.6 0 0 0 31 39.23" stroke="#000" stroke-width="8"/><path d="M31.5 39.04a19.38 19.38 0 0 1-7.42 1.46c-10.5 0-17.96-4.5-19-17-1-12 7.5-18.5 18-18.5 3.14 0 6.19.6 8.92 1.73l-.5 32.3Z" fill="${xml$1(`${colors.base}`)}"/><path d="M27.5 13.5c-4-1.83-12.8-2.8-16 8" stroke="#000" stroke-width="4"/><path d="M17 14c2.17 1.83 6.3 7.5 5.5 15.5" stroke="#000" stroke-width="4"/><g transform="translate(3 35)">${(_b = (_a = components.earrings) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+			},
+			detached: (components, colors) => {
+				var _a, _b;
+				return `<path d="M37 8.25V7.13l-.95-.59A24.91 24.91 0 0 0 23.08 3C17.44 3 12.16 4.75 8.4 8.3c-3.8 3.58-5.86 8.83-5.31 15.37.52 6.37 2.66 11.06 6.2 14.17-.29 1-.37 2.08-.24 3.21a8.98 8.98 0 0 0 4.6 7.08C16.09 49.5 19.2 50 22.52 50c5.48 0 10.29-2.95 13.95-6.89l.53-.57V8.25Z" stroke="#000" stroke-width="4"/><path d="M42.97 23.98c.07-.65.1-1.3.1-1.98 0-10.22-9.5-17-20-17C12.6 5 4.09 11.5 5.09 23.5c.56 6.68 2.95 11.07 6.65 13.72a5.7 5.7 0 0 0-.68 3.6C11.68 46.1 16.19 48 22.52 48c11.1 0 19.9-14.05 20.45-24.02Z" fill="${xml$1(`${colors.base}`)}"/><path d="M27.5 13.5c-4-1.83-12.8-2.8-16 8" stroke="#000" stroke-width="4"/><path d="M17 14c2.17 1.83 6.3 7.5 5.5 15.5" stroke="#000" stroke-width="4"/><g transform="translate(3 42)">${(_b = (_a = components.earrings) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g>`;
+			}
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/shirt.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const shirt = {
+			open: (components, colors) => `<path d="M260.37 90.86H-12.54l.1-.2C-7.89 81.38.5 64.31 11.4 49.03c6.2-8.67 13.13-16.65 20.54-22.27 7.41-5.61 15.12-8.73 22.95-8.04 15.06 1.31 28.46 9.56 41.93 17.83l3.83 2.35c14.48 8.82 29.35 17.02 45.72 13.43 5.53-1.2 9.26-3.8 11.6-7.16 2.32-3.3 3.15-7.15 3.3-10.66.14-3.52-.4-6.85-.96-9.26a39.89 39.89 0 0 0-.75-2.78c3.63-3.64 7.47-5.77 11.43-6.73 4.3-1.03 8.89-.73 13.72.7 9.73 2.87 20.14 10.25 30.3 19.73 18.61 17.37 35.69 41.14 45.36 54.68Z" fill="${xml$1(`${colors.shirt}`)}" stroke="#000" stroke-width="4.27"/>`,
+			crew: (components, colors) => `<g stroke="#000" stroke-width="4"><path d="M260.7 91H-12.64C3.67 61.66 26.86 42.98 64.44 34.4c16.02-3.65 34.67-5.47 56.56-5.47 9.46 0 16.81 1.44 23.8 3.35 2.58.7 5.18 1.5 7.84 2.3 4.4 1.34 8.97 2.72 13.91 3.86l.14.03.15.01c46.12 3.8 73.78 24.3 93.85 52.5Z" fill="${xml$1(`${colors.shirt}`)}"/><path d="m52.93 36.58 9.15-19.6a1 1 0 0 1 1.25-.51c37.93 13.42 72.43 12.48 104.4 3.57a1 1 0 0 1 1.09.38l13.93 19.05a.98.98 0 0 1-.42 1.5c-33.6 13.2-96.67 10.95-128.91-3.07a.98.98 0 0 1-.49-1.32Z" fill="${xml$1(`${colors.shirt}`)}"/><path opacity=".75" d="m52.93 36.58 9.15-19.6a1 1 0 0 1 1.25-.51c37.93 13.42 72.43 12.48 104.4 3.57a1 1 0 0 1 1.09.38l13.93 19.05a.98.98 0 0 1-.42 1.5c-33.6 13.2-96.67 10.95-128.91-3.07a.98.98 0 0 1-.49-1.32Z" fill="#fff"/></g>`,
+			collared: (components, colors) => `<g stroke="#000" stroke-width="4"><path d="M126.77 67.58 128 66l-1.23 1.58 1.72 1.34 1.19-1.83v-.02l.05-.06.04-.05a28.57 28.57 0 0 1 .8-1.18 112.35 112.35 0 0 1 11.5-14.05c3.67-3.78 7.83-7.4 12.13-9.93 4.31-2.53 8.58-3.84 12.53-3.3C209.17 44.2 240.4 63 260.67 91h-273.3c16.3-29.34 39.49-48.02 77.07-56.59 1.6-.36 3.78-.25 6.5.38 2.7.63 5.77 1.73 9.09 3.19 6.62 2.9 14.02 7.16 20.97 11.56a355.78 355.78 0 0 1 25.24 17.63l.4.3.1.08.02.02h.01Z" fill="${xml$1(`${colors.shirt}`)}"/><path d="m52.61 37.08 5.17-19.23c.2-.78 1.22-1 1.76-.4C74.4 33.7 93.16 33.08 99.4 32.33c.84-.1 1.5.82 1.1 1.58L87.34 58.86c-.2.38-.62.6-1.04.5-3.95-.82-23.62-5.63-33.57-21.5a1 1 0 0 1-.12-.78ZM183.2 36.98 171.61 17.5c-.4-.66-1.37-.65-1.79 0-5.73 8.83-15.63 12.9-19.09 14.1-.62.22-.9.96-.57 1.53l13.5 22.81c.2.34.59.53.97.42 2.13-.61 9.46-3.67 18.54-18.34a1 1 0 0 0 .01-1.04Z" fill="${xml$1(`${colors.shirt}`)}"/><path d="m52.61 37.08 5.17-19.23c.2-.78 1.22-1 1.76-.4C74.4 33.7 93.16 33.08 99.4 32.33c.84-.1 1.5.82 1.1 1.58L87.34 58.86c-.2.38-.62.6-1.04.5-3.95-.82-23.62-5.63-33.57-21.5a1 1 0 0 1-.12-.78ZM183.2 36.98 171.61 17.5c-.4-.66-1.37-.65-1.79 0-5.73 8.83-15.63 12.9-19.09 14.1-.62.22-.9.96-.57 1.53l13.5 22.81c.2.34.59.53.97.42 2.13-.61 9.46-3.67 18.54-18.34a1 1 0 0 0 .01-1.04Z" fill="#fff" fill-opacity=".75"/><path d="m109.5 54.5-9-21.5-7 15 16 6.5ZM141 53.5l9-21.5 7 15-16 6.5ZM70.5 14l-12 3 10 6.5 2-9.5ZM160 14l11 3-7 6.5-4-9.5Z" fill="#000" stroke-linejoin="round"/></g>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/earrings.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const earrings = {
+			hoop: (components, colors) => `<path d="M24 0A24 24 0 1 1 0 24c0-6.4 3.5-11.5 6.57-16.5L7.5 6" stroke="${xml$1(`${colors.earring}`)}" stroke-width="4"/>`,
+			stud: (components, colors) => `<circle cx="25" cy="2" r="4" fill="${xml$1(`${colors.earring}`)}"/><circle cx="26" cy="1" r="1" fill="#fff"/>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/glasses.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const glasses = {
+			round: (components, colors) => `<g stroke="${xml$1(`${colors.glasses}`)}" stroke-width="4"><circle cx="122.5" cy="28" r="26"/><circle cx="55.5" cy="37" r="26"/><path d="M97.5 35a8 8 0 0 0-16 0M30 39 0 44.5"/></g>`,
+			square: (components, colors) => `<g stroke="${xml$1(`${colors.glasses}`)}" stroke-width="4"><path d="M34.5 42.5 0 49.12" stroke-linecap="round"/><path d="M35.47 18.53 74.2 13.1a6 6 0 0 1 6.77 5.1l5.57 39.62a6 6 0 0 1-5.1 6.78l-34.48 4.84a6 6 0 0 1-6.65-4.48l-9.81-39.01a6 6 0 0 1 4.98-7.4ZM145.92 3.22 107.2 8.66a6 6 0 0 0-5.1 6.78l5.56 39.6a6 6 0 0 0 6.78 5.11l34.47-4.84a6 6 0 0 0 5.16-6.14l-1.32-40.2a6 6 0 0 0-6.83-5.75ZM83.5 37.12l22-3.5"/></g>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/facialHair.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const facialHair = {
+			beard: (components, colors) => `<path d="M146.13 49.15A73.74 73.74 0 0 1 27.69 123.4C10.5 107.5 6.5 56 2.7 31.65c14 31.5 49.62 33.94 83.5 28 28.5-5 51.3-6 51.3-45 1.88 2.62 6.97 27.59 8.63 34.5Z" fill="${xml$1(`${colors.facialHair}`)}"/>`,
+			scruff: (components, colors) => `<g fill="${xml$1(`${colors.facialHair}`)}"><path d="M31 109a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM83 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM79 123a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM99 121a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 111a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM120 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM130 102a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM21 88a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM54 104a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM51 124a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM69 128a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM103 102a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM117 106a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM109 123a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM123 92a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM30 94a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM54 94a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM54 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM58 130a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM85 130a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM96 130a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM113 94a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM113 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM133 89a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM33 81a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM43 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM39 123a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM79 103a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM91 105a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM77 135a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 84a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 66a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM124 81a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM131 71a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM42 90a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM42 101a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM63 86a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM63 68a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM75 82a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM87 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/><path d="M113 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM139 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM61 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM72 110a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM68 102a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM92 93a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM43 75a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM80 91a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM80 73a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM115 87a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM115 69a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM122 71a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM137 62a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/><path d="M31 109a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM83 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM79 123a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM99 121a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 111a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM120 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM130 102a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM21 88a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM54 104a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM51 124a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM69 128a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM103 102a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM117 106a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM109 123a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM123 92a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM30 94a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM54 94a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM54 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM58 130a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM85 130a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM96 130a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM113 94a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM113 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM133 89a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM33 81a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM43 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM39 123a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM79 103a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM91 105a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM77 135a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 84a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 66a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM124 81a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM131 71a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM42 90a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM42 101a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM63 86a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM63 68a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM75 82a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM87 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM100 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" stroke="#000"/><path d="M113 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM139 76a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM61 116a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM72 110a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM68 102a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM92 93a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM43 75a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM80 91a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM80 73a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM115 87a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM115 69a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM122 71a1 1 0 1 1-2 0 1 1 0 0 1 2 0ZM137 62a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z" stroke="#000"/></g>`
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/components/index.js
+		var components_exports = /* @__PURE__ */ __exportAll({
+			base: () => base,
+			earrings: () => earrings,
+			ears: () => ears,
+			eyebrows: () => eyebrows,
+			eyes: () => eyes,
+			facialHair: () => facialHair,
+			glasses: () => glasses,
+			hair: () => hair,
+			mouth: () => mouth,
+			nose: () => nose,
+			shirt: () => shirt
+		});
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/utils/pickComponent.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		function pickComponent({ prng, group, values = [] }) {
+			const componentCollection = components_exports;
+			const key = prng.pick(values);
+			if (key && componentCollection[group][key]) return {
+				name: key,
+				value: componentCollection[group][key]
+			};
+			else return;
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/utils/getComponents.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		function getComponents({ prng, options }) {
+			const baseComponent = pickComponent({
+				prng,
+				group: "base",
+				values: options.base
+			});
+			const mouthComponent = pickComponent({
+				prng,
+				group: "mouth",
+				values: options.mouth
+			});
+			const eyebrowsComponent = pickComponent({
+				prng,
+				group: "eyebrows",
+				values: options.eyebrows
+			});
+			const hairComponent = pickComponent({
+				prng,
+				group: "hair",
+				values: options.hair
+			});
+			const eyesComponent = pickComponent({
+				prng,
+				group: "eyes",
+				values: options.eyes
+			});
+			const noseComponent = pickComponent({
+				prng,
+				group: "nose",
+				values: options.nose
+			});
+			const earsComponent = pickComponent({
+				prng,
+				group: "ears",
+				values: options.ears
+			});
+			const shirtComponent = pickComponent({
+				prng,
+				group: "shirt",
+				values: options.shirt
+			});
+			const earringsComponent = pickComponent({
+				prng,
+				group: "earrings",
+				values: options.earrings
+			});
+			const glassesComponent = pickComponent({
+				prng,
+				group: "glasses",
+				values: options.glasses
+			});
+			const facialHairComponent = pickComponent({
+				prng,
+				group: "facialHair",
+				values: options.facialHair
+			});
+			return {
+				base: baseComponent,
+				mouth: mouthComponent,
+				eyebrows: eyebrowsComponent,
+				hair: prng.bool(options.hairProbability) ? hairComponent : void 0,
+				eyes: eyesComponent,
+				nose: noseComponent,
+				ears: earsComponent,
+				shirt: shirtComponent,
+				earrings: prng.bool(options.earringsProbability) ? earringsComponent : void 0,
+				glasses: prng.bool(options.glassesProbability) ? glassesComponent : void 0,
+				facialHair: prng.bool(options.facialHairProbability) ? facialHairComponent : void 0
+			};
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/utils/convertColor.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		function convertColor(color) {
+			return "transparent" === color ? color : `#${color}`;
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/utils/getColors.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		function getColors({ prng, options }) {
+			var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+			return {
+				base: convertColor(prng.pick((_a = options.baseColor) !== null && _a !== void 0 ? _a : [], "transparent")),
+				earring: convertColor(prng.pick((_b = options.earringColor) !== null && _b !== void 0 ? _b : [], "transparent")),
+				eyeShadow: convertColor(prng.pick((_c = options.eyeShadowColor) !== null && _c !== void 0 ? _c : [], "transparent")),
+				eyebrows: convertColor(prng.pick((_d = options.eyebrowsColor) !== null && _d !== void 0 ? _d : [], "transparent")),
+				facialHair: convertColor(prng.pick((_e = options.facialHairColor) !== null && _e !== void 0 ? _e : [], "transparent")),
+				glasses: convertColor(prng.pick((_f = options.glassesColor) !== null && _f !== void 0 ? _f : [], "transparent")),
+				hair: convertColor(prng.pick((_g = options.hairColor) !== null && _g !== void 0 ? _g : [], "transparent")),
+				mouth: convertColor(prng.pick((_h = options.mouthColor) !== null && _h !== void 0 ? _h : [], "transparent")),
+				shirt: convertColor(prng.pick((_j = options.shirtColor) !== null && _j !== void 0 ? _j : [], "transparent")),
+				eyes: convertColor(prng.pick((_k = options.eyesColor) !== null && _k !== void 0 ? _k : [], "transparent"))
+			};
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/hooks/onPreCreate.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		function onPreCreate({ prng, options }) {
+			var _a;
+			options.baseColor = options.baseColor && options.baseColor.length > 0 ? [prng.pick(options.baseColor, "transparent")] : [];
+			for (const colorName of [
+				"eyebrows",
+				"hair",
+				"eyes",
+				"nose",
+				"ears",
+				"shirt",
+				"earrings",
+				"glasses",
+				"facialHair"
+			]) {
+				const colorOption = (_a = options[`${colorName}Color`]) !== null && _a !== void 0 ? _a : [];
+				const index = colorOption.indexOf(options.baseColor[0]);
+				if (colorOption.length > 1 && index > -1) colorOption.splice(index, 1);
+			}
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/hooks/onPostCreate.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		function onPostCreate({ prng, options, components, colors }) {
+			var _a;
+			if (((_a = components.facialHair) === null || _a === void 0 ? void 0 : _a.name) === "beard" && colors.facialHair === colors.mouth) colors.mouth = "#ffffff33";
+		}
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/schema.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		const schema = {
+			$schema: "http://json-schema.org/draft-07/schema#",
+			properties: {
+				base: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: ["standard"]
+					},
+					default: ["standard"]
+				},
+				baseColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: [
+						"f9c9b6",
+						"ac6651",
+						"77311d"
+					]
+				},
+				earringColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: [
+						"f9c9b6",
+						"d2eff3",
+						"000000",
+						"e0ddff",
+						"f4d150",
+						"ac6651",
+						"9287ff",
+						"ffeba4",
+						"fc909f",
+						"ffedef",
+						"6bd9e9",
+						"77311d",
+						"ffffff"
+					]
+				},
+				earrings: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: ["hoop", "stud"]
+					},
+					default: ["hoop", "stud"]
+				},
+				earringsProbability: {
+					type: "integer",
+					minimum: 0,
+					maximum: 100,
+					default: 30
+				},
+				ears: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: ["attached", "detached"]
+					},
+					default: ["attached", "detached"]
+				},
+				eyeShadowColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: [
+						"d2eff3",
+						"e0ddff",
+						"ffeba4",
+						"ffedef",
+						"ffffff"
+					]
+				},
+				eyebrows: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: [
+							"up",
+							"down",
+							"eyelashesUp",
+							"eyelashesDown"
+						]
+					},
+					default: [
+						"up",
+						"down",
+						"eyelashesUp",
+						"eyelashesDown"
+					]
+				},
+				eyebrowsColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: ["000000"]
+				},
+				eyes: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: [
+							"eyes",
+							"round",
+							"eyesShadow",
+							"smiling",
+							"smilingShadow"
+						]
+					},
+					default: [
+						"eyes",
+						"round",
+						"eyesShadow",
+						"smiling",
+						"smilingShadow"
+					]
+				},
+				eyesColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: ["000000"]
+				},
+				facialHair: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: ["beard", "scruff"]
+					},
+					default: ["beard", "scruff"]
+				},
+				facialHairColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: ["000000"]
+				},
+				facialHairProbability: {
+					type: "integer",
+					minimum: 0,
+					maximum: 100,
+					default: 10
+				},
+				glasses: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: ["round", "square"]
+					},
+					default: ["round", "square"]
+				},
+				glassesColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: [
+						"f9c9b6",
+						"d2eff3",
+						"000000",
+						"e0ddff",
+						"f4d150",
+						"ac6651",
+						"9287ff",
+						"ffeba4",
+						"fc909f",
+						"ffedef",
+						"6bd9e9",
+						"77311d",
+						"ffffff"
+					]
+				},
+				glassesProbability: {
+					type: "integer",
+					minimum: 0,
+					maximum: 100,
+					default: 30
+				},
+				hair: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: [
+							"fonze",
+							"mrT",
+							"dougFunny",
+							"mrClean",
+							"dannyPhantom",
+							"full",
+							"turban",
+							"pixie"
+						]
+					},
+					default: [
+						"fonze",
+						"mrT",
+						"dougFunny",
+						"mrClean",
+						"dannyPhantom",
+						"full",
+						"turban",
+						"pixie"
+					]
+				},
+				hairColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: [
+						"f9c9b6",
+						"d2eff3",
+						"000000",
+						"e0ddff",
+						"f4d150",
+						"ac6651",
+						"9287ff",
+						"ffeba4",
+						"fc909f",
+						"ffedef",
+						"6bd9e9",
+						"77311d",
+						"ffffff"
+					]
+				},
+				hairProbability: {
+					type: "integer",
+					minimum: 0,
+					maximum: 100,
+					default: 100
+				},
+				mouth: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: [
+							"surprised",
+							"laughing",
+							"nervous",
+							"smile",
+							"sad",
+							"pucker",
+							"frown",
+							"smirk"
+						]
+					},
+					default: [
+						"surprised",
+						"laughing",
+						"nervous",
+						"smile",
+						"sad",
+						"pucker",
+						"frown",
+						"smirk"
+					]
+				},
+				mouthColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: ["000000"]
+				},
+				nose: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: [
+							"curve",
+							"pointed",
+							"tound"
+						]
+					},
+					default: [
+						"curve",
+						"pointed",
+						"tound"
+					]
+				},
+				shirt: {
+					type: "array",
+					items: {
+						type: "string",
+						enum: [
+							"open",
+							"crew",
+							"collared"
+						]
+					},
+					default: [
+						"open",
+						"crew",
+						"collared"
+					]
+				},
+				shirtColor: {
+					type: "array",
+					items: {
+						type: "string",
+						pattern: "^(transparent|[a-fA-F0-9]{6})$"
+					},
+					default: [
+						"f9c9b6",
+						"d2eff3",
+						"000000",
+						"e0ddff",
+						"f4d150",
+						"ac6651",
+						"9287ff",
+						"ffeba4",
+						"fc909f",
+						"ffedef",
+						"6bd9e9",
+						"77311d",
+						"ffffff"
+					]
+				}
+			}
+		};
+		//#endregion
+		//#region ../../../node_modules/.pnpm/@dicebear+micah@9.4.2_@dicebear+core@9.4.3/node_modules/@dicebear/micah/lib/index.js
+		/**
+		* Do not change this file manually! This file was generated with the "Dicebear Exporter"-Plugin for Figma.
+		*
+		* Plugin: https://www.figma.com/community/plugin/1005765655729342787
+		* File: https://www.figma.com/file/YHb4ShTgmO8Lqhkz1plLfL
+		*/
+		var lib_exports = /* @__PURE__ */ __exportAll({
+			create: () => create,
+			meta: () => meta,
+			schema: () => schema
+		});
+		const meta = {
+			title: "Avatar Illustration System",
+			creator: "Micah Lanier",
+			source: "https://www.figma.com/community/file/829741575478342595",
+			homepage: "https://dribbble.com/micahlanier",
+			license: {
+				name: "CC BY 4.0",
+				url: "https://creativecommons.org/licenses/by/4.0/"
+			}
+		};
+		const create = ({ prng, options }) => {
+			var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r;
+			onPreCreate({
+				prng,
+				options
+			});
+			const components = getComponents({
+				prng,
+				options
+			});
+			const colors = getColors({
+				prng,
+				options
+			});
+			onPostCreate({
+				prng,
+				options,
+				components,
+				colors
+			});
+			return {
+				attributes: {
+					viewBox: "0 0 360 360",
+					fill: "none",
+					"shape-rendering": "auto"
+				},
+				body: `<g transform="translate(80 23)">${(_b = (_a = components.base) === null || _a === void 0 ? void 0 : _a.value(components, colors)) !== null && _b !== void 0 ? _b : ""}</g><g transform="translate(170 183)">${(_d = (_c = components.mouth) === null || _c === void 0 ? void 0 : _c.value(components, colors)) !== null && _d !== void 0 ? _d : ""}</g><g transform="translate(110 102)">${(_f = (_e = components.eyebrows) === null || _e === void 0 ? void 0 : _e.value(components, colors)) !== null && _f !== void 0 ? _f : ""}</g><g transform="translate(49 11)">${(_h = (_g = components.hair) === null || _g === void 0 ? void 0 : _g.value(components, colors)) !== null && _h !== void 0 ? _h : ""}</g><g transform="translate(142 119)">${(_k = (_j = components.eyes) === null || _j === void 0 ? void 0 : _j.value(components, colors)) !== null && _k !== void 0 ? _k : ""}</g><g transform="rotate(-8 1149.44 -1186.92)">${(_m = (_l = components.nose) === null || _l === void 0 ? void 0 : _l.value(components, colors)) !== null && _m !== void 0 ? _m : ""}</g><g transform="translate(84 154)">${(_p = (_o = components.ears) === null || _o === void 0 ? void 0 : _o.value(components, colors)) !== null && _p !== void 0 ? _p : ""}</g><g transform="translate(53 272)">${(_r = (_q = components.shirt) === null || _q === void 0 ? void 0 : _q.value(components, colors)) !== null && _r !== void 0 ? _r : ""}</g>`,
+				extra: () => ({
+					...Object.entries(components).reduce((acc, [key, value]) => {
+						acc[key] = value === null || value === void 0 ? void 0 : value.name;
+						return acc;
+					}, {}),
+					...Object.entries(colors).reduce((acc, [key, value]) => {
+						acc[`${key}Color`] = value;
+						return acc;
+					}, {})
+				})
+			};
+		};
+		//#endregion
 		//#region lib/types/client/ui/avatar.js
-		/** Coat, main and ink. Ordered so neighbouring entries are not near-duplicates. */
-		const AVATAR_PALETTES = [
-			[
-				"#fff1e8",
-				"#f07f62",
-				"#7b3e31"
-			],
-			[
-				"#e9f8ef",
-				"#55b783",
-				"#245b40"
-			],
-			[
-				"#eef1ff",
-				"#7d82d8",
-				"#3f4278"
-			],
-			[
-				"#fff5d9",
-				"#dfaa3f",
-				"#76530f"
-			],
-			[
-				"#e7f5fb",
-				"#51a7c8",
-				"#245e73"
-			],
-			[
-				"#faeaf3",
-				"#d779aa",
-				"#713652"
-			],
-			[
-				"#ecfbf7",
-				"#3fb8a6",
-				"#175c53"
-			],
-			[
-				"#fdeee6",
-				"#e0894a",
-				"#7a4318"
-			],
-			[
-				"#f2edfd",
-				"#9c7ae0",
-				"#4a3178"
-			],
-			[
-				"#e8f4e6",
-				"#79ae5c",
-				"#37552a"
-			],
-			[
-				"#fdecec",
-				"#e0655f",
-				"#7a2c28"
-			],
-			[
-				"#e9eff5",
-				"#6f89a8",
-				"#31445a"
-			],
-			[
-				"#fff8e1",
-				"#c9a227",
-				"#6b5410"
-			],
-			[
-				"#efe9e3",
-				"#a2846b",
-				"#4f3c2d"
-			],
-			[
-				"#e6f7ff",
-				"#4f9ae8",
-				"#1f4d80"
-			],
-			[
-				"#f7ecff",
-				"#b96fd4",
-				"#5f2d70"
-			]
+		/**
+		* Skill portraits.
+		*
+		* These were hand-drawn SVG primitives — circles for heads, triangles for ears
+		* — and at 30px in a directory of several hundred Skills they read as the same
+		* picture in different colours. Identity is this product's premise, so the
+		* artwork now comes from a real illustration set: DiceBear's `micah` style,
+		* generated locally from a seed.
+		*
+		* Two decisions worth keeping:
+		*
+		* - **`<img>` with a data URI, not inline SVG.** Every DiceBear document
+		*   declares `id="viewboxMask"`. Inlining several on one page makes those ids
+		*   collide and all but the first render blank — which is exactly what happens
+		*   in a 334-row contact list. An `<img>` is its own document, so the ids
+		*   cannot clash.
+		* - **A deterministic background tint.** Portraits differ by hair, skin and
+		*   accessory, which is plenty at 64px and marginal at 30px. The tint carries
+		*   the differentiation in a list; the portrait carries the personality.
+		*
+		* Artwork: Avatar Illustration System by Micah Lanier, CC BY 4.0. The
+		* attribution is recorded in the repository README.
+		*/
+		/** Background tints, one per identity, in the plugin's own palette. */
+		const AVATAR_BACKGROUNDS = [
+			"fff1e8",
+			"e9f8ef",
+			"eef1ff",
+			"fff5d9",
+			"e7f5fb",
+			"faeaf3",
+			"ecfbf7",
+			"fdeee6",
+			"f2edfd",
+			"e8f4e6",
+			"fdecec",
+			"e9eff5",
+			"fff8e1",
+			"efe9e3",
+			"e6f7ff",
+			"f7ecff"
 		];
-		/** Silhouettes, ordered so the library reads as a varied grid rather than a gradient. */
-		const AVATAR_SPECIES = [
-			"fox",
-			"cat",
-			"bear",
-			"rabbit",
-			"owl",
-			"panda",
-			"otter",
-			"deer",
-			"seal",
-			"dog",
-			"mouse",
-			"tiger",
-			"frog",
-			"penguin",
-			"koala",
-			"hamster",
-			"wolf",
-			"pig",
-			"sheep",
-			"monkey",
-			"chick",
-			"bat",
-			"raccoon",
-			"axolotl"
-		];
-		/** Every pickable identity: one entry per species and palette pair. */
-		const AVATAR_LIBRARY = AVATAR_SPECIES.flatMap((species) => AVATAR_PALETTES.map((_, index) => `${species}-${index}`));
+		/**
+		* Every pickable identity. An identity is just a seed: the generator maps it to
+		* a portrait, so the library is a list of seeds rather than a list of drawings.
+		*/
+		const AVATAR_LIBRARY = Array.from({ length: 192 }, (_, index) => `p${index + 1}`);
 		/** FNV-style string hash; stable across runs and platforms. */
 		function seedOf(value) {
 			let hash = 2166136261;
@@ -5234,763 +6259,50 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			}
 			return hash;
 		}
-		/** Pull an independent small integer out of one seed. */
-		function pick(seed, slot, size) {
-			return (Math.imul(seed ^ Math.imul(slot + 1, 2654435761), 2246822519) >>> 8) % size;
+		/**
+		* Generated portraits are pure functions of their inputs and a list re-renders
+		* on every keystroke of the search box, so each one is built once and kept.
+		*/
+		const cache = /* @__PURE__ */ new Map();
+		const CACHE_LIMIT = 1024;
+		/**
+		* Render one identity to a data URI.
+		* @param avatarId - the stored identity, used as the generator's seed.
+		* @param size - pixel size the SVG declares.
+		* @returns a `data:image/svg+xml` URI.
+		*/
+		function avatarDataUri(avatarId, size) {
+			const key = `${avatarId}@${size}`;
+			const hit = cache.get(key);
+			if (hit !== void 0) return hit;
+			const uri = createAvatar(lib_exports, {
+				seed: avatarId,
+				size,
+				backgroundColor: [AVATAR_BACKGROUNDS[seedOf(avatarId) % AVATAR_BACKGROUNDS.length] ?? "eef1ff"],
+				radius: 50
+			}).toDataUri();
+			if (cache.size >= CACHE_LIMIT) cache.clear();
+			cache.set(key, uri);
+			return uri;
 		}
 		/**
-		* Resolve an avatar id into the species and palette it names. Ids are written
-		* `species-palette`; anything unrecognised falls back to a hash of the id so a
-		* legacy or hand-typed value still draws something stable.
-		* @param avatarId - the stored identity.
-		* @returns species name and palette index.
+		* Draw one portrait.
+		* @param props - identity and presentation.
+		* @returns the avatar image.
 		*/
-		function resolve(avatarId) {
-			const [head, tail] = avatarId.split("-");
-			const named = AVATAR_SPECIES.find((item) => item === head);
-			const index = Number.parseInt(tail ?? "", 10);
-			const seed = seedOf(avatarId);
-			return {
-				species: named ?? AVATAR_SPECIES[seed % AVATAR_SPECIES.length] ?? "fox",
-				palette: Number.isNaN(index) ? seed % AVATAR_PALETTES.length : Math.abs(index) % AVATAR_PALETTES.length
-			};
-		}
-		/**
-		* Head geometry per species. A single circle for everyone was the main reason
-		* the old set read as one face: the silhouette is what the eye resolves first
-		* at 30px, so it has to differ before the ears do.
-		*/
-		const HEADS = {
-			fox: {
-				rx: 17,
-				ry: 16,
-				cy: 26
-			},
-			wolf: {
-				rx: 16.5,
-				ry: 17,
-				cy: 26
-			},
-			cat: {
-				rx: 17,
-				ry: 15.5,
-				cy: 27
-			},
-			bear: {
-				rx: 18,
-				ry: 17,
-				cy: 27
-			},
-			panda: {
-				rx: 18,
-				ry: 17,
-				cy: 27
-			},
-			rabbit: {
-				rx: 15,
-				ry: 16,
-				cy: 28
-			},
-			owl: {
-				rx: 18,
-				ry: 16,
-				cy: 26
-			},
-			otter: {
-				rx: 17,
-				ry: 15,
-				cy: 28
-			},
-			deer: {
-				rx: 14.5,
-				ry: 17,
-				cy: 28
-			},
-			seal: {
-				rx: 16,
-				ry: 17,
-				cy: 27
-			},
-			dog: {
-				rx: 16,
-				ry: 16.5,
-				cy: 27
-			},
-			mouse: {
-				rx: 14.5,
-				ry: 14.5,
-				cy: 29
-			},
-			tiger: {
-				rx: 18,
-				ry: 16.5,
-				cy: 27
-			},
-			frog: {
-				rx: 19,
-				ry: 14,
-				cy: 30
-			},
-			penguin: {
-				rx: 15,
-				ry: 17.5,
-				cy: 27
-			},
-			koala: {
-				rx: 16,
-				ry: 15,
-				cy: 28
-			},
-			hamster: {
-				rx: 17.5,
-				ry: 15,
-				cy: 28
-			},
-			pig: {
-				rx: 18,
-				ry: 15.5,
-				cy: 27
-			},
-			sheep: {
-				rx: 14.5,
-				ry: 15,
-				cy: 29
-			},
-			monkey: {
-				rx: 16,
-				ry: 16,
-				cy: 27
-			},
-			chick: {
-				rx: 16,
-				ry: 15,
-				cy: 28
-			},
-			bat: {
-				rx: 16.5,
-				ry: 14.5,
-				cy: 28
-			},
-			raccoon: {
-				rx: 17.5,
-				ry: 15.5,
-				cy: 27
-			},
-			axolotl: {
-				rx: 17,
-				ry: 15,
-				cy: 28
-			}
-		};
-		function EarLayer({ species }) {
-			switch (species) {
-				case "fox":
-				case "wolf": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("path", { d: "M8 18 L12 2 L23 12 Z" }), (0, react_jsx_runtime.jsx)("path", { d: "M40 18 L36 2 L25 12 Z" })] });
-				case "cat": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("path", { d: "M10 17 L11 4 L23 13 Z" }), (0, react_jsx_runtime.jsx)("path", { d: "M38 17 L37 4 L25 13 Z" })] });
-				case "bear":
-				case "panda": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					cx: "11",
-					cy: "12",
-					r: "8"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					cx: "37",
-					cy: "12",
-					r: "8"
-				})] });
-				case "rabbit": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("ellipse", {
-					cx: "16",
-					cy: "7",
-					rx: "5",
-					ry: "12"
-				}), (0, react_jsx_runtime.jsx)("ellipse", {
-					cx: "32",
-					cy: "7",
-					rx: "5",
-					ry: "12"
-				})] });
-				case "owl": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("path", { d: "M9 14 L14 4 L21 11 Z" }), (0, react_jsx_runtime.jsx)("path", { d: "M39 14 L34 4 L27 11 Z" })] });
-				case "otter":
-				case "hamster": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					cx: "12",
-					cy: "15",
-					r: "6"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					cx: "36",
-					cy: "15",
-					r: "6"
-				})] });
-				case "deer": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-					(0, react_jsx_runtime.jsx)("path", {
-						d: "M15 12 L12 2 M12 6 L7 3 M33 12 L36 2 M36 6 L41 3",
-						stroke: "currentColor",
-						strokeWidth: "2.6",
-						strokeLinecap: "round",
-						fill: "none"
-					}),
-					(0, react_jsx_runtime.jsx)("ellipse", {
-						cx: "11",
-						cy: "17",
-						rx: "4",
-						ry: "6"
-					}),
-					(0, react_jsx_runtime.jsx)("ellipse", {
-						cx: "37",
-						cy: "17",
-						rx: "4",
-						ry: "6"
-					})
-				] });
-				case "dog": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("ellipse", {
-					cx: "9",
-					cy: "24",
-					rx: "6",
-					ry: "11"
-				}), (0, react_jsx_runtime.jsx)("ellipse", {
-					cx: "39",
-					cy: "24",
-					rx: "6",
-					ry: "11"
-				})] });
-				case "mouse": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					cx: "11",
-					cy: "14",
-					r: "10"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					cx: "37",
-					cy: "14",
-					r: "10"
-				})] });
-				case "tiger": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					cx: "12",
-					cy: "13",
-					r: "7"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					cx: "36",
-					cy: "13",
-					r: "7"
-				})] });
-				case "koala": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-					(0, react_jsx_runtime.jsx)("circle", {
-						cx: "9",
-						cy: "19",
-						r: "10"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						cx: "39",
-						cy: "19",
-						r: "10"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarInner",
-						cx: "9",
-						cy: "19",
-						r: "6"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarInner",
-						cx: "39",
-						cy: "19",
-						r: "6"
-					})
-				] });
-				case "pig": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("path", { d: "M11 20 L10 8 L22 14 Z" }), (0, react_jsx_runtime.jsx)("path", { d: "M37 20 L38 8 L26 14 Z" })] });
-				case "sheep": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-					(0, react_jsx_runtime.jsx)("circle", {
-						cx: "13",
-						cy: "12",
-						r: "7"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						cx: "35",
-						cy: "12",
-						r: "7"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						cx: "24",
-						cy: "8",
-						r: "8"
-					}),
-					(0, react_jsx_runtime.jsx)("ellipse", {
-						cx: "8",
-						cy: "21",
-						rx: "4",
-						ry: "6"
-					}),
-					(0, react_jsx_runtime.jsx)("ellipse", {
-						cx: "40",
-						cy: "21",
-						rx: "4",
-						ry: "6"
-					})
-				] });
-				case "monkey": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					cx: "8",
-					cy: "26",
-					r: "7"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					cx: "40",
-					cy: "26",
-					r: "7"
-				})] });
-				case "bat": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("path", { d: "M6 16 L10 1 L24 13 Z" }), (0, react_jsx_runtime.jsx)("path", { d: "M42 16 L38 1 L24 13 Z" })] });
-				case "raccoon": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("path", { d: "M10 16 L13 4 L23 12 Z" }), (0, react_jsx_runtime.jsx)("path", { d: "M38 16 L35 4 L25 12 Z" })] });
-				case "chick": return (0, react_jsx_runtime.jsx)(react_jsx_runtime.Fragment, { children: (0, react_jsx_runtime.jsx)("path", { d: "M22 9 L24 1 L27 9 Z" }) });
-				case "frog": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					cx: "14",
-					cy: "12",
-					r: "8"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					cx: "34",
-					cy: "12",
-					r: "8"
-				})] });
-				case "seal":
-				case "penguin":
-				case "axolotl": return null;
-				default: return null;
-			}
-		}
-		/** Markings that sit on top of the face and define the species as much as the ears do. */
-		function MarkLayer({ species }) {
-			switch (species) {
-				case "panda": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarPatch",
-					cx: "17",
-					cy: "24",
-					rx: "5.4",
-					ry: "6.4"
-				}), (0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarPatch",
-					cx: "31",
-					cy: "24",
-					rx: "5.4",
-					ry: "6.4"
-				})] });
-				case "raccoon": return (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarPatch",
-					d: "M10 24 Q24 18 38 24 Q34 31 24 30 Q14 31 10 24 Z"
-				});
-				case "tiger": return (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarInk",
-					d: "M18 13 L16 18 M24 12 L24 17 M30 13 L32 18",
-					strokeWidth: "2.2",
-					strokeLinecap: "round",
-					fill: "none",
-					stroke: "currentColor"
-				});
-				case "penguin": return (0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarPatch",
-					cx: "24",
-					cy: "29",
-					rx: "12",
-					ry: "13"
-				});
-				case "owl": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarPatch",
-					cx: "17",
-					cy: "25",
-					r: "7"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarPatch",
-					cx: "31",
-					cy: "25",
-					r: "7"
-				})] });
-				case "dog": return (0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarPatch",
-					cx: "24",
-					cy: "33",
-					rx: "9",
-					ry: "7"
-				});
-				case "cat": return (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarInk",
-					d: "M4 27 L13 28 M4 32 L13 31 M44 27 L35 28 M44 32 L35 31",
-					strokeWidth: "1.6",
-					strokeLinecap: "round",
-					fill: "none",
-					stroke: "currentColor"
-				});
-				case "axolotl": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-					(0, react_jsx_runtime.jsx)("path", {
-						d: "M6 20 L1 14 M6 26 L0 26 M42 20 L47 14 M42 26 L48 26",
-						stroke: "currentColor",
-						strokeWidth: "2.4",
-						strokeLinecap: "round",
-						fill: "none"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarPatch",
-						cx: "15",
-						cy: "32",
-						r: "3"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarPatch",
-						cx: "33",
-						cy: "32",
-						r: "3"
-					})
-				] });
-				case "sheep": return (0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarPatch",
-					cx: "24",
-					cy: "31",
-					rx: "10",
-					ry: "8"
-				});
-				case "monkey": return (0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarPatch",
-					cx: "24",
-					cy: "30",
-					rx: "11",
-					ry: "10"
-				});
-				case "hamster": return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarPatch",
-					cx: "12",
-					cy: "31",
-					r: "5"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarPatch",
-					cx: "36",
-					cy: "31",
-					r: "5"
-				})] });
-				case "frog": return (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarInk",
-					d: "M14 33 Q24 40 34 33",
-					strokeWidth: "2.2",
-					strokeLinecap: "round",
-					fill: "none",
-					stroke: "currentColor"
-				});
-				default: return null;
-			}
-		}
-		const EYE_Y = 25;
-		function Eyes({ variant, species }) {
-			const y = species === "frog" ? 13 : EYE_Y;
-			const [left, right] = species === "frog" ? [14, 34] : [17, 31];
-			switch (variant) {
-				case 0: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarEye",
-					cx: left,
-					cy: y,
-					r: "2.4"
-				}), (0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarEye",
-					cx: right,
-					cy: y,
-					r: "2.4"
-				})] });
-				case 1: return (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarEye",
-					d: `M${left - 3} ${y + 1} Q${left} ${y - 3} ${left + 3} ${y + 1} M${right - 3} ${y + 1} Q${right} ${y - 3} ${right + 3} ${y + 1}`,
-					fill: "none",
-					stroke: "currentColor",
-					strokeWidth: "2",
-					strokeLinecap: "round"
-				});
-				case 2: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarEye",
-					cx: left,
-					cy: y,
-					r: "2.4"
-				}), (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarEye",
-					d: `M${right - 3} ${y} Q${right} ${y - 3} ${right + 3} ${y}`,
-					fill: "none",
-					stroke: "currentColor",
-					strokeWidth: "2",
-					strokeLinecap: "round"
-				})] });
-				case 3: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarEye",
-						cx: left,
-						cy: y,
-						r: "3.2"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarEye",
-						cx: right,
-						cy: y,
-						r: "3.2"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarGlint",
-						cx: left + 1.2,
-						cy: y - 1.2,
-						r: "1"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarGlint",
-						cx: right + 1.2,
-						cy: y - 1.2,
-						r: "1"
-					})
-				] });
-				case 4: return (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarEye",
-					d: `M${left - 3} ${y} L${left + 3} ${y} M${right - 3} ${y} L${right + 3} ${y}`,
-					fill: "none",
-					stroke: "currentColor",
-					strokeWidth: "2",
-					strokeLinecap: "round"
-				});
-				default: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarEye",
-						cx: left,
-						cy: y,
-						r: "2.6"
-					}),
-					(0, react_jsx_runtime.jsx)("circle", {
-						className: "avatarEye",
-						cx: right,
-						cy: y,
-						r: "2.6"
-					}),
-					(0, react_jsx_runtime.jsx)("path", {
-						className: "avatarGlint",
-						d: `M${left + 2} ${y - 3} l1 1 -1 1 -1 -1 z M${right + 2} ${y - 3} l1 1 -1 1 -1 -1 z`
-					})
-				] });
-			}
-		}
-		function Mouth({ variant, species }) {
-			if (species === "chick" || species === "penguin" || species === "owl") return (0, react_jsx_runtime.jsx)("path", {
-				className: "avatarBeak",
-				d: "M20 30 L24 36 L28 30 Z"
-			});
-			if (species === "pig") return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
-				(0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarNose",
-					cx: "24",
-					cy: "31",
-					rx: "6",
-					ry: "4.6"
-				}),
-				(0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarInk",
-					cx: "22",
-					cy: "31",
-					r: "1"
-				}),
-				(0, react_jsx_runtime.jsx)("circle", {
-					className: "avatarInk",
-					cx: "26",
-					cy: "31",
-					r: "1"
-				})
-			] });
-			const nose = (0, react_jsx_runtime.jsx)("circle", {
-				className: "avatarNose",
-				cx: "24",
-				cy: "30",
-				r: "2.2"
-			});
-			switch (variant) {
-				case 0: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [nose, (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarMuzzle",
-					d: "M20 33 Q24 36.5 28 33"
-				})] });
-				case 1: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [nose, (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarMuzzle",
-					d: "M19 33 Q24 39 29 33"
-				})] });
-				case 2: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [nose, (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarMuzzle",
-					d: "M21 34 Q24 35.5 27 34"
-				})] });
-				case 3: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [nose, (0, react_jsx_runtime.jsx)("ellipse", {
-					className: "avatarInk",
-					cx: "24",
-					cy: "35",
-					rx: "3.4",
-					ry: "2.6"
-				})] });
-				default: return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [nose, (0, react_jsx_runtime.jsx)("path", {
-					className: "avatarMuzzle",
-					d: "M24 32 L24 34 M21 35 Q24 37.5 27 35"
-				})] });
-			}
-		}
-		function Accessory({ variant }) {
-			switch (variant) {
-				case 1: return (0, react_jsx_runtime.jsxs)("g", {
-					className: "avatarGear",
-					fill: "none",
-					stroke: "currentColor",
-					strokeWidth: "1.8",
-					children: [
-						(0, react_jsx_runtime.jsx)("circle", {
-							cx: "17",
-							cy: "25",
-							r: "5"
-						}),
-						(0, react_jsx_runtime.jsx)("circle", {
-							cx: "31",
-							cy: "25",
-							r: "5"
-						}),
-						(0, react_jsx_runtime.jsx)("path", { d: "M22 25 L26 25" })
-					]
-				});
-				case 2: return (0, react_jsx_runtime.jsxs)("g", {
-					className: "avatarGear",
-					children: [
-						(0, react_jsx_runtime.jsx)("path", {
-							d: "M8 26 A16 16 0 0 1 40 26",
-							fill: "none",
-							stroke: "currentColor",
-							strokeWidth: "2.4"
-						}),
-						(0, react_jsx_runtime.jsx)("rect", {
-							x: "4",
-							y: "24",
-							width: "7",
-							height: "11",
-							rx: "3.5"
-						}),
-						(0, react_jsx_runtime.jsx)("rect", {
-							x: "37",
-							y: "24",
-							width: "7",
-							height: "11",
-							rx: "3.5"
-						})
-					]
-				});
-				case 3: return (0, react_jsx_runtime.jsx)("g", {
-					className: "avatarGear",
-					children: (0, react_jsx_runtime.jsx)("path", { d: "M9 39 Q24 46 39 39 L39 44 Q24 50 9 44 Z" })
-				});
-				case 4: return (0, react_jsx_runtime.jsxs)("g", {
-					className: "avatarGear",
-					children: [(0, react_jsx_runtime.jsx)("path", { d: "M7 15 Q24 -1 41 15 L41 18 L7 18 Z" }), (0, react_jsx_runtime.jsx)("rect", {
-						x: "3",
-						y: "16",
-						width: "20",
-						height: "4",
-						rx: "2"
-					})]
-				});
-				case 5: return (0, react_jsx_runtime.jsxs)("g", {
-					className: "avatarGear",
-					children: [
-						(0, react_jsx_runtime.jsx)("circle", {
-							cx: "38",
-							cy: "11",
-							r: "2.6"
-						}),
-						(0, react_jsx_runtime.jsx)("circle", {
-							cx: "43",
-							cy: "11",
-							r: "2.6"
-						}),
-						(0, react_jsx_runtime.jsx)("circle", {
-							cx: "40.5",
-							cy: "7",
-							r: "2.6"
-						}),
-						(0, react_jsx_runtime.jsx)("circle", {
-							cx: "40.5",
-							cy: "15",
-							r: "2.6"
-						}),
-						(0, react_jsx_runtime.jsx)("circle", {
-							className: "avatarGlint",
-							cx: "40.5",
-							cy: "11",
-							r: "1.6"
-						})
-					]
-				});
-				case 6: return (0, react_jsx_runtime.jsxs)("g", {
-					className: "avatarGear",
-					children: [
-						(0, react_jsx_runtime.jsx)("path", { d: "M17 42 L23 39 L23 45 Z" }),
-						(0, react_jsx_runtime.jsx)("path", { d: "M31 42 L25 39 L25 45 Z" }),
-						(0, react_jsx_runtime.jsx)("rect", {
-							x: "22.4",
-							y: "40.4",
-							width: "3.2",
-							height: "3.2",
-							rx: "1"
-						})
-					]
-				});
-				case 7: return (0, react_jsx_runtime.jsxs)("g", {
-					className: "avatarGear",
-					children: [(0, react_jsx_runtime.jsx)("path", {
-						d: "M24 8 L24 2",
-						stroke: "currentColor",
-						strokeWidth: "2",
-						fill: "none"
-					}), (0, react_jsx_runtime.jsx)("circle", {
-						cx: "24",
-						cy: "1.6",
-						r: "2.4"
-					})]
-				});
-				default: return null;
-			}
-		}
-		/**
-		* Draw one avatar.
-		* @param props - identity, seed and presentation.
-		* @returns the inline SVG portrait.
-		*/
-		function CartoonAvatar({ avatarId, seed, size = 40, title, className }) {
-			const { species, palette } = resolve(avatarId);
-			const colors = AVATAR_PALETTES[palette] ?? AVATAR_PALETTES[0];
-			const head = HEADS[species] ?? {
-				rx: 17,
-				ry: 16,
-				cy: 27
-			};
-			const faceSeed = seedOf(seed ?? avatarId);
-			const eyes = pick(faceSeed, 0, 6);
-			const mouth = pick(faceSeed, 1, 5);
-			const accessory = pick(faceSeed, 2, 12) < 8 ? 0 : pick(faceSeed, 3, 7) + 1;
+		function CartoonAvatar({ avatarId, size = 40, title, className }) {
+			const uri = avatarDataUri(avatarId, size * 2);
 			return (0, react_jsx_runtime.jsx)("span", {
 				className,
 				title,
-				style: {
-					"--avatar-size": `${size}px`,
-					"--avatar-bg": colors[0],
-					"--avatar-main": colors[1],
-					"--avatar-ink": colors[2]
-				},
-				"data-avatar-species": species,
-				children: (0, react_jsx_runtime.jsxs)("svg", {
-					viewBox: "0 0 48 48",
-					"aria-hidden": "true",
-					children: [
-						(0, react_jsx_runtime.jsx)("g", {
-							className: "avatarEars",
-							children: (0, react_jsx_runtime.jsx)(EarLayer, { species })
-						}),
-						(0, react_jsx_runtime.jsx)("ellipse", {
-							className: "avatarFace",
-							cx: "24",
-							cy: head.cy,
-							rx: head.rx,
-							ry: head.ry
-						}),
-						(0, react_jsx_runtime.jsx)(MarkLayer, { species }),
-						(0, react_jsx_runtime.jsx)(Eyes, {
-							variant: eyes,
-							species
-						}),
-						(0, react_jsx_runtime.jsx)(Mouth, {
-							variant: mouth,
-							species
-						}),
-						(0, react_jsx_runtime.jsx)(Accessory, { variant: accessory })
-					]
+				style: { "--avatar-size": `${size}px` },
+				"data-avatar": true,
+				children: (0, react_jsx_runtime.jsx)("img", {
+					src: uri,
+					alt: "",
+					width: size,
+					height: size,
+					draggable: false
 				})
 			});
 		}
@@ -6125,7 +6437,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			return {
 				skillId: contact.id,
 				displayName: FRIENDLY_NAMES[hash % FRIENDLY_NAMES.length] ?? "小满",
-				avatarId: ANIMAL_AVATARS[(hash >>> 5) % ANIMAL_AVATARS.length] ?? "fox-0",
+				avatarId: contact.id,
 				originalName: contact.name,
 				roleLabel: contact.source === "harness" ? "项目内 AI 同事" : contact.source === "workbuddy" ? "WorkBuddy 专家" : "社区 Skill 专家",
 				bio: contact.description,
@@ -6156,7 +6468,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					changed = true;
 					continue;
 				}
-				const staleAvatar = current.customizedAvatar !== true && !ANIMAL_AVATARS.includes(current.avatarId);
+				const staleAvatar = current.customizedAvatar !== true && current.avatarId !== contact.id;
 				const refreshed = {
 					...current,
 					...staleAvatar ? { avatarId: generated.avatarId } : {},
@@ -6379,7 +6691,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		}
 		//#endregion
 		//#region \0dsh-global-css:/Users/lileilei/workspace/deepseek-harness/packages/experimental/client-ui-skill-chat/src/client/theme.css.mjs
-		const css$2 = ":root{--ds-chat-font:-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"PingFang SC\", \"Helvetica Neue\", system-ui, sans-serif;--ds-chat-font-mono:ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, monospace;--ds-chat-text-caption:11px;--ds-chat-text-footnote:12px;--ds-chat-text-body:13px;--ds-chat-text-callout:14px;--ds-chat-text-title3:15px;--ds-chat-text-title2:17px;--ds-chat-text-title1:20px;--ds-chat-weight-regular:400;--ds-chat-weight-medium:500;--ds-chat-weight-semibold:600;--ds-chat-weight-bold:700;--ds-chat-leading-tight:1.25;--ds-chat-leading-normal:1.45;--ds-chat-leading-relaxed:1.6;--ds-chat-tracking-title:-.022em;--ds-chat-tracking-body:-.008em;--ds-chat-tracking-caption:0;--ds-chat-space-1:4px;--ds-chat-space-2:8px;--ds-chat-space-3:12px;--ds-chat-space-4:16px;--ds-chat-space-5:20px;--ds-chat-space-6:24px;--ds-chat-space-8:32px;--ds-chat-radius-xs:6px;--ds-chat-radius-sm:8px;--ds-chat-radius-control:10px;--ds-chat-radius-md:12px;--ds-chat-radius-lg:16px;--ds-chat-radius-xl:20px;--ds-chat-radius-round:999px;color-scheme:light;--ds-chat-hairline:.5px;--ds-chat-border:#0000001a;--ds-chat-border-strong:#0000001f;--ds-chat-surface:Canvas;--ds-chat-surface-raised:Canvas;--ds-chat-surface-sunken:var(--ds-chat-fill-quaternary);--ds-chat-fill-primary:#78788033;--ds-chat-fill-secondary:#78788024;--ds-chat-fill-tertiary:#7676801a;--ds-chat-fill-quaternary:#7474800f;--ds-chat-hover:#2631480f;--ds-chat-pressed:var(--ds-chat-fill-tertiary);--ds-chat-text-color:CanvasText;--ds-chat-text-secondary:color-mix(in srgb, CanvasText 68%, transparent);--ds-chat-muted:color-mix(in srgb, CanvasText 46%, transparent);--ds-chat-accent-solid:#12a05f;--ds-chat-accent-hover:#0e8a50;--ds-chat-accent-text:var(--ds-chat-accent-solid);--ds-chat-on-accent:#fff;--ds-chat-accent-soft:color-mix(in srgb, var(--ds-chat-accent-solid) 10%, transparent);--ds-chat-accent-soft-strong:color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent);--ds-chat-accent-border:color-mix(in srgb, var(--ds-chat-accent-solid) 28%, transparent);--ds-chat-focus:color-mix(in srgb, var(--ds-chat-accent-solid) 70%, transparent);--ds-chat-accent:var(--ds-chat-accent-solid);--ds-chat-accent-faint:var(--ds-chat-accent-soft);--ds-chat-avatar-gradient:var(--ds-chat-accent-soft-strong);--ds-chat-row-hover:var(--ds-chat-hover);--ds-chat-row-selected:var(--ds-chat-accent-soft-strong);--ds-chat-user-bubble:var(--ds-chat-accent-solid);--ds-chat-shadow:var(--ds-chat-shadow-2);--ds-chat-accent-bright:#32d583;--ds-chat-code-bg:#0d1218;--ds-chat-code-bg-raised:#151b22;--ds-chat-code-fg:#d9e2ea;--ds-chat-code-muted:#8995a3;--ds-chat-code-border:#ffffff1f;--ds-chat-danger:#d0342c;--ds-chat-danger-soft:color-mix(in srgb, var(--ds-chat-danger) 10%, transparent);--ds-chat-warning:#b25000;--ds-chat-warning-soft:color-mix(in srgb, var(--ds-chat-warning) 12%, transparent);--ds-chat-info:#3b6fd4;--ds-chat-info-soft:color-mix(in srgb, var(--ds-chat-info) 12%, transparent);--ds-chat-shadow-1:0 1px 2px #0000000d;--ds-chat-shadow-2:0 4px 14px #00000014;--ds-chat-shadow-3:0 16px 40px #00000024;--ds-chat-scrim:#00000038;--ds-chat-ease:cubic-bezier(.32, .72, 0, 1);--ds-chat-duration-fast:.12s;--ds-chat-duration:.2s}body{--ds-chat-surface:var(--dsw-alias-bg-base);--ds-chat-surface-raised:var(--dsw-alias-bg-layer-2);--ds-chat-border:var(--dsw-alias-border-l2);--ds-chat-border-strong:var(--dsw-alias-border-l3);--ds-chat-hover:var(--dsw-alias-interactive-bg-hover);--ds-chat-text-color:var(--dsw-alias-label-primary);--ds-chat-text-secondary:var(--dsw-alias-label-secondary);--ds-chat-muted:var(--dsw-alias-label-tertiary)}body[data-ds-dark-theme]{color-scheme:dark;--ds-chat-hover:#ffffff14;--ds-chat-fill-primary:#8e8e9352;--ds-chat-fill-secondary:#8e8e933d;--ds-chat-fill-tertiary:#8e8e932e;--ds-chat-fill-quaternary:#8e8e931f;--ds-chat-accent-solid:#32d583;--ds-chat-accent-hover:#4ade9b;--ds-chat-on-accent:#06231a;--ds-chat-accent-soft:color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent);--ds-chat-accent-soft-strong:color-mix(in srgb, var(--ds-chat-accent-solid) 24%, transparent);--ds-chat-danger:#ff6961;--ds-chat-warning:#ffb340;--ds-chat-info:#6ea8fe;--ds-chat-shadow-1:0 1px 2px #0000004d;--ds-chat-shadow-2:0 4px 14px #0006;--ds-chat-shadow-3:0 16px 40px #0000008c;--ds-chat-scrim:#00000080}[data-avatar-species] svg{width:92%;height:92%;overflow:visible}[data-avatar-species] .avatarEars{fill:color-mix(in srgb, var(--avatar-main) 78%, var(--avatar-ink));color:var(--avatar-ink)}[data-avatar-species] .avatarFace{fill:var(--avatar-main)}[data-avatar-species] .avatarInner{fill:color-mix(in srgb, var(--avatar-bg) 70%, var(--avatar-main))}[data-avatar-species] .avatarPatch{fill:var(--avatar-ink);opacity:.42}[data-avatar-species] .avatarInk{color:var(--avatar-ink);fill:var(--avatar-ink)}[data-avatar-species] .avatarEye{fill:var(--avatar-ink);color:var(--avatar-ink)}[data-avatar-species] .avatarGlint{fill:var(--avatar-bg)}[data-avatar-species] .avatarNose{fill:var(--avatar-ink)}[data-avatar-species] .avatarBeak{fill:#f0a63c}[data-avatar-species] .avatarMuzzle{fill:none;stroke:var(--avatar-ink);stroke-width:1.8px;stroke-linecap:round}[data-avatar-species] .avatarGear{fill:var(--avatar-ink);color:var(--avatar-ink)}[data-chat-flow-kind=assistant-step] [data-disclosure-row],[data-chat-flow-kind=tool-call] [data-disclosure-row]{padding-left:var(--ds-chat-space-3);border-left:2px solid var(--ds-chat-accent-border);background:var(--ds-chat-accent-soft);font-size:var(--ds-chat-text-footnote);opacity:.66;transition:opacity var(--ds-chat-duration-fast) var(--ds-chat-ease);margin-left:26px}[data-chat-flow-kind=assistant-step] [data-disclosure-row]:hover,[data-chat-flow-kind=tool-call] [data-disclosure-row]:hover,[data-chat-flow-kind=assistant-step] [data-disclosure-row]:focus-visible,[data-chat-flow-kind=tool-call] [data-disclosure-row]:focus-visible{opacity:1}[data-chat-flow-kind=assistant-step]+[data-chat-flow-kind=assistant-step],[data-chat-flow-kind=assistant-step]+[data-chat-flow-kind=tool-call],[data-chat-flow-kind=tool-call]+[data-chat-flow-kind=tool-call],[data-chat-flow-kind=tool-call]+[data-chat-flow-kind=assistant-step]{margin-top:0}[data-chat-flow-kind=assistant-step] [class*=markdown]{margin-top:var(--ds-chat-space-2)}[data-chat-flow-kind=user]{margin-block:var(--ds-chat-space-3)}@media (prefers-reduced-motion:reduce){[data-chat-flow-kind=assistant-step] [data-disclosure-row],[data-chat-flow-kind=tool-call] [data-disclosure-row]{transition:none}}[data-slot=sidebar\\.settings] button{box-sizing:border-box;width:calc(100% - 8px);margin-inline:4px}";
+		const css$2 = ":root{--ds-chat-font:-apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"PingFang SC\", \"Helvetica Neue\", system-ui, sans-serif;--ds-chat-font-mono:ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, monospace;--ds-chat-text-caption:11px;--ds-chat-text-footnote:12px;--ds-chat-text-body:13px;--ds-chat-text-callout:14px;--ds-chat-text-title3:15px;--ds-chat-text-title2:17px;--ds-chat-text-title1:20px;--ds-chat-weight-regular:400;--ds-chat-weight-medium:500;--ds-chat-weight-semibold:600;--ds-chat-weight-bold:700;--ds-chat-leading-tight:1.25;--ds-chat-leading-normal:1.45;--ds-chat-leading-relaxed:1.6;--ds-chat-tracking-title:-.022em;--ds-chat-tracking-body:-.008em;--ds-chat-tracking-caption:0;--ds-chat-space-1:4px;--ds-chat-space-2:8px;--ds-chat-space-3:12px;--ds-chat-space-4:16px;--ds-chat-space-5:20px;--ds-chat-space-6:24px;--ds-chat-space-8:32px;--ds-chat-radius-xs:6px;--ds-chat-radius-sm:8px;--ds-chat-radius-control:10px;--ds-chat-radius-md:12px;--ds-chat-radius-lg:16px;--ds-chat-radius-xl:20px;--ds-chat-radius-round:999px;color-scheme:light;--ds-chat-hairline:.5px;--ds-chat-border:#0000001a;--ds-chat-border-strong:#0000001f;--ds-chat-surface:Canvas;--ds-chat-surface-raised:Canvas;--ds-chat-surface-sunken:var(--ds-chat-fill-quaternary);--ds-chat-fill-primary:#78788033;--ds-chat-fill-secondary:#78788024;--ds-chat-fill-tertiary:#7676801a;--ds-chat-fill-quaternary:#7474800f;--ds-chat-hover:#2631480f;--ds-chat-pressed:var(--ds-chat-fill-tertiary);--ds-chat-text-color:CanvasText;--ds-chat-text-secondary:color-mix(in srgb, CanvasText 68%, transparent);--ds-chat-muted:color-mix(in srgb, CanvasText 46%, transparent);--ds-chat-accent-solid:#12a05f;--ds-chat-accent-hover:#0e8a50;--ds-chat-accent-text:var(--ds-chat-accent-solid);--ds-chat-on-accent:#fff;--ds-chat-accent-soft:color-mix(in srgb, var(--ds-chat-accent-solid) 10%, transparent);--ds-chat-accent-soft-strong:color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent);--ds-chat-accent-border:color-mix(in srgb, var(--ds-chat-accent-solid) 28%, transparent);--ds-chat-focus:color-mix(in srgb, var(--ds-chat-accent-solid) 70%, transparent);--ds-chat-accent:var(--ds-chat-accent-solid);--ds-chat-accent-faint:var(--ds-chat-accent-soft);--ds-chat-avatar-gradient:var(--ds-chat-accent-soft-strong);--ds-chat-row-hover:var(--ds-chat-hover);--ds-chat-row-selected:var(--ds-chat-accent-soft-strong);--ds-chat-user-bubble:var(--ds-chat-accent-solid);--ds-chat-shadow:var(--ds-chat-shadow-2);--ds-chat-accent-bright:#32d583;--ds-chat-code-bg:#0d1218;--ds-chat-code-bg-raised:#151b22;--ds-chat-code-fg:#d9e2ea;--ds-chat-code-muted:#8995a3;--ds-chat-code-border:#ffffff1f;--ds-chat-danger:#d0342c;--ds-chat-danger-soft:color-mix(in srgb, var(--ds-chat-danger) 10%, transparent);--ds-chat-warning:#b25000;--ds-chat-warning-soft:color-mix(in srgb, var(--ds-chat-warning) 12%, transparent);--ds-chat-info:#3b6fd4;--ds-chat-info-soft:color-mix(in srgb, var(--ds-chat-info) 12%, transparent);--ds-chat-shadow-1:0 1px 2px #0000000d;--ds-chat-shadow-2:0 4px 14px #00000014;--ds-chat-shadow-3:0 16px 40px #00000024;--ds-chat-scrim:#00000038;--ds-chat-ease:cubic-bezier(.32, .72, 0, 1);--ds-chat-duration-fast:.12s;--ds-chat-duration:.2s}body{--ds-chat-surface:var(--dsw-alias-bg-base);--ds-chat-surface-raised:var(--dsw-alias-bg-layer-2);--ds-chat-border:var(--dsw-alias-border-l2);--ds-chat-border-strong:var(--dsw-alias-border-l3);--ds-chat-hover:var(--dsw-alias-interactive-bg-hover);--ds-chat-text-color:var(--dsw-alias-label-primary);--ds-chat-text-secondary:var(--dsw-alias-label-secondary);--ds-chat-muted:var(--dsw-alias-label-tertiary)}body[data-ds-dark-theme]{color-scheme:dark;--ds-chat-hover:#ffffff14;--ds-chat-fill-primary:#8e8e9352;--ds-chat-fill-secondary:#8e8e933d;--ds-chat-fill-tertiary:#8e8e932e;--ds-chat-fill-quaternary:#8e8e931f;--ds-chat-accent-solid:#32d583;--ds-chat-accent-hover:#4ade9b;--ds-chat-on-accent:#06231a;--ds-chat-accent-soft:color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent);--ds-chat-accent-soft-strong:color-mix(in srgb, var(--ds-chat-accent-solid) 24%, transparent);--ds-chat-danger:#ff6961;--ds-chat-warning:#ffb340;--ds-chat-info:#6ea8fe;--ds-chat-shadow-1:0 1px 2px #0000004d;--ds-chat-shadow-2:0 4px 14px #0006;--ds-chat-shadow-3:0 16px 40px #0000008c;--ds-chat-scrim:#00000080}[data-avatar]{width:var(--avatar-size,40px);min-width:var(--avatar-size,40px);height:var(--avatar-size,40px);min-height:var(--avatar-size,40px);aspect-ratio:1;border-radius:var(--ds-chat-radius-round);box-shadow:inset 0 0 0 var(--ds-chat-hairline) #00000014;flex:none;display:inline-block;overflow:hidden}[data-avatar] img{border-radius:inherit;-webkit-user-drag:none;width:100%;height:100%;display:block}[data-chat-flow-kind=assistant-step] [data-disclosure-row],[data-chat-flow-kind=tool-call] [data-disclosure-row]{padding-left:var(--ds-chat-space-3);border-left:2px solid var(--ds-chat-accent-border);background:var(--ds-chat-accent-soft);font-size:var(--ds-chat-text-footnote);opacity:.66;transition:opacity var(--ds-chat-duration-fast) var(--ds-chat-ease);margin-left:26px}[data-chat-flow-kind=assistant-step] [data-disclosure-row]:hover,[data-chat-flow-kind=tool-call] [data-disclosure-row]:hover,[data-chat-flow-kind=assistant-step] [data-disclosure-row]:focus-visible,[data-chat-flow-kind=tool-call] [data-disclosure-row]:focus-visible{opacity:1}[data-chat-flow-kind=assistant-step]+[data-chat-flow-kind=assistant-step],[data-chat-flow-kind=assistant-step]+[data-chat-flow-kind=tool-call],[data-chat-flow-kind=tool-call]+[data-chat-flow-kind=tool-call],[data-chat-flow-kind=tool-call]+[data-chat-flow-kind=assistant-step]{margin-top:0}[data-chat-flow-kind=assistant-step] [class*=markdown]{margin-top:var(--ds-chat-space-2)}[data-chat-flow-kind=user]{margin-block:var(--ds-chat-space-3)}@media (prefers-reduced-motion:reduce){[data-chat-flow-kind=assistant-step] [data-disclosure-row],[data-chat-flow-kind=tool-call] [data-disclosure-row]{transition:none}}[data-slot=sidebar\\.settings] button{box-sizing:border-box;width:calc(100% - 8px);margin-inline:4px}";
 		const tagId$2 = "deepseek-harness-chat-ui/theme.css";
 		if (typeof document !== "undefined" && document.querySelector("style[data-plugin-css=" + JSON.stringify(tagId$2) + "]") === null) {
 			const tag = document.createElement("style");

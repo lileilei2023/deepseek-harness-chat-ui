@@ -12,7 +12,7 @@ This is **not another ChatGPT-style single-assistant shell**. DS Chat treats eve
 
 The demo walks the room list, opens a Skill group, inspects its members and system role, switches rooms and returns with the conversation intact, then scrolls the contact directory — several hundred Skills, each with its own generated identity.
 
-[Watch the 26-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
+[Watch the 21-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI main screen](docs/images/deepseek-harness-chat-ui-main.png)
 
@@ -22,7 +22,7 @@ DeepSeek Harness provides a powerful agent runtime, but its default interface is
 
 - **Persistent rooms** restore the previous conversation instead of silently creating a new session.
 - **Normal chat** works without selecting a Skill.
-- **Personified Skills** appear as recognizable contacts with deterministic names, generated cartoon avatars (24 species × 16 palettes, plus per-Skill expression and accessory), profiles, and original capability metadata.
+- **Personified Skills** appear as recognizable contacts with deterministic names, illustrated portraits generated per Skill (DiceBear Micah, see Credits), profiles, and original capability metadata.
 - **Group chats** let users search Skills, pull them into a group, choose a coordinator, and define a reusable group system prompt.
 - **Automation entry points** connect scheduled tasks to rooms and conversation history.
 - **Project and terminal sidecars** keep files and command-line work beside the active conversation.
@@ -137,6 +137,10 @@ Override the roster from the profile's patch layer:
 ```
 
 A Skill name found under more than one root keeps the first root's entry, so roster order is precedence order. `config.root` still relocates the WorkBuddy cache on its own and leaves the other roots in place.
+
+## Credits
+
+Skill portraits are generated locally with [DiceBear](https://www.dicebear.com) (MIT) using the **Micah** style — *Avatar Illustration System* by [Micah Lanier](https://dribbble.com/micahlanier), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Nothing is fetched at runtime: the generator is bundled and every portrait is derived from the Skill's own id.
 
 ## Compatibility
 

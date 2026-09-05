@@ -142,7 +142,11 @@ export function defaultPersona(contact: SkillContact, now = Date.now()): SkillPe
   return {
     skillId: contact.id,
     displayName: FRIENDLY_NAMES[hash % FRIENDLY_NAMES.length] ?? '小满',
-    avatarId: ANIMAL_AVATARS[(hash >>> 5) % ANIMAL_AVATARS.length] ?? 'fox-0',
+    // The Skill's own id is the seed, so an auto-assigned portrait is as
+    // distinct as the Skill is. Drawing from the picker's fixed library instead
+    // would collide by the birthday bound — 334 Skills over 192 presets left
+    // only 159 distinct faces.
+    avatarId: contact.id,
     originalName: contact.name,
     roleLabel: contact.source === 'harness' ? '项目内 AI 同事' : contact.source === 'workbuddy' ? 'WorkBuddy 专家' : '社区 Skill 专家',
     bio: contact.description,
@@ -184,7 +188,10 @@ export function ensurePersonas(
     // library. Without this, personas minted against an older, smaller library
     // keep its silhouettes forever and the new species are never seen. A
     // customised avatar is the user's and is left alone.
-    const staleAvatar = current.customizedAvatar !== true && !ANIMAL_AVATARS.includes(current.avatarId)
+    // `customizedAvatar` already records whether the user chose this portrait,
+    // so that flag alone decides. Testing library membership instead would
+    // treat an auto-assigned library entry as a user's pick and freeze it.
+    const staleAvatar = current.customizedAvatar !== true && current.avatarId !== contact.id
     const refreshed = {
       ...current,
       ...staleAvatar ? { avatarId: generated.avatarId } : {},

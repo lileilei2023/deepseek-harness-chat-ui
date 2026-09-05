@@ -138,6 +138,10 @@ npm run check
 
 同名 Skill 出现在多个来源时保留靠前来源的条目，因此名单顺序即优先级。`config.root` 仍然可以单独改写 WorkBuddy 缓存路径，其余来源保持不变。
 
+## 致谢
+
+Skill 头像由 [DiceBear](https://www.dicebear.com)（MIT）在本地生成，画风为 **Micah** —— [Micah Lanier](https://dribbble.com/micahlanier) 的 *Avatar Illustration System*，授权 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。运行时不发起任何网络请求：生成器已打进产物，每个头像由 Skill 自身的 id 推导。
+
 ## 兼容性
 
 首个版本锁定 DeepSeek Harness `0.1.2-alpha.5`。Harness API 仍在快速演进，后续 Harness 版本可能需要对应的插件版本。模型提供方、API Key、权限和 Session 日志继续由 Harness 管理，本仓库不包含任何凭证。

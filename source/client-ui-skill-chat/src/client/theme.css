@@ -216,32 +216,32 @@ body[data-ds-dark-theme] {
 }
 
 /*
- * Avatar internals.
+ * Avatar box.
  *
- * Scoped to the portrait itself through the species attribute the generator
- * stamps, so these plain names cannot leak into the rest of the document.
- * Colours come from the three custom properties the generator sets per avatar.
+ * The portrait is an <img> carrying its own artwork and background, so the
+ * only job left here is the box: size it, keep it circular and give it the
+ * hairline ring that separates it from the row underneath.
  */
-[data-avatar-species] svg { width: 92%; height: 92%; overflow: visible; }
-[data-avatar-species] .avatarEars {
-  fill: color-mix(in srgb, var(--avatar-main) 78%, var(--avatar-ink));
-  color: var(--avatar-ink);
+[data-avatar] {
+  width: var(--avatar-size, 40px);
+  min-width: var(--avatar-size, 40px);
+  height: var(--avatar-size, 40px);
+  min-height: var(--avatar-size, 40px);
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: var(--ds-chat-radius-round);
+  box-shadow: inset 0 0 0 var(--ds-chat-hairline) rgb(0 0 0 / 8%);
 }
-[data-avatar-species] .avatarFace { fill: var(--avatar-main); }
-[data-avatar-species] .avatarInner { fill: color-mix(in srgb, var(--avatar-bg) 70%, var(--avatar-main)); }
-[data-avatar-species] .avatarPatch { fill: var(--avatar-ink); opacity: .42; }
-[data-avatar-species] .avatarInk { color: var(--avatar-ink); fill: var(--avatar-ink); }
-[data-avatar-species] .avatarEye { fill: var(--avatar-ink); color: var(--avatar-ink); }
-[data-avatar-species] .avatarGlint { fill: var(--avatar-bg); }
-[data-avatar-species] .avatarNose { fill: var(--avatar-ink); }
-[data-avatar-species] .avatarBeak { fill: #f0a63c; }
-[data-avatar-species] .avatarMuzzle {
-  fill: none;
-  stroke: var(--avatar-ink);
-  stroke-width: 1.8;
-  stroke-linecap: round;
+
+[data-avatar] img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  -webkit-user-drag: none;
 }
-[data-avatar-species] .avatarGear { fill: var(--avatar-ink); color: var(--avatar-ink); }
 
 /* ===========================================================================
  * Conversation: make the transcript read as a chat.

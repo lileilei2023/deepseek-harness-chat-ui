@@ -2129,3 +2129,100 @@
 }
 
 .codeLineText { padding-right: var(--ds-chat-space-3); color: var(--ds-chat-code-fg); white-space: pre-wrap; word-break: break-word; }
+
+/* The column paints its own ground so the window reads as two surfaces — a
+ * room list and a room — rather than one flat sheet. */
+.root {
+  background: var(--ds-chat-sidebar-ground);
+}
+
+/* Controls that sat on the shared white now sit on that ground, so they need
+ * their own contrast rather than borrowing the page's. */
+.search { background: var(--ds-chat-surface); }
+.search:hover { background: var(--ds-chat-surface); border-color: var(--ds-chat-border); }
+.tabs { background: color-mix(in srgb, var(--ds-chat-surface) 55%, transparent); }
+.workspaceTrigger { background: var(--ds-chat-surface); }
+.roomRow[data-selected='true'] { background: var(--ds-chat-surface); box-shadow: var(--ds-chat-shadow-1); }
+.createMenu, .headerMenu { background: var(--ds-chat-surface); }
+
+/* ===========================================================================
+ * Skill profile.
+ *
+ * The persona already carried capabilities, routing guidance and links; the
+ * card showed none of them, so opening a Skill told you little more than the
+ * row you clicked. These are the things that make a contact a person.
+ * ======================================================================== */
+
+.profileSection { margin-top: var(--ds-chat-space-5); }
+
+.profileSection h3 {
+  margin: 0 0 var(--ds-chat-space-2);
+  color: var(--ds-chat-muted);
+  font-size: var(--ds-chat-text-caption);
+  font-weight: var(--ds-chat-weight-semibold);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.capabilityChips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.capabilityChips span {
+  padding: 5px 10px;
+  border-radius: var(--ds-chat-radius-round);
+  color: var(--ds-chat-accent-text);
+  background: var(--ds-chat-accent-soft);
+  font-size: var(--ds-chat-text-caption);
+}
+
+.profileNote {
+  margin: 0;
+  color: var(--ds-chat-text-secondary);
+  font-size: var(--ds-chat-text-body);
+  line-height: var(--ds-chat-leading-relaxed);
+}
+
+.profileRooms { display: grid; gap: 6px; }
+
+.profileRooms button {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-chat-space-2);
+  padding: var(--ds-chat-space-2);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-control);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-chat-text-body);
+}
+
+.profileRooms button:hover { background: var(--ds-chat-hover); }
+.profileRooms small { margin-left: auto; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); font-variant-numeric: tabular-nums; }
+
+.profileLinks { display: flex; gap: var(--ds-chat-space-3); margin-top: var(--ds-chat-space-3); }
+.profileLinks a { color: var(--ds-chat-accent-text); font-size: var(--ds-chat-text-footnote); text-decoration: none; }
+.profileLinks a:hover { text-decoration: underline; }
+
+/* Automation starters. An empty list plus a disabled button says what the
+ * feature is called but not what it is for. */
+.templateList { display: grid; gap: 6px; padding: 0 var(--ds-chat-space-1); }
+
+.templateCard {
+  display: grid;
+  gap: 2px;
+  padding: var(--ds-chat-space-3);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-control);
+  color: inherit;
+  background: var(--ds-chat-surface);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.templateCard:hover:not(:disabled) { border-color: var(--ds-chat-accent-border); background: var(--ds-chat-accent-soft); }
+.templateCard:disabled { opacity: .5; cursor: not-allowed; }
+.templateCard strong { font-size: var(--ds-chat-text-body); font-weight: var(--ds-chat-weight-semibold); }
+.templateCard small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); line-height: var(--ds-chat-leading-normal); }

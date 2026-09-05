@@ -154,6 +154,71 @@ type SkillContactsBrowserProps = PropsRuntime<'sidebar.workspaces'>
   >
   & SkillContactsInjected & PropsLocale<'skillChat'>
 
+/**
+ * Starter automations.
+ *
+ * The tab opened on an empty list and a disabled button, which says what the
+ * feature is called but not what it is for. Each entry prefills the dialog so
+ * the first automation is one click plus a review, not a blank prompt box.
+ */
+const AUTOMATION_TEMPLATES: readonly {
+  readonly id: string
+  readonly name: string
+  readonly hint: string
+  readonly prompt: string
+  readonly schedule: 'once' | 'recurring'
+  readonly interval: string
+  readonly unit: 'h' | 'd'
+}[] = [
+  {
+    id: 'briefing', name: '每日工作简报', hint: '每天早上汇总进展、待办与风险',
+    prompt: '汇总这个项目自昨天以来的进展、今天待办、以及需要我决策的风险。按「进展 / 待办 / 风险」三段输出，每段不超过五条。',
+    schedule: 'recurring', interval: '1', unit: 'd',
+  },
+  {
+    id: 'watch', name: '竞品 / 行业监测', hint: '持续跟踪，有变化就提醒',
+    prompt: '检索这个领域最近一天的公开动态，只保留与本项目直接相关的变化，给出「发生了什么 / 对我们意味着什么 / 建议动作」。没有实质变化就明确说没有。',
+    schedule: 'recurring', interval: '1', unit: 'd',
+  },
+  {
+    id: 'review', name: '代码变更回顾', hint: '每周汇总改动并指出风险',
+    prompt: '回顾本周工作区里的代码改动，按模块归纳做了什么，指出其中风险最高的三处并说明理由。',
+    schedule: 'recurring', interval: '7', unit: 'd',
+  },
+  {
+    id: 'research', name: '专家团队深研', hint: '组织成员就一个问题做一次深入调研',
+    prompt: '就下面这个问题做一次深入调研，先拆解成子问题分工，再合并成一份结论：\n\n（在这里写下你的问题）',
+    schedule: 'once', interval: '1', unit: 'd',
+  },
+  {
+    id: 'report', name: '产出报告 / 演示稿', hint: '把已有材料整理成可发布的文档',
+    prompt: '把这个房间里已经讨论过的内容整理成一份可直接发布的报告：结论先行，附关键证据与未决问题。',
+    schedule: 'once', interval: '1', unit: 'd',
+  },
+]
+
+/**
+ * A first-run time for a template.
+ *
+ * `createAutomation` falls back to "now" when the field is blank, which turns
+ * "每天早上汇总" into "every day at whatever o'clock you clicked the card". A
+ * recurring template therefore starts at the next 09:00, and a one-off starts
+ * an hour out, both rounded to a whole minute the field can display.
+ * @param schedule - whether the template repeats.
+ * @returns a local `YYYY-MM-DDTHH:mm` string for `<input type="datetime-local">`.
+ */
+function templateRunAt(schedule: 'once' | 'recurring'): string {
+  const when = new Date()
+  if (schedule === 'recurring') {
+    if (when.getHours() >= 9) when.setDate(when.getDate() + 1)
+    when.setHours(9, 0, 0, 0)
+  } else {
+    when.setHours(when.getHours() + 1, 0, 0, 0)
+  }
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}T${pad(when.getHours())}:${pad(when.getMinutes())}`
+}
+
 export const FAVORITES_KEY = 'dsh.skill-chat.favorites.v1'
 export const GROUPS_KEY = 'dsh.skill-chat.groups.v1'
 export const EXTERNAL_KEY = 'dsh.skill-chat.external.v1'
@@ -1251,7 +1316,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     {notice !== null ? <button className={css.notice} type="button" onClick={() => { setNotice(null) }}>{notice} ×</button> : null}
 
     {view === 'contacts' ? <><div className={css.subtabs}><button data-active={contactList === 'frequent'} onClick={() => { setContactList('frequent') }}>{t('frequentContacts')}</button><button data-active={contactList === 'all'} onClick={() => { setContactList('all') }}>{t('allContacts')}</button></div><div className={css.modeBar}><span>{t('displayMode')}</span><button type="button" data-active={mode === 'persona'} onClick={() => { setMode('persona') }}>{t('personaMode')}</button><button type="button" data-active={mode === 'raw'} onClick={() => { setMode('raw') }}>{t('rawMode')}</button></div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : visibleContacts.map(contactRow)}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>
-      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>按计划在目标对话中创建独立会话</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>＋ 新建</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `当前没有自动化，点击“新建”即可绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? '单次' : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? '等待运行' : automation.status === 'paused' ? '已暂停' : automation.status === 'completed' ? '已完成' : '失败'}</span><button type="button" onClick={() => { void runAutomation(automation) }}>立即运行</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? '恢复' : '暂停'}</button></footer></article>)}</div></>
+      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>按计划在目标对话中创建独立会话</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>＋ 新建</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <><div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? '单次' : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? '等待运行' : automation.status === 'paused' ? '已暂停' : automation.status === 'completed' ? '已完成' : '失败'}</span><button type="button" onClick={() => { void runAutomation(automation) }}>立即运行</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? '恢复' : '暂停'}</button></footer></article>)}</div></>
       : <><div className={css.roomList}>{roomResults.length === 0
         ? (query.trim() === ''
           ? <EmptyState className={css.emptyCard} title="还没有对话">用右上角的 ＋ 开始一段普通对话，或建一个 Skill 群组。</EmptyState>
@@ -1263,7 +1328,15 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     {activeRoom !== undefined && currentSessionId !== undefined && currentSessionBlank ? <aside className={css.blankRoomDock}><SkillChatHeaderTools sessionId={currentSessionId}/></aside> : null}
     {activeRoom === undefined ? null : renderSlot('ds-chat.room.drawer', { roomId: activeRoom.roomId, ...(currentSessionId === undefined ? {} : { sessionId: currentSessionId }) })}
 
-    {selected !== null ? <Dialog className={`${css.panel} ${css.skillProfileDialog}`} label="Skill 资料" onClose={() => { setSelected(null) }}><div className={css.panelTop}><AnimalAvatar avatarId={personaAvatar} label={personaName}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setSelected(null) }}>×</IconButton></div>{editingPersona ? <><label className={css.field}><span>昵称</span><input value={personaName} maxLength={24} onChange={event => { setPersonaName(event.target.value) }}/></label><div className={css.avatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={personaAvatar === avatarId} key={avatarId} onClick={() => { setPersonaAvatar(avatarId) }}><AnimalAvatar avatarId={avatarId} label={avatarId}/></button>)}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={savePersona}>保存身份</Button><Button className={css.secondaryAction} onClick={resetPersona}>恢复默认</Button></div></> : <><h2 className={css.panelTitle}>{displayOf(selected, mode, state.personas).name}</h2><div className={css.role}>{state.personas[selected.id]?.roleLabel}</div><p className={css.bio}>{selected.description}</p><div className={css.originCard}><span>原始 Skill</span><strong>{selected.name}</strong><small>{selected.sourceLabel}</small></div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { void beginContactChat(selected) }}>继续对话</Button><Button className={css.secondaryAction} onClick={() => { setEditingPersona(true) }}>编辑昵称与头像</Button><Button className={css.secondaryAction} onClick={() => { toggleFavorite(selected.id) }}>{favorites.includes(selected.id) ? `★ ${t('frequentContact')}` : `☆ ${t('addFrequent')}`}</Button></div></>}</Dialog> : null}
+    {selected !== null ? <Dialog className={`${css.panel} ${css.skillProfileDialog}`} label="Skill 资料" onClose={() => { setSelected(null) }}><div className={css.panelTop}><AnimalAvatar avatarId={personaAvatar} label={personaName}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setSelected(null) }}>×</IconButton></div>{editingPersona ? <><label className={css.field}><span>昵称</span><input value={personaName} maxLength={24} onChange={event => { setPersonaName(event.target.value) }}/></label><div className={css.avatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={personaAvatar === avatarId} key={avatarId} onClick={() => { setPersonaAvatar(avatarId) }}><AnimalAvatar avatarId={avatarId} label={avatarId}/></button>)}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={savePersona}>保存身份</Button><Button className={css.secondaryAction} onClick={resetPersona}>恢复默认</Button></div></> : <><h2 className={css.panelTitle}>{displayOf(selected, mode, state.personas).name}</h2><div className={css.role}>{state.personas[selected.id]?.roleLabel}</div><p className={css.bio}>{selected.description}</p>
+      {(state.personas[selected.id]?.capabilities ?? []).length === 0 ? null : <div className={css.profileSection}><h3>擅长什么</h3><div className={css.capabilityChips}>{(state.personas[selected.id]?.capabilities ?? []).map(item => <span key={item}>{item}</span>)}</div></div>}
+      {selected.whenToUse === undefined ? null : <div className={css.profileSection}><h3>什么时候找 TA</h3><p className={css.profileNote}>{selected.whenToUse}</p></div>}
+      {(() => {
+        const inRooms = visibleRooms.filter(room => room.type === 'group' && room.memberIds.includes(selected.id))
+        return inRooms.length === 0 ? null : <div className={css.profileSection}><h3>在这些群组里</h3><div className={css.profileRooms}>{inRooms.map(room => <button type="button" key={room.roomId} onClick={() => { setSelected(null); void openRoom(room) }}>{roomAvatar(room, true)}<span>{room.title}</span><small>{room.memberIds.length} 人</small></button>)}</div></div>
+      })()}
+      <div className={css.originCard}><span>原始 Skill</span><strong>{selected.name}</strong><small>{selected.sourceLabel}</small></div>
+      {selected.homepage === undefined && selected.repository === undefined ? null : <div className={css.profileLinks}>{selected.homepage === undefined ? null : <a href={selected.homepage} target="_blank" rel="noreferrer">主页 ↗</a>}{selected.repository === undefined ? null : <a href={selected.repository} target="_blank" rel="noreferrer">仓库 ↗</a>}</div>}<div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { void beginContactChat(selected) }}>继续对话</Button><Button className={css.secondaryAction} onClick={() => { setEditingPersona(true) }}>编辑昵称与头像</Button><Button className={css.secondaryAction} onClick={() => { toggleFavorite(selected.id) }}>{favorites.includes(selected.id) ? `★ ${t('frequentContact')}` : `☆ ${t('addFrequent')}`}</Button></div></>}</Dialog> : null}
 
     {groupOpen ? <Dialog className={css.groupDialog} label={t('newGroup')} onClose={() => { setGroupOpen(false) }}>
         <div className={css.groupHeader}><div><h2>{t('newGroup')}</h2><p>{t('groupWorkspace').replace('{workspace}', currentWorkspace?.title ?? t('noWorkspace'))}</p></div><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setGroupOpen(false) }}>×</IconButton></div>

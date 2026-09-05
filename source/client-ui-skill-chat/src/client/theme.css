@@ -181,6 +181,10 @@ body {
   --ds-chat-border: var(--dsw-alias-border-l2);
   --ds-chat-border-strong: var(--dsw-alias-border-l3);
   --ds-chat-hover: var(--dsw-alias-interactive-bg-hover);
+  /* The room list sits on its own ground, one step off the conversation. A
+   * community client separates its channel column from its room this way, and
+   * without it the whole window is one flat white sheet. */
+  --ds-chat-sidebar-ground: color-mix(in srgb, var(--dsw-alias-bg-base) 96%, #4a5568);
   --ds-chat-text-color: var(--dsw-alias-label-primary);
   --ds-chat-text-secondary: var(--dsw-alias-label-secondary);
   --ds-chat-muted: var(--dsw-alias-label-tertiary);
@@ -188,6 +192,9 @@ body {
 
 body[data-ds-dark-theme] {
   color-scheme: dark;
+
+  /* Darker than the room, not lighter: depth reads downward in a dark scheme. */
+  --ds-chat-sidebar-ground: color-mix(in srgb, var(--dsw-alias-bg-base) 88%, #000);
 
   --ds-chat-hover: rgb(255 255 255 / 8%);
 

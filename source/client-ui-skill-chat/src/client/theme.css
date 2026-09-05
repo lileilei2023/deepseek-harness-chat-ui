@@ -70,6 +70,8 @@
    * sub-device-pixel border as one device pixel, so 1x renders unchanged and
    * 2x gets a true hairline.
    */
+  color-scheme: light;
+
   --ds-chat-hairline: 0.5px;
   --ds-chat-border: rgb(0 0 0 / 10%);
   --ds-chat-border-strong: rgb(0 0 0 / 12%);
@@ -185,6 +187,8 @@ body {
 }
 
 body[data-ds-dark-theme] {
+  color-scheme: dark;
+
   --ds-chat-hover: rgb(255 255 255 / 8%);
 
   /* Fills carry more alpha over a dark ground to stay perceptible. */

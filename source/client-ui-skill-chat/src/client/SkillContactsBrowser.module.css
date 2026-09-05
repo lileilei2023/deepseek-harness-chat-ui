@@ -2238,3 +2238,240 @@
   background: var(--ds-chat-surface);
   box-shadow: var(--ds-chat-shadow-1);
 }
+
+/* ===========================================================================
+ * Unified room list.
+ *
+ * Messages used to be three stacked sections — a quick-action card, a
+ * collapsible session history and a groups list — whose contents overlapped:
+ * a room appeared once under Groups and once per session under History. One
+ * recency-sorted list of rooms removes the duplication and the two section
+ * headers, which is most of the chrome the 268px column was spending.
+ * ======================================================================== */
+
+.roomList {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--ds-chat-space-1) var(--ds-chat-space-2) var(--ds-chat-space-2);
+}
+
+/* Rows are uniform, so the browser can skip the ones outside the viewport.
+ * `contain-intrinsic-size` keeps the scrollbar honest while they are skipped —
+ * the guideline's own alternative to pulling in a virtualisation library. */
+/* Each list declares its own measured row height: an intrinsic size that
+ * disagrees with the real one makes the scrollbar lie and the scroll jump as
+ * rows are realised. Room rows measure 56px, contact rows 58px. */
+.roomList > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+
+.list > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 58px;
+}
+
+/* One create affordance, opened as a menu, replaces the four the sidebar grew:
+ * the tab-bar ＋ and the group section's ＋新建 called the same handler. */
+.createWrap { position: relative; display: inline-flex; }
+
+.createMenu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 216px;
+  display: grid;
+  gap: 2px;
+  padding: var(--ds-chat-space-1);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-md);
+  background: var(--ds-chat-surface);
+  box-shadow: var(--ds-chat-shadow-3);
+}
+
+.createMenu button {
+  display: grid;
+  gap: 1px;
+  padding: var(--ds-chat-space-2);
+  border: 0;
+  border-radius: var(--ds-chat-radius-sm);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.createMenu button:hover { background: var(--ds-chat-hover); }
+.createMenu strong { font-size: var(--ds-chat-text-body); font-weight: var(--ds-chat-weight-semibold); }
+.createMenu small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); }
+
+.workspaceMenuSep {
+  height: var(--ds-chat-hairline);
+  margin: var(--ds-chat-space-1) 0;
+  background: var(--ds-chat-border);
+}
+
+/* Search is now permanent rather than living only inside Contacts: a returning
+ * user's first move is to find a conversation, and 334 contacts plus every room
+ * is past the point where scrolling is an answer. */
+.searchWrap { padding: 0 var(--ds-chat-space-3) var(--ds-chat-space-2); }
+
+.search {
+  width: 100%;
+  box-sizing: border-box;
+  border: var(--ds-chat-hairline) solid transparent;
+  border-radius: var(--ds-chat-radius-control);
+  padding: 6px var(--ds-chat-space-3);
+  color: var(--ds-chat-text-color);
+  background: var(--ds-chat-fill-quaternary);
+  font: inherit;
+  font-size: var(--ds-chat-text-footnote);
+  outline: 0;
+}
+
+.search::placeholder { color: var(--ds-chat-muted); }
+
+/* The row's right column is a time, and times only line up with tabular
+ * figures. */
+.time {
+  color: var(--ds-chat-muted);
+  font-size: var(--ds-chat-text-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Appearance is a preference, not navigation: it drops to the foot of the
+ * column, next to the shell's own 设置 entry, instead of sitting above the
+ * conversation list. */
+.root > [data-slot-name='ds-chat.settings.section'],
+.root > :last-child:not(.roomList):not(.list) { margin-top: auto; }
+
+.root {
+  /* Removes the 300ms double-tap delay on touch without disabling zoom. */
+  touch-action: manipulation;
+}
+
+.unreadBadge,
+.sectionHeading small,
+.workspaceMeta { font-variant-numeric: tabular-nums; }
+
+/* ===========================================================================
+ * New-group dialog.
+ *
+ * The form was a two-column grid with the name input and the role textarea in
+ * the same row. The row is sized by the textarea's 110px min-height, and
+ * `.field` stretches to it, so the short field's label floated away from its
+ * own input. Stacking them removes the fight rather than patching the heights.
+ *
+ * The dialog is also given an explicit three-part budget. Every child except
+ * the member list defaulted to `min-height: auto` and refused to shrink, and
+ * the member list never claimed space, so it collapsed to roughly one row —
+ * and once the fixed chrome passed the 720px cap, `overflow: hidden` clipped
+ * the footer's 创建 button off the bottom.
+ * ======================================================================== */
+
+.groupFormGrid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+/* Between the fixed header and the fixed footer, two bounded regions rather
+ * than one long scroll. Picking members is the dialog's actual task — 创建 stays
+ * disabled until two are chosen — so the member list keeps a guaranteed floor
+ * and the optional identity/role/binding form scrolls in whatever is left,
+ * instead of pushing the list past the fold. */
+.groupBody {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The required path only: an avatar and a name. Both fit without scrolling. */
+.groupBody .groupFormGrid { flex: 0 0 auto; }
+
+.groupBody .memberToolbar { flex: 0 0 auto; }
+
+.groupBody .groupCandidates {
+  min-height: 192px;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.groupFormGrid .generatePrompt {
+  grid-column: 1;
+  justify-self: start;
+  margin-top: 0;
+  margin-bottom: var(--ds-chat-space-2);
+}
+
+.groupFormGrid .field textarea { min-height: 84px; }
+
+/* Bound the bindings: this list was unbounded, so every extra project took
+ * another row away from the member picker below it. */
+.workspaceBindings {
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.groupHeader,
+.memberToolbar,
+.groupFooter { flex: 0 0 auto; }
+
+/* The member list is the one part that should absorb the leftover height. */
+
+
+.groupCandidates > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
+}
+
+.memberToolbar input { font-variant-numeric: tabular-nums; }
+
+
+
+/* Archiving is irreversible from the UI, so it asks first. */
+.confirmDialog { width: min(400px, calc(100vw - 32px)); padding: var(--ds-chat-space-6); }
+.confirmDialog h2 { margin: 0 0 var(--ds-chat-space-2); font-size: var(--ds-chat-text-title2); }
+.confirmDialog p { margin: 0; color: var(--ds-chat-text-secondary); font-size: var(--ds-chat-text-body); line-height: var(--ds-chat-leading-relaxed); }
+.confirmActions { display: flex; justify-content: flex-end; gap: var(--ds-chat-space-2); margin-top: var(--ds-chat-space-5); }
+
+/* Optional configuration: the role prompt, the avatar library and the project
+ * bindings. Collapsed by default so the dialog opens on the one thing it
+ * actually requires — choosing members. */
+.groupMore {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ds-chat-space-2);
+  margin: 0 28px var(--ds-chat-space-2);
+  padding: var(--ds-chat-space-2) var(--ds-chat-space-3);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-control);
+  color: inherit;
+  background: var(--ds-chat-fill-quaternary);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-chat-text-body);
+}
+
+.groupMore span { font-weight: var(--ds-chat-weight-semibold); }
+.groupMore small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); }
+.groupMore b { margin-left: auto; color: var(--ds-chat-muted); font-weight: 400; }
+.groupMore:hover { background: var(--ds-chat-hover); }
+
+.groupMorePanel {
+  min-height: 0;
+  max-height: 40vh;
+  flex: 0 1 auto;
+  padding: 0 28px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.groupMorePanel .workspaceBindings { max-height: none; overflow: visible; }

@@ -581,6 +581,8 @@ interface WorkbenchDrawerProps {
   readonly terminalCommand: string
   readonly terminalBusy: boolean
   readonly browserUrl: string
+  readonly renderedFile: boolean
+  readonly onToggleRendered: () => void
   readonly browserDraft: string
   readonly canGoBack: boolean
   readonly canGoForward: boolean
@@ -701,6 +703,20 @@ function DiffView({ text }: { readonly text: string }): React.JSX.Element {
 }
 
 /** Human-readable byte size for a directory listing. */
+/**
+ * Whether a previewed file is worth rendering rather than reading.
+ *
+ * Only self-contained HTML: it is what these Skills hand back as a report, and
+ * it carries its own styles and scripts, so there is nothing to resolve. A page
+ * that pulled in siblings would render broken, because `srcdoc` has no base URL
+ * to resolve them against.
+ * @param file - the previewed file.
+ * @returns true when a rendered view is offered.
+ */
+function isRenderable(file: ProjectFilePreview): boolean {
+  return !file.binary && !file.truncated && /\.html?$/i.test(file.name)
+}
+
 function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
@@ -738,7 +754,17 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
           </div>
         </div>
         <div className={css.filePreview}>
-          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <><div className={css.filePreviewMeta}><strong>{props.file.name}</strong><small>{props.file.language} · {fileSize(props.file.size)}{props.file.truncated ? tr('truncated') : ''}</small></div>{props.file.binary ? <div className={css.drawerEmpty}>{tr('binaryFile')}</div> : <div className={css.filePreviewBody}>{(props.file.content ?? '').split('\n').map((line, index) => <div className={css.codeLine} key={index}><span className={css.codeLineNo}>{index + 1}</span><span className={css.codeLineText}>{line || '\u00a0'}</span></div>)}</div>}</>}
+          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <><div className={css.filePreviewMeta}><strong>{props.file.name}</strong><small>{props.file.language} · {fileSize(props.file.size)}{props.file.truncated ? tr('truncated') : ''}</small>{isRenderable(props.file) ? <button className={css.previewToggle} type="button" onClick={props.onToggleRendered}>{props.renderedFile ? tr('viewSource') : tr('viewRendered')}</button> : null}</div>{props.file.binary
+            ? <div className={css.drawerEmpty}>{tr('binaryFile')}</div>
+            : props.renderedFile
+              // Self-contained HTML is the deliverable these research Skills
+              // produce, and the source view showed it as code. `srcdoc` renders
+              // it from the content already read, so no route has to serve the
+              // workspace over HTTP — and `file://` in an iframe would be
+              // blocked from this origin anyway. The sandbox withholds
+              // same-origin, so the report cannot reach this page or its data.
+              ? <iframe className={css.filePreviewFrame} title={props.file.name} srcDoc={props.file.content ?? ''} sandbox="allow-scripts allow-popups"/>
+              : <div className={css.filePreviewBody}>{(props.file.content ?? '').split('\n').map((line, index) => <div className={css.codeLine} key={index}><span className={css.codeLineNo}>{index + 1}</span><span className={css.codeLineText}>{line || '\u00a0'}</span></div>)}</div>}</>}
         </div>
       </div> : null}
       {props.tool === 'diff' ? <div className={css.diffWorkbench}>
@@ -840,6 +866,9 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [projectListing, setProjectListing] = useState<ProjectDirectoryListing | null>(null)
   const [projectListingError, setProjectListingError] = useState<string | null>(null)
   const [projectFile, setProjectFile] = useState<ProjectFilePreview | null>(null)
+  // A rendered report is what a person opening an HTML deliverable wants first;
+  // the source is one click away and stays the default for everything else.
+  const [renderedFile, setRenderedFile] = useState(true)
   const [terminal, setTerminal] = useState<TerminalSnapshot | null>(null)
   const [terminalCommand, setTerminalCommand] = useState('')
   const [terminalBusy, setTerminalBusy] = useState(false)
@@ -1937,6 +1966,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       workspacePath={activeWorkspace.path}
       listing={projectListing}
       file={projectFile}
+      renderedFile={renderedFile}
+      onToggleRendered={() => { setRenderedFile(current => !current) }}
       error={projectListingError}
       terminal={terminal}
       terminalCommand={terminalCommand}

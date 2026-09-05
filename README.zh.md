@@ -60,7 +60,7 @@ DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Ses
 | 按发言人配脸 | 每段转述带上撰写它的那个成员的头像，一个群才读起来像一个群 |
 | Workspace | 项目文件浏览、文件预览、终端与旁路任务入口 |
 | 自动化 | 与外壳「新会话」并列的顶层入口，场景模板、Room 绑定、立即运行与运行历史 |
-| 外观 | 薄荷工作台、Teamily 柔光、夜航三套皮肤，基于 DSH Skin Manifest v2。皮肤只声明身份与形状，明暗始终归外壳，因此每套皮肤在两种底色下都完整 |
+| 外观 | 薄荷工作台、Teamily 柔光两套皮肤，基于 DSH Skin Manifest v2。皮肤只声明身份与形状，明暗始终归外壳，因此每套皮肤在两种底色下都完整 |
 
 ![DeepSeek Harness Chat UI 暗色模式](docs/images/deepseek-harness-chat-ui-dark.png)
 

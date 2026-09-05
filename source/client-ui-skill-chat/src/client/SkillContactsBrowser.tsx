@@ -30,7 +30,6 @@ import { en, zh, type SkillChatKey } from './locales.ts'
 import css from './SkillContactsBrowser.module.css'
 
 type View = 'chats' | 'groups' | 'contacts' | 'automations'
-type ContactList = 'frequent' | 'all'
 type ContactMode = 'persona' | 'raw'
 type ProjectToolKind = 'files' | 'terminal' | 'diff' | 'browser'
 
@@ -795,7 +794,6 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const sessions = useSessions(value => value)
   const workspaces = useWorkspaces(value => value)
   const [view, setView] = useState<View>('chats')
-  const [contactList, setContactList] = useState<ContactList>('frequent')
   const [mode, setMode] = useState<ContactMode>(() => readStored<ContactMode>(MODE_KEY, 'persona'))
   const [query, setQuery] = useState('')
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase())
@@ -816,8 +814,6 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [personaName, setPersonaName] = useState('')
   const [personaAvatar, setPersonaAvatar] = useState('fox-coral')
   const [groupOpen, setGroupOpen] = useState(false)
-  const [createOpen, setCreateOpen] = useState(false)
-  const createRef = useDismiss(createOpen, () => { setCreateOpen(false) })
   const [groupMoreOpen, setGroupMoreOpen] = useState(false)
   const [archiveConfirm, setArchiveConfirm] = useState<string | null>(null)
   const [dragRoom, setDragRoom] = useState<string | null>(null)
@@ -891,8 +887,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       // A saved room is a team, and a team is not the property of one project.
       || savedRooms.includes(room.roomId)))), [savedRooms, state.rooms, workspaceId])
   const filtered = useMemo(() => allContacts.filter(skill => matches(skill, deferredQuery, state.personas)), [allContacts, deferredQuery, state.personas])
-  const frequent = useMemo(() => { const pinned = filtered.filter(contact => favorites.includes(contact.id)); return pinned.length > 0 ? pinned : filtered.slice(0, 8) }, [favorites, filtered])
-  const visibleContacts = contactList === 'frequent' && deferredQuery.length === 0 ? frequent : filtered
+  const visibleContacts = filtered
+  // Starred first, then the rest — the roster is one list with a lead section.
+  const starredContacts = useMemo(
+    () => deferredQuery.length > 0 ? [] : filtered.filter(contact => favorites.includes(contact.id)),
+    [deferredQuery, favorites, filtered],
+  )
+  const restContacts = useMemo(
+    () => starredContacts.length === 0 ? filtered : filtered.filter(contact => !favorites.includes(contact.id)),
+    [favorites, filtered, starredContacts],
+  )
   // The Messages view searches rooms with the same box the Contacts view uses
   // for Skills, so one field serves whichever list is on screen.
   const roomResults = useMemo(() => {
@@ -1227,18 +1231,54 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setSelected(null); setNotice(null)
   }
 
-  const beginGeneralChat = async (): Promise<void> => {
-    if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
+  /**
+   * Take in a Session the shell started on its own.
+   *
+   * The shell's own 新会话 sits directly above this panel, so a second
+   * "plain chat" entry in the ＋ menu was the same door twice. Removing it only
+   * works if the Session that door opens shows up here: a Session with no Room
+   * is invisible to the list, which is where plain chats used to disappear to.
+   * Adopting it as a general Room puts it in the list, gives it history, and
+   * lets it be pinned, archived and branched like any other conversation.
+   * @param sessionId - the Session now on screen.
+   */
+  const adoptSession = async (sessionId: SessionId): Promise<void> => {
+    if (workspaceId === undefined) return
     const now = Date.now()
+    const roomId = `room:general:${sessionId}`
+    const roomSessionId = `room-session:${sessionId}`
+    const title = sessions.byId[sessionId]?.title?.trim() || t('plainChat')
     const room: ChatRoom = {
-      roomId: `room:general:${randomUUID()}`, type: 'general', workspaceId, workspaceIds: [workspaceId], title: t('plainChat'),
-      memberIds: [], coordinatorId: '', sessionIds: [], createdAt: now, updatedAt: now,
+      roomId, type: 'general', workspaceId, workspaceIds: [workspaceId], title,
+      memberIds: [], coordinatorId: '', sessionIds: [roomSessionId], activeSessionId: roomSessionId,
+      createdAt: now, updatedAt: now,
     }
-    updateState(current => ({ ...current, rooms: [room, ...current.rooms] }))
-    await createRoomSession(room, false)
-    setView('chats')
-    setNotice(null)
+    const next = updateState((current) => {
+      // Re-checked inside the updater: the adopting effect and a Room the panel
+      // itself is creating can race for the same Session.
+      if (current.roomSessions.some(item => item.harnessSessionId === sessionId)) return current
+      return {
+        ...current,
+        rooms: [room, ...current.rooms],
+        roomSessions: [...current.roomSessions, {
+          roomSessionId, roomId, harnessSessionId: sessionId, title,
+          memberSnapshot: [], createdAt: now, updatedAt: now,
+        }],
+      }
+    })
+    if (next.rooms.some(item => item.roomId === roomId)) await saveState(next, new AbortController().signal)
   }
+
+  useEffect(() => {
+    if (!stateReady || currentSessionId === undefined || workspaceId === undefined) return
+    if (stateRef.current.roomSessions.some(item => item.harnessSessionId === currentSessionId)) return
+    // Not until it has something in it: pressing 新会话 and walking away would
+    // otherwise leave an empty room behind every time.
+    if (currentSessionBlank) return
+    // Only the Session on screen: subagent and automation Sessions are bound by
+    // whoever started them, and must not each grow a room of their own.
+    void adoptSession(currentSessionId)
+  }, [currentSessionBlank, currentSessionId, stateReady, state.roomSessions, workspaceId])
 
   const createGroup = (): void => {
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
@@ -1800,7 +1840,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       onClick={() => { setView(current => current === 'automations' ? 'chats' : 'automations') }}
     ><span className={css.automationEntryMark} aria-hidden="true">◷</span>{t('automations')}{dueAutomations > 0 ? <span className={css.automationEntryCount}>{dueAutomations}</span> : null}</button>
     <div className={css.workspaceSection}><div className={css.workspacePicker} ref={workspaceRef as React.RefObject<HTMLDivElement>}><button className={css.workspaceTrigger} type="button" aria-expanded={workspaceOpen} onClick={() => { setWorkspaceOpen(current => !current) }}><span className={css.workspaceIcon}>⌂</span><span>{currentWorkspace?.title ?? t('noWorkspace')}</span><span className={css.chevron}>⌄</span></button>{workspaceOpen ? <div className={css.workspaceMenu}>{workspaces.items.map(workspace => <button type="button" data-active={workspace.workspaceId === workspaceId} key={workspace.workspaceId} onClick={() => { setWorkspaceId(workspace.workspaceId); setWorkspaceOpen(false) }}><span>⌂</span><strong>{workspace.title}</strong>{workspace.workspaceId === workspaceId ? <b>✓</b> : null}</button>)}<span className={css.workspaceMenuSep}/><button type="button" onClick={() => { setWorkspaceOpen(false); void createWorkspace() }}><span>＋</span><strong>{t('addWorkspace')}</strong></button></div> : null}</div></div>
-    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'groups', 'contacts'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{t(item)}</button>)}</div><span className={css.createWrap} ref={createRef as React.RefObject<HTMLSpanElement>}><button className={css.addGroup} type="button" aria-label="新建" aria-expanded={createOpen} onClick={() => { setCreateOpen(open => !open) }}>＋</button>{createOpen ? <div className={css.createMenu}>{[{ id: 'chat', label: t('plainChat'), hint: t('noSkillMode'), run: () => { void beginGeneralChat() } }, { id: 'group', label: t('groupChat'), hint: t('organizeSkills'), run: openGroupCreator }, { id: 'workspace', label: t('projectDir'), hint: t('addWorkspaceHint'), run: () => { void createWorkspace() } }].map(entry => <button type="button" key={entry.id} onClick={() => { setCreateOpen(false); entry.run() }}><strong>{entry.label}</strong><small>{entry.hint}</small></button>)}</div> : null}</span></div>
+    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'groups', 'contacts'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{t(item)}</button>)}</div><span className={css.createWrap}><button className={css.addGroup} type="button" aria-label={t('groupChat')} title={t('organizeSkills')} onClick={openGroupCreator}>＋</button></span></div>
     <div className={css.searchWrap}><input className={css.search} value={query} onChange={event => { setQuery(event.target.value) }} placeholder={view === 'contacts' ? t('searchAll') : t('searchRoomsPlaceholder')} aria-label={view === 'contacts' ? t('searchAll') : t('searchRooms')} autoComplete="off" spellCheck={false} type="search"/></div>
     {renderSlot('ds-chat.sidebar.before-rooms', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
     {notice !== null ? <button className={css.notice} type="button" onClick={() => { setNotice(null) }}>{notice} ×</button> : null}
@@ -1835,7 +1875,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       </div>
       : null}
     {view === 'groups' ? null
-      : view === 'contacts' ? <><div className={css.subtabs}><button data-active={contactList === 'frequent'} onClick={() => { setContactList('frequent') }}>{t('frequentContacts')}</button><button data-active={contactList === 'all'} onClick={() => { setContactList('all') }}>{t('allContacts')}</button></div><div className={css.modeBar}><span>{t('displayMode')}</span><button type="button" data-active={mode === 'persona'} onClick={() => { setMode('persona') }}>{t('personaMode')}</button><button type="button" data-active={mode === 'raw'} onClick={() => { setMode('raw') }}>{t('rawMode')}</button></div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : visibleContacts.map(contactRow)}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>
+      : view === 'contacts' ? <>{/* One list, not two modes. A messaging client puts starred people in a
+        * section at the top of the same roster rather than behind a switch, and
+        * the display toggle is a preference rather than navigation — it moves
+        * beside the search field so the roster keeps a single header. */}
+      <div className={css.contactBar}>
+        <span>{visibleContacts.length}</span>
+        <button type="button" className={css.modeToggle} aria-pressed={mode === 'raw'} onClick={() => { setMode(mode === 'raw' ? 'persona' : 'raw') }}>
+          {mode === 'raw' ? t('rawMode') : t('personaMode')}
+        </button>
+      </div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : <>{starredContacts.length === 0 ? null : <><div className={css.rosterHeading}>{t('frequentContacts')}</div>{starredContacts.map(contactRow)}<div className={css.rosterHeading}>{t('allContacts')}</div></>}{restContacts.map(contactRow)}</>}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>
       : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>{t('automationHint')}</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>{t('newItem')}</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? t('onceLabel') : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? t('waitingRun') : automation.status === 'paused' ? t('pausedLabel') : automation.status === 'completed' ? t('completedLabel') : t('failedLabel')}</span><button type="button" onClick={() => { void runAutomation(automation) }}>{t('runNow')}</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? t('restoreLabel') : t('pauseLabel')}</button></footer></article>)}<div className={css.templateHeading}>{t('fromTemplate')}</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></div></>
       : <><div className={css.roomList}>{roomResults.length === 0
         ? (query.trim() === ''

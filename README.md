@@ -61,7 +61,7 @@ name, prompt and cadence, or start from a blank one.
 | Per-speaker faces | Each relayed answer carries the portrait of the member who wrote it, so a group reads as a group |
 | Workspace | Project browser, file preview, terminal and sidecar task entry points |
 | Automation | A top-level destination beside the shell's own new-chat entry, scenario templates, room-bound definitions, run-now and persisted history |
-| Appearance | Mint, Teamily-inspired and Nocturne skins using the DSH Web Skin Manifest v2 contract. A skin states identity and shape; light and dark stay the shell's, so every skin is complete in both |
+| Appearance | Mint and Teamily-inspired skins using the DSH Web Skin Manifest v2 contract. A skin states identity and shape; light and dark stay the shell's, so every skin is complete in both |
 
 ![DeepSeek Harness Chat UI in dark mode](docs/images/deepseek-harness-chat-ui-dark.png)
 

@@ -2613,3 +2613,37 @@
 .groupSectionRowWrap .roomMenuButton { opacity: 0; }
 .groupSectionRowWrap:hover .roomMenuButton,
 .groupSectionRowWrap:focus-within .roomMenuButton { opacity: 1; }
+
+/* One header for the roster: a count on the left, the display preference on the
+ * right. It replaces a tab strip and a labelled toggle row that between them
+ * put three bands of chrome above the list. */
+.contactBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ds-chat-space-1) var(--ds-chat-space-3) var(--ds-chat-space-2);
+  color: var(--ds-chat-muted);
+  font-size: var(--ds-chat-text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.modeToggle {
+  padding: 2px 8px;
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-pill, 999px);
+  color: var(--ds-chat-muted);
+  background: transparent;
+  font: inherit;
+  font-size: var(--ds-chat-text-caption);
+  cursor: pointer;
+}
+
+.modeToggle:hover { color: var(--ds-chat-text-color); background: var(--ds-chat-hover); }
+.modeToggle[aria-pressed='true'] { color: var(--ds-chat-accent-text); border-color: var(--ds-chat-accent-border); }
+
+.rosterHeading {
+  padding: var(--ds-chat-space-3) var(--ds-chat-space-3) var(--ds-chat-space-1);
+  color: var(--ds-chat-muted);
+  font-size: var(--ds-chat-text-caption);
+  font-weight: var(--ds-chat-weight-semibold);
+}

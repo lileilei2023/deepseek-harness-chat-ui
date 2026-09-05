@@ -57,6 +57,8 @@ name, prompt and cadence, or start from a blank one.
 | Personification | Generated portraits, deterministic friendly names, profiles and original Skill metadata |
 | Skills | Every agent tool's Skill directory in one catalog, `skills.sh` search, install and install-then-add flows |
 | Real invocation | Joining a room links the Skill into the Harness's own Skill root, so the model can actually load it |
+| Parallel members | When a task needs several members the coordinator delegates one background subagent per member, each loading that member's Skill — real concurrency, not a narrated one |
+| Per-speaker faces | Each relayed answer carries the portrait of the member who wrote it, so a group reads as a group |
 | Workspace | Project browser, file preview, terminal and sidecar task entry points |
 | Automation | A top-level destination beside the shell's own new-chat entry, scenario templates, room-bound definitions, run-now and persisted history |
 | Appearance | Mint, Teamily-inspired and always-dark Nocturne skins using the DSH Web Skin Manifest v2 contract; light and dark schemes follow the shell |

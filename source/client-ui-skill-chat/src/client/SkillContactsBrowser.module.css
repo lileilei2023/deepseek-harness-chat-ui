@@ -6,12 +6,18 @@
   color: var(--ds-chat-text-color);
 }
 
+/* The wordmark sat in plain body colour, so it read as a heading rather than a
+ * mark and shared nothing with the accent that runs through the tabs, the
+ * automations badge and the plain-chat tile. `Chat` alone carries the colour:
+ * the whole name in accent would compete with the shell's own logo beside it. */
 .dsChatBrand {
   color: var(--ds-chat-text-color);
   font-size: var(--ds-chat-text-title2);
   font-weight: var(--ds-chat-weight-bold);
   letter-spacing: -0.02em;
 }
+
+.dsChatBrand b { color: var(--ds-chat-accent-text); font-weight: inherit; }
 
 .workspaceIcon {
   display: grid;
@@ -1582,14 +1588,35 @@
   .generalChatButton { transition: none; }
 }
 
+/* The Host's hero card, restyled as the opening of a conversation. It kept a
+ * 24px radius, an accent ring and a heavy shadow while every other surface in
+ * the product is a hairline at 12-14px, so it read as a foreign panel dropped
+ * into the room. It also said who you were talking to in words only; the
+ * portrait is what a messaging client opens with. */
 :global([data-skill-chat-welcome]) {
-  width: min(620px, calc(100vw - 380px));
-  padding: 26px 28px 18px;
-  border: 1px solid var(--ds-chat-accent-border);
-  border-radius: 24px;
+  width: min(560px, calc(100vw - 380px));
+  padding: 22px 28px 18px;
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: 18px;
   background: var(--ds-chat-surface);
-  box-shadow: var(--ds-chat-shadow-2);
+  box-shadow: var(--ds-chat-shadow-1);
 }
+
+/* The room's portrait, published as a data URI by the browser component. The
+ * rule is skipped entirely when there is no room, because a `var()` with no
+ * fallback makes the whole declaration invalid and the box never paints. */
+:global([data-skill-chat-welcome][data-skill-chat-welcome])::before {
+  content: '';
+  display: block;
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: 50%;
+  background: var(--ds-chat-speaker-avatar, none) center / cover no-repeat, var(--ds-chat-hover);
+}
+
+:global([data-skill-chat-welcome='general'])::before { display: none; }
 
 :global([data-skill-chat-welcome])::after {
   content: attr(data-skill-chat-hint);
@@ -2435,3 +2462,43 @@
 .linkedChip b { color: var(--ds-chat-text-color); font-weight: var(--ds-chat-weight-semibold); }
 .linkedChip button { border: none; color: var(--ds-chat-muted); background: none; font: inherit; line-height: 1; cursor: pointer; }
 .linkedChip button:hover { color: var(--ds-chat-text-color); }
+
+/* A destination beside the shell's own 新会话, not a tab: it matches that
+ * button's height and radius so the two read as one stack of entries. */
+.automationEntry {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-chat-space-2);
+  width: 100%;
+  padding: 9px var(--ds-chat-space-3);
+  border: var(--ds-chat-hairline) solid transparent;
+  border-radius: var(--ds-chat-radius-control);
+  color: var(--ds-chat-text-color);
+  background: transparent;
+  font: inherit;
+  font-weight: var(--ds-chat-weight-medium);
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+
+.automationEntry:hover { background: var(--ds-chat-hover); }
+
+.automationEntry[data-active] {
+  border-color: var(--ds-chat-accent-border);
+  background: var(--ds-chat-accent-soft);
+  color: var(--ds-chat-accent-text);
+}
+
+.automationEntryMark { font-size: 15px; line-height: 1; opacity: .75; }
+
+.automationEntryCount {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--ds-chat-accent);
+  color: #fff;
+  font-size: var(--ds-chat-text-caption);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}

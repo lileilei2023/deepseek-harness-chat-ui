@@ -247,6 +247,18 @@ export function preferLocalState(remote: SkillChatState, local: SkillChatState):
   return remoteEmpty && localHasData
 }
 
+/**
+ * Rooms kept across projects.
+ *
+ * A room belongs to the project it was made in, which is right for a thread but
+ * wrong for a team: the roster, the coordinator and the group's brief are worth
+ * reusing on the next project. Saving one lists it in every project, and
+ * opening it there binds that project in, so the session runs where you are.
+ * Stored outside the Host document because it is this person's shortlist, not
+ * part of the room graph.
+ */
+export const SAVED_ROOMS_KEY = 'dsh.skill-chat.saved-rooms.v1'
+
 export const FAVORITES_KEY = 'dsh.skill-chat.favorites.v1'
 export const GROUPS_KEY = 'dsh.skill-chat.groups.v1'
 export const EXTERNAL_KEY = 'dsh.skill-chat.external.v1'
@@ -655,6 +667,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [externalJoined, setExternalJoined] = useState<readonly SkillContact[]>(() => readStored(EXTERNAL_KEY, []))
   const [externalResults, setExternalResults] = useState<readonly ExternalSkillContact[]>([])
   const [favorites, setFavorites] = useState<readonly string[]>(() => readStored(FAVORITES_KEY, []))
+  const [savedRooms, setSavedRooms] = useState<readonly string[]>(() => readStored(SAVED_ROOMS_KEY, []))
   const [groups, setGroups] = useState<readonly ContactGroup[]>(storedGroups)
   const [chatBindings, setChatBindings] = useState<Readonly<Record<string, ChatBinding>>>(storedBindings)
   const [state, setState] = useState<SkillChatState>(() => readStored(STATE_KEY, EMPTY_SKILL_CHAT_STATE))
@@ -734,7 +747,11 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     : workspaces.items.find(workspace => workspace.workspaceId === activeRoom.workspaceId) ?? currentWorkspace,
   [activeRoom, currentWorkspace, workspaces.items])
   const archivedRooms = useMemo(() => state.rooms.filter(room => room.workspaceId === workspaceId && room.archivedAt !== undefined).sort((left, right) => (right.archivedAt ?? 0) - (left.archivedAt ?? 0)), [state.rooms, workspaceId])
-  const visibleRooms = useMemo(() => orderRooms(state.rooms.filter(room => room.workspaceId === workspaceId && room.archivedAt === undefined)), [state.rooms, workspaceId])
+  const visibleRooms = useMemo(() => orderRooms(state.rooms.filter(room => room.archivedAt === undefined
+    && (room.workspaceId === workspaceId
+      || (room.workspaceIds ?? []).includes(workspaceId as WorkspaceId)
+      // A saved room is a team, and a team is not the property of one project.
+      || savedRooms.includes(room.roomId)))), [savedRooms, state.rooms, workspaceId])
   const filtered = useMemo(() => allContacts.filter(skill => matches(skill, deferredQuery, state.personas)), [allContacts, deferredQuery, state.personas])
   const frequent = useMemo(() => { const pinned = filtered.filter(contact => favorites.includes(contact.id)); return pinned.length > 0 ? pinned : filtered.slice(0, 8) }, [favorites, filtered])
   const visibleContacts = contactList === 'frequent' && deferredQuery.length === 0 ? frequent : filtered
@@ -836,6 +853,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   useEffect(() => { store(MODE_KEY, mode) }, [mode])
   useEffect(() => { store(FAVORITES_KEY, favorites) }, [favorites])
+  useEffect(() => { store(SAVED_ROOMS_KEY, savedRooms) }, [savedRooms])
   useEffect(() => { store(GROUPS_KEY, groups) }, [groups])
   useEffect(() => { store(EXTERNAL_KEY, externalJoined) }, [externalJoined])
   useEffect(() => { store(CHAT_BINDINGS_KEY, chatBindings) }, [chatBindings])
@@ -939,14 +957,52 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   }
 
   const openRoom = async (room: ChatRoom): Promise<void> => {
+    // A saved room opened under another project has to be bound to it, or the
+    // session it starts would run against the directory it was built in.
+    if (workspaceId !== undefined && !(room.workspaceIds ?? [room.workspaceId]).includes(workspaceId)) {
+      updateRoom(room.roomId, { workspaceIds: [...(room.workspaceIds ?? [room.workspaceId]), workspaceId] })
+    }
     const sessionId = activeHarnessSession(room, stateRef.current.roomSessions)
     if (sessionId !== undefined && sessions.byId[sessionId] !== undefined) { openSession(sessionId); return }
     await createRoomSession(room)
   }
 
+  /**
+   * Make these Skills loadable by the model.
+   *
+   * A scanned Skill is only a contact card: the Host's Skill service never saw
+   * it, so a model that tries to load one gets `skill "X" is unknown or no
+   * longer available` — which is what happened whenever a group of imported
+   * Skills was actually put to work. Linking the bundle into the Harness's own
+   * Skill root registers it for real, and the Host watches that directory, so
+   * the catalog updates without a restart.
+   *
+   * Linking on membership rather than on a button: a Skill in a room is a Skill
+   * the person expects to work. Failures are reported once and do not block the
+   * room — an unlinked member still participates as a persona.
+   * @param ids - contact ids joining a room.
+   */
+  const ensureLinked = (ids: readonly string[]): void => {
+    const pending = ids.flatMap(id => {
+      const contact = allContacts.find(item => item.id === id)
+      return contact?.source === 'workbuddy' && contact.path !== undefined
+        ? [{ path: contact.path, name: contact.name }]
+        : []
+    })
+    if (pending.length === 0) return
+    const abort = new AbortController()
+    void Promise.allSettled(pending.map(entry => linkSkill(entry.path, entry.name, abort.signal)))
+      .then((results) => {
+        const failed = results.filter(result => result.status === 'rejected').length
+        if (failed > 0) setNotice(`${t('enableSkillFailed')}：${failed}/${pending.length}`)
+        setContactsRevision(current => current + 1)
+      })
+  }
+
   const beginContactChat = async (contact: SkillContact): Promise<void> => {
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
     const existing = state.rooms.find(room => room.type === 'direct' && room.workspaceId === workspaceId && room.memberIds[0] === contact.id && room.archivedAt === undefined)
+    ensureLinked([contact.id])
     const display = displayOf(contact, 'persona', state.personas)
     const room: ChatRoom = existing ?? { roomId: `room:direct:${workspaceId}:${contact.id}`, type: 'direct', workspaceId, workspaceIds: [workspaceId], title: display.name, memberIds: [contact.id], coordinatorId: contact.id, sessionIds: [], createdAt: Date.now(), updatedAt: Date.now() }
     if (existing === undefined) updateState(current => ({ ...current, rooms: [...current.rooms, room] }))
@@ -971,6 +1027,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
     const members = allContacts.filter(contact => groupMembers.includes(contact.id))
     if (members.length < 2) return
+    ensureLinked(members.map(member => member.id))
     const now = Date.now()
     const roomId = `room:group:${randomUUID()}`
     const coordinator = members[0]
@@ -1082,6 +1139,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const included = activeRoom.memberIds.includes(skillId)
     const memberIds = included ? activeRoom.memberIds.filter(id => id !== skillId) : [...activeRoom.memberIds, skillId]
     if (memberIds.length < 2) { setNotice(t('groupNeedsMember')); return }
+    if (!included) ensureLinked([skillId])
     updateRoom(activeRoom.roomId, {
       memberIds,
       coordinatorId: memberIds.includes(activeRoom.coordinatorId) ? activeRoom.coordinatorId : memberIds[0] ?? activeRoom.coordinatorId,
@@ -1165,6 +1223,11 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setFavorites(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   }
   const selectContact = (contact: SkillContact): void => { const identity = state.personas[contact.id] ?? defaultPersona(contact); setSelected(contact); setPersonaName(identity.displayName); setPersonaAvatar(identity.avatarId); setEditingPersona(false) }
+
+  // Active automations for this project; the entry carries the count the tab
+  // strip used to show by being visible at all.
+  const dueAutomations = state.automations
+    .filter(item => item.workspaceId === workspaceId && item.status === 'active').length
 
   const roomAvatar = (room: ChatRoom, compact = false): React.JSX.Element => {
     if (room.type === 'general') return <span className={css.generalAvatar} data-compact={compact || undefined}>✦</span>
@@ -1491,8 +1554,17 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   }
 
   return <div className={css.root} data-skill-chat-root>
+    {/* Automations sit beside the shell's own 新会话 rather than inside the
+      * tab strip: the tabs switch what the list below shows, and automations
+      * are a place you go, not a filter over the same rooms. */}
+    <button
+      className={css.automationEntry}
+      type="button"
+      data-active={view === 'automations' || undefined}
+      onClick={() => { setView(current => current === 'automations' ? 'chats' : 'automations') }}
+    ><span className={css.automationEntryMark} aria-hidden="true">◷</span>{t('automations')}{dueAutomations > 0 ? <span className={css.automationEntryCount}>{dueAutomations}</span> : null}</button>
     <div className={css.workspaceSection}><div className={css.workspacePicker}><button className={css.workspaceTrigger} type="button" aria-expanded={workspaceOpen} onClick={() => { setWorkspaceOpen(current => !current) }}><span className={css.workspaceIcon}>⌂</span><span>{currentWorkspace?.title ?? t('noWorkspace')}</span><span className={css.chevron}>⌄</span></button>{workspaceOpen ? <div className={css.workspaceMenu}>{workspaces.items.map(workspace => <button type="button" data-active={workspace.workspaceId === workspaceId} key={workspace.workspaceId} onClick={() => { setWorkspaceId(workspace.workspaceId); setWorkspaceOpen(false) }}><span>⌂</span><strong>{workspace.title}</strong>{workspace.workspaceId === workspaceId ? <b>✓</b> : null}</button>)}<span className={css.workspaceMenuSep}/><button type="button" onClick={() => { setWorkspaceOpen(false); void createWorkspace() }}><span>＋</span><strong>{t('addWorkspace')}</strong></button></div> : null}</div></div>
-    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'contacts', 'automations'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{item === 'automations' ? t('automations') : t(item)}</button>)}</div><span className={css.createWrap}><button className={css.addGroup} type="button" aria-label="新建" aria-expanded={createOpen} onClick={() => { setCreateOpen(open => !open) }}>＋</button>{createOpen ? <div className={css.createMenu}>{[{ id: 'chat', label: t('plainChat'), hint: t('noSkillMode'), run: () => { void beginGeneralChat() } }, { id: 'group', label: t('groupChat'), hint: t('organizeSkills'), run: openGroupCreator }, { id: 'workspace', label: t('projectDir'), hint: t('addWorkspaceHint'), run: () => { void createWorkspace() } }].map(entry => <button type="button" key={entry.id} onClick={() => { setCreateOpen(false); entry.run() }}><strong>{entry.label}</strong><small>{entry.hint}</small></button>)}</div> : null}</span></div>
+    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'contacts'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{t(item)}</button>)}</div><span className={css.createWrap}><button className={css.addGroup} type="button" aria-label="新建" aria-expanded={createOpen} onClick={() => { setCreateOpen(open => !open) }}>＋</button>{createOpen ? <div className={css.createMenu}>{[{ id: 'chat', label: t('plainChat'), hint: t('noSkillMode'), run: () => { void beginGeneralChat() } }, { id: 'group', label: t('groupChat'), hint: t('organizeSkills'), run: openGroupCreator }, { id: 'workspace', label: t('projectDir'), hint: t('addWorkspaceHint'), run: () => { void createWorkspace() } }].map(entry => <button type="button" key={entry.id} onClick={() => { setCreateOpen(false); entry.run() }}><strong>{entry.label}</strong><small>{entry.hint}</small></button>)}</div> : null}</span></div>
     <div className={css.searchWrap}><input className={css.search} value={query} onChange={event => { setQuery(event.target.value) }} placeholder={view === 'contacts' ? t('searchAll') : t('searchRoomsPlaceholder')} aria-label={view === 'contacts' ? t('searchAll') : t('searchRooms')} autoComplete="off" spellCheck={false} type="search"/></div>
     {renderSlot('ds-chat.sidebar.before-rooms', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
     {notice !== null ? <button className={css.notice} type="button" onClick={() => { setNotice(null) }}>{notice} ×</button> : null}
@@ -1580,6 +1652,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       return <div className={css.menuBackdrop} onMouseDown={close}>
         <div className={css.roomMenu} style={{ left: `${Math.min(roomMenu.x, window.innerWidth - 190)}px`, top: `${Math.min(roomMenu.y, window.innerHeight - 170)}px` }} onMouseDown={(event) => { event.stopPropagation() }}>
           <button type="button" onClick={() => { togglePin(room); close() }}>{room.pinnedAt === undefined ? t('pin') : t('unpin')}</button>
+          <button type="button" onClick={() => { setSavedRooms(current => current.includes(room.roomId) ? current.filter(id => id !== room.roomId) : [...current, room.roomId]); close() }}>{savedRooms.includes(room.roomId) ? t('unsaveRoom') : t('saveRoom')}</button>
           <button type="button" onClick={() => { updateRoom(room.roomId, { archivedAt: Date.now() }); close() }}>{t('archive')}</button>
           <button className={css.menuDanger} type="button" onClick={() => { setDeleteConfirm(room.roomId); close() }}>{t('delete')}</button>
         </div>
@@ -1595,5 +1668,5 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 }
 
 export function DSChatBrand(): React.JSX.Element {
-  return <span className={css.dsChatBrand}>DS Chat</span>
+  return <span className={css.dsChatBrand}>DS <b>Chat</b></span>
 }

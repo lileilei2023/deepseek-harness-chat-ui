@@ -24,6 +24,7 @@
 
 import { createAvatar } from '@dicebear/core'
 import * as micah from '@dicebear/micah'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 
 /** Background tints, one per identity, in the plugin's own palette. */
@@ -31,6 +32,24 @@ export const AVATAR_BACKGROUNDS = [
   'fff1e8', 'e9f8ef', 'eef1ff', 'fff5d9', 'e7f5fb', 'faeaf3', 'ecfbf7', 'fdeee6',
   'f2edfd', 'e8f4e6', 'fdecec', 'e9eff5', 'fff8e1', 'efe9e3', 'e6f7ff', 'f7ecff',
 ] as const
+
+/**
+ * The same sixteen hues at dark-theme weight.
+ *
+ * The tint is painted inside the SVG, so a light one cannot be toned down from
+ * a stylesheet. Four portraits packed into a 40px group tile therefore merged
+ * into one bright block on a dark sidebar. Same hue order as the light list, so
+ * an identity keeps its colour across themes.
+ */
+export const AVATAR_BACKGROUNDS_DARK = [
+  '3b2b21', '1f3a2c', '262b47', '3d3722', '1e333f', '3a2530', '1d3a35', '3d2a20',
+  '2d2547', '24331f', '3d2626', '242b33', '3d3a20', '332e28', '1f3340', '33254a',
+] as const
+
+/** Whether the Host currently has its dark theme on. */
+export function darkTheme(): boolean {
+  return document.body.dataset.dsDarkTheme !== undefined
+}
 
 /** How many distinct identities the picker offers. */
 const LIBRARY_SIZE = 192
@@ -67,11 +86,12 @@ const CACHE_LIMIT = 1024
  * @param size - pixel size the SVG declares.
  * @returns a `data:image/svg+xml` URI.
  */
-export function avatarDataUri(avatarId: string, size: number): string {
-  const key = `${avatarId}@${size}`
+export function avatarDataUri(avatarId: string, size: number, dark = darkTheme()): string {
+  const key = `${avatarId}@${size}@${dark ? 'dark' : 'light'}`
   const hit = cache.get(key)
   if (hit !== undefined) return hit
-  const background = AVATAR_BACKGROUNDS[seedOf(avatarId) % AVATAR_BACKGROUNDS.length] ?? 'eef1ff'
+  const palette = dark ? AVATAR_BACKGROUNDS_DARK : AVATAR_BACKGROUNDS
+  const background = palette[seedOf(avatarId) % palette.length] ?? (dark ? '262b47' : 'eef1ff')
   const uri = createAvatar(micah, {
     seed: avatarId,
     size,
@@ -83,6 +103,25 @@ export function avatarDataUri(avatarId: string, size: number): string {
   if (cache.size >= CACHE_LIMIT) cache.clear()
   cache.set(key, uri)
   return uri
+}
+
+/**
+ * Track the Host's theme.
+ *
+ * The Host marks it with an attribute on `body` rather than the colour-scheme
+ * media query — a person can pick dark on a light desktop — so the switch has
+ * to be observed rather than queried once.
+ * @returns whether the dark theme is on.
+ */
+function useDarkTheme(): boolean {
+  const [dark, setDark] = useState(darkTheme)
+  useEffect(() => {
+    const observer = new MutationObserver(() => { setDark(darkTheme()) })
+    observer.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+    setDark(darkTheme())
+    return () => { observer.disconnect() }
+  }, [])
+  return dark
 }
 
 export interface CartoonAvatarProps {
@@ -105,8 +144,9 @@ export interface CartoonAvatarProps {
  * @returns the avatar image.
  */
 export function CartoonAvatar({ avatarId, size = 40, title, className }: CartoonAvatarProps): React.JSX.Element {
+  const dark = useDarkTheme()
   // Generated at twice the box so the portrait stays crisp on a retina panel.
-  const uri = avatarDataUri(avatarId, size * 2)
+  const uri = avatarDataUri(avatarId, size * 2, dark)
   const style = { '--avatar-size': `${size}px` } as CSSProperties
   return <span className={className} title={title} style={style} data-avatar>
     <img src={uri} alt="" width={size} height={size} draggable={false}/>

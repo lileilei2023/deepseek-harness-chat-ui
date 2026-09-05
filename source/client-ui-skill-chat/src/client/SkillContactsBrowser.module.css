@@ -2463,42 +2463,66 @@
 .linkedChip button { border: none; color: var(--ds-chat-muted); background: none; font: inherit; line-height: 1; cursor: pointer; }
 .linkedChip button:hover { color: var(--ds-chat-text-color); }
 
-/* A destination beside the shell's own 新会话, not a tab: it matches that
- * button's height and radius so the two read as one stack of entries. */
+/* A destination beside the shell's own 新会话.
+ *
+ * It was a bare row between two white pills — the only transparent thing in a
+ * column of contained controls, so it read as an orphan rather than a peer. It
+ * now shares that button's metrics (height, radius, type) but takes a neutral
+ * fill instead of a third elevated white surface: there is one primary action
+ * in this column, and this is not it. */
 .automationEntry {
   display: flex;
   align-items: center;
   gap: var(--ds-chat-space-2);
+  box-sizing: border-box;
   width: 100%;
-  padding: 9px var(--ds-chat-space-3);
+  height: 38px;
+  margin-bottom: var(--ds-chat-space-1);
+  padding: 0 12px 0 14px;
   border: var(--ds-chat-hairline) solid transparent;
   border-radius: var(--ds-chat-radius-control);
   color: var(--ds-chat-text-color);
-  background: transparent;
+  background: var(--ds-chat-hover);
   font: inherit;
+  font-size: var(--ds-chat-text-body);
   font-weight: var(--ds-chat-weight-medium);
   cursor: pointer;
-  transition: background-color .12s ease, border-color .12s ease;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
 }
 
-.automationEntry:hover { background: var(--ds-chat-hover); }
+.automationEntry:hover { background: var(--ds-chat-hover-strong, var(--ds-chat-row-selected)); }
 
 .automationEntry[data-active] {
   border-color: var(--ds-chat-accent-border);
+  color: var(--ds-chat-accent-text);
   background: var(--ds-chat-accent-soft);
+}
+
+.automationEntryMark {
+  flex: none;
+  font-size: 15px;
+  line-height: 1;
   color: var(--ds-chat-accent-text);
 }
 
-.automationEntryMark { font-size: 15px; line-height: 1; opacity: .75; }
-
+/* Pushed to the trailing edge so the row has a left cluster and a right count,
+ * the shape every list entry in this sidebar already uses. */
 .automationEntryCount {
   margin-left: auto;
-  min-width: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: var(--ds-chat-accent);
-  color: #fff;
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--ds-chat-accent-soft-strong);
+  color: var(--ds-chat-accent-text);
   font-size: var(--ds-chat-text-caption);
+  font-weight: var(--ds-chat-weight-semibold);
   font-variant-numeric: tabular-nums;
+  line-height: 16px;
   text-align: center;
 }
+
+.automationEntry[data-active] .automationEntryCount {
+  background: var(--ds-chat-accent-solid);
+  color: var(--ds-chat-on-accent);
+}
+

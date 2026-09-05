@@ -18,6 +18,23 @@ const REMOTE: TypertRemoteContribution = {
 }
 
 describe('SkillChat browser plugin', () => {
+  it('attributes a reply to the member it opens with, not to whoever the user asked for', () => {
+    const contact = (id: string, name: string): SkillContact => ({
+      id, name, description: '', source: 'workbuddy', sourceLabel: 'WorkBuddy', invocable: false, modelInvocable: false,
+    })
+    const members = [contact('a', 'analyst'), contact('b', 'writer')]
+
+    // The coordinator is asked to open a relayed result with `@name`; that is a
+    // statement about who wrote it, so it outranks the user's request.
+    expect(responderForMessage(members, 'a', '@analyst 看一下', 'raw', '@writer 我整理了初稿')?.id).toBe('b')
+    // With nothing declared, the user's single mention decides.
+    expect(responderForMessage(members, 'a', '@writer 写个开头', 'raw', '整理好了')?.id).toBe('b')
+    // An `@` deep in the body is the coordinator talking about a member.
+    expect(responderForMessage(members, 'a', '随便问问', 'raw', `${'x'.repeat(60)}@writer`)?.id).toBe('a')
+    // Neither names anyone: the coordinator answers.
+    expect(responderForMessage(members, 'a', '随便问问', 'raw', '好的')?.id).toBe('a')
+  })
+
   it('adds to the stored Rooms when importing legacy local data instead of replacing them', () => {
     const bindings = {
       'session-legacy': { kind: 'contact' as const, name: '旧会话', avatar: 'cat-lime', members: [{ id: 'skill', name: 'skill' }] },

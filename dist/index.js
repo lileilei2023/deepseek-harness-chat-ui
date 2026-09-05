@@ -391,8 +391,8 @@ let WorkBuddySkillCatalog = (() => {
 					if (room?.type !== "group") return "";
 					const configuredPrompt = room.systemPrompt?.trim();
 					if (configuredPrompt !== void 0 && configuredPrompt !== "") return configuredPrompt;
-					const members = room.memberIds.map((id) => this.cachedState.personas[id]?.originalName ?? id).join("、");
-					return `你是「${room.title}」的协调者。根据用户目标组织群组成员（${members}）协作；没有明确 @ 时主动拆解并路由任务，有 @ 时优先尊重指定成员。不要声称发生了真实并行执行。`;
+					const members = room.memberIds.map((id) => `@${this.cachedState.personas[id]?.originalName ?? id}`).join("、");
+					return `你是「${room.title}」的协调者。根据用户目标组织群组成员（${members}）协作。没有明确 @ 时你先拆解任务再决定交给谁，有 @ 时优先尊重指定成员。一次需要多个成员时，用 subagent 工具为每个成员各起一个后台子代理并发进行，并在提示里写明「先加载 <成员名> 这个 Skill，再按它的方法完成以下任务」；单个成员能完成时直接自己加载对应 Skill 处理。转述成员结果时该段以「@成员名」开头再换行写内容，界面据此标注发言人。只陈述真实发生的事。`;
 				}
 			}), "workBuddySkillCatalog.roomSystemPrompt()");
 			const timer = setInterval(() => {

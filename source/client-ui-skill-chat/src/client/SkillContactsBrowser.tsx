@@ -359,11 +359,36 @@ function storedBindings(): Readonly<Record<string, ChatBinding>> {
   return Object.fromEntries(Object.entries(legacy).map(([sessionId, identity]) => [sessionId, { ...identity, kind: 'contact' as const, members: [] }]))
 }
 
-export function responderForMessage(members: readonly SkillContact[], leaderId: string | undefined, text: string, mode: ContactMode): SkillContact | undefined {
-  const mentioned = members.filter((member) => {
+/**
+ * Who a message belongs to.
+ *
+ * The reply's own opening line wins: the coordinator is asked to start a
+ * relayed result with `@nickname`, and that is a statement about authorship,
+ * where the user's `@` is only a request. The request is the fallback, and the
+ * coordinator answers for anything neither names.
+ * @param members - the room's Skills.
+ * @param leaderId - the coordinator's contact id.
+ * @param text - the user's message for this turn.
+ * @param mode - whether names are shown as personas or raw Skill names.
+ * @param reply - the assistant's own text, when it has been rendered.
+ * @returns the member to attribute the message to.
+ */
+export function responderForMessage(
+  members: readonly SkillContact[],
+  leaderId: string | undefined,
+  text: string,
+  mode: ContactMode,
+  reply = '',
+): SkillContact | undefined {
+  const named = (source: string): readonly SkillContact[] => members.filter((member) => {
     const display = displayOf(member, mode)
-    return text.includes(`@${display.name}`) || text.includes(`@${member.name}`)
+    return source.includes(`@${display.name}`) || source.includes(`@${member.name}`)
   })
+  // Only the opening of the reply attributes it; an `@` deeper in the text is
+  // the coordinator talking about a member, not speaking as one.
+  const declared = named(reply.slice(0, 40))
+  if (declared.length === 1) return declared[0]
+  const mentioned = named(text)
   return mentioned.length === 1 ? mentioned[0] : members.find(member => member.id === leaderId) ?? members[0]
 }
 
@@ -382,9 +407,36 @@ function roomGroup(room: ChatRoom, contacts: readonly SkillContact[]): ContactGr
   return { id: room.roomId.replace('room:group:', ''), name: room.title, members, leaderId: room.coordinatorId, ...(room.systemPrompt === undefined ? {} : { systemPrompt: room.systemPrompt }), workspaceId: room.workspaceId, createdAt: room.createdAt }
 }
 
+/**
+ * The group's brief.
+ *
+ * This used to end with "do not claim real parallel execution", which was
+ * honest while members were personas in a prompt and nothing more. They are
+ * now linked into the Harness's own Skill root, and this preset gives the
+ * model a `subagent` tool that runs in the background by default and returns
+ * immediately — so several members genuinely can work at once, and the
+ * instruction to pretend otherwise had become the thing standing in the way.
+ *
+ * Each relayed result opens with `@nickname` because that line is what the
+ * sidebar reads to put the right face on the message.
+ * @param name - the room's title.
+ * @param members - the Skills in the room.
+ * @returns the system prompt.
+ */
 function generatedGroupPrompt(name: string, members: readonly SkillContact[]): string {
-  const roster = members.map(member => `- ${member.name}：${member.description}`).join('\n')
-  return `你是「${name || tr('collabGroup')}」的协调者。根据用户目标组织以下 Skill 协作，优先给出明确、可执行且可验证的结果。\n\n成员能力：\n${roster}\n\n工作规则：没有明确 @ 时由协调者拆解任务并选择合适成员；有 @ 时优先由指定成员处理；不要声称发生了真实并行执行。`
+  const roster = members.map(member => `- @${member.name}：${member.description}`).join('\n')
+  return `你是「${name || tr('collabGroup')}」的协调者。根据用户目标组织以下成员协作，优先给出明确、可执行且可验证的结果。
+
+成员：
+${roster}
+
+工作规则：
+1. 用户明确 @ 某个成员时，交给该成员。
+2. 没有明确 @ 时，你先拆解任务，再决定交给谁。
+3. 一次需要多个成员时，用 subagent 工具为每个成员各起一个后台子代理并发进行；不要串行等待。给每个子代理的提示里写明「先加载 <成员名> 这个 Skill，再按它的方法完成以下任务」。
+4. 单个成员就能完成，或任务很小时，直接自己加载对应 Skill 处理，不必起子代理。
+5. 转述某个成员的结果时，该段以「@成员名」开头，再换行写内容。这是界面据以标注发言人的依据。
+6. 只陈述真实发生的事：并发就说并发，自己做的就说自己做的。`
 }
 
 function GroupAvatar({ avatarId, label, small = false }: { readonly avatarId: string; readonly label: string; readonly small?: boolean }): React.JSX.Element {
@@ -884,11 +936,14 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       for (const reply of document.querySelectorAll<HTMLElement>('[data-chat-flow-kind="assistant-step"]:has([data-assistant-reply])')) {
         const turn = reply.dataset.chatTurn
         const user = turn === undefined ? undefined : [...document.querySelectorAll<HTMLElement>('[data-chat-flow-kind="user"]')].find(node => node.dataset.chatTurn === turn)
-        const responder = responderForMessage(activeMembers, activeRoom.coordinatorId, user?.textContent ?? '', mode)
+        const answer = reply.querySelector('[data-assistant-reply]')?.textContent ?? ''
+        const responder = responderForMessage(activeMembers, activeRoom.coordinatorId, user?.textContent ?? '', mode, answer)
         if (responder === undefined) continue
         const display = displayOf(responder, mode, state.personas)
         reply.dataset.skillResponder = display.name
-        reply.style.setProperty('--skill-message-avatar', `'${display.name.slice(0, 1)}'`)
+        // Overrides the room-wide portrait for this message only. Every reply
+        // wearing the coordinator's face made a group read as one voice.
+        reply.style.setProperty('--ds-chat-speaker-avatar', `url("${avatarDataUri(display.avatar, 64)}")`)
       }
     }
     assign()

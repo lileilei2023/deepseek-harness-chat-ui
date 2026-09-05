@@ -127,6 +127,8 @@ interface SkillContactsInjected {
   saveState: (state: SkillChatState, signal: AbortSignal) => Promise<void>
   runAutomation: (automationId: string, signal: AbortSignal) => Promise<{ readonly sessionId: SessionId; readonly state: SkillChatState }>
   linkSkill: (path: string, name: string, signal: AbortSignal) => Promise<{ readonly name: string; readonly target: string }>
+  forkSession: (sessionId: SessionId, atSeq: number, increaseTitle: boolean) => Promise<SessionId>
+  messageSeq: (sessionId: SessionId, messageId: string) => number | undefined
   browseProject: (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => Promise<ProjectDirectoryListing>
   readProjectFile: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<ProjectFilePreview>
   openTerminal: (sessionId: SessionId, workspaceId: WorkspaceId, signal: AbortSignal) => Promise<TerminalSnapshot>
@@ -459,6 +461,10 @@ interface HeaderBridgeValue {
   readonly onSettings: () => void
   readonly onProjectTool: (tool: ProjectToolKind) => void
   readonly onTemporaryChat: () => void
+  /** Cut a fork at one message; see {@link SkillChatMessageActions}. */
+  readonly onBranch: (atSeq: number, kind: 'revert' | 'fork') => Promise<void>
+  readonly messageSeq: (sessionId: SessionId, messageId: string) => number | undefined
+  readonly onNotice: (text: string) => void
 }
 
 let headerBridgeValue: HeaderBridgeValue | null = null
@@ -571,6 +577,47 @@ export interface DiffLine {
  * @param text - raw terminal output.
  * @returns the typed lines, in order.
  */
+/**
+ * Branch actions for one finalized assistant message.
+ *
+ * The Harness Session log is append-only: there is no truncate and no delete,
+ * so "go back to here" cannot mean erasing what followed. It means cutting a
+ * fork at that message — the Host's own `fork({ atSeq })`, which copies the
+ * prefix into a child Session. The trace follows for free, because the child
+ * only ever held those events.
+ *
+ * Two entries rather than one because the intent differs, and the Host already
+ * encodes the difference: reverting continues the same thread from an earlier
+ * point and keeps the title, while branching is a deliberate parallel attempt
+ * and takes a numbered one (`increaseTitle`). Both leave the original in the
+ * room's history, so a fork taken by mistake costs nothing.
+ */
+export function SkillChatMessageActions(
+  { messageId }: { readonly messageId: string },
+): React.JSX.Element | null {
+  const bridge = useHeaderBridge()
+  const [busy, setBusy] = useState<'revert' | 'fork' | null>(null)
+  if (bridge === null) return null
+  const branch = (kind: 'revert' | 'fork'): void => {
+    const atSeq = bridge.messageSeq(bridge.sessionId, messageId)
+    // Outside the loaded window there is no seq to cut at, and forking the
+    // whole Session instead would silently do the wrong thing.
+    if (atSeq === undefined) { bridge.onNotice(tr('branchOutOfWindow')); return }
+    setBusy(kind)
+    void bridge.onBranch(atSeq, kind).catch((error: unknown) => {
+      bridge.onNotice(`${tr('branchFailed')}：${error instanceof Error ? error.message : String(error)}`)
+    }).finally(() => { setBusy(null) })
+  }
+  return <span className={css.messageActions}>
+    <button type="button" disabled={busy !== null} onClick={() => { branch('revert') }} title={tr('revertHereHint')}>
+      {busy === 'revert' ? tr('working') : tr('revertHere')}
+    </button>
+    <button type="button" disabled={busy !== null} onClick={() => { branch('fork') }} title={tr('forkHereHint')}>
+      {busy === 'fork' ? tr('working') : tr('forkHere')}
+    </button>
+  </span>
+}
+
 export function parseDiff(text: string): readonly DiffLine[] {
   const lines = text.replace(/\r/gu, '').split('\n')
   const start = lines.findIndex(line => line.startsWith('diff --git') || line.startsWith('@@'))
@@ -705,7 +752,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
-    linkSkill,
+    linkSkill, forkSession, messageSeq,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
   const sessions = useSessions(value => value)
@@ -972,6 +1019,58 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   const bindChat = (sessionId: SessionId, binding: ChatBinding): void => {
     setChatBindings(current => ({ ...current, [sessionId]: binding }))
+  }
+
+  /**
+   * Cut a branch of this conversation at one message.
+   *
+   * The Host copies the prefix into a child Session; recording that child as a
+   * Room Session is what keeps it inside the room — same members, same
+   * portraits, and reachable from 历史 beside the branch it came from. Nothing
+   * is removed: the original stays exactly where it was.
+   * @param room - the room the conversation belongs to.
+   * @param sessionId - the Session being branched.
+   * @param atSeq - log sequence to cut at.
+   * @param kind - `revert` keeps the title, `fork` takes a numbered one.
+   */
+  const branchRoomSession = async (
+    room: ChatRoom,
+    sessionId: SessionId,
+    atSeq: number,
+    kind: 'revert' | 'fork',
+  ): Promise<void> => {
+    const childId = await forkSession(sessionId, atSeq, kind === 'fork')
+    const members = room.memberIds.flatMap(id => allContacts.find(contact => contact.id === id) ?? [])
+    const now = Date.now()
+    const roomSessionId = `room-session:${childId}`
+    const source = stateRef.current.roomSessions.find(item => item.harnessSessionId === sessionId)
+    const roomSession: RoomSession = {
+      roomSessionId,
+      roomId: room.roomId,
+      harnessSessionId: childId,
+      title: kind === 'fork' ? `${source?.title ?? room.title} · ${t('branchSuffix')}` : source?.title ?? room.title,
+      // The snapshot is copied rather than rebuilt: a branch should show the
+      // roster the original ran with, not whatever the catalog says today.
+      memberSnapshot: source?.memberSnapshot ?? members.map((member) => {
+        const display = displayOf(member, 'persona', state.personas)
+        return { skillId: member.id, displayName: display.name, avatarId: display.avatar, originalName: member.name }
+      }),
+      createdAt: now,
+      updatedAt: now,
+    }
+    const next = updateState((current) => {
+      const stored = current.rooms.find(item => item.roomId === room.roomId) ?? room
+      return {
+        ...current,
+        roomSessions: [...current.roomSessions, roomSession],
+        rooms: current.rooms.map(item => item.roomId === room.roomId
+          ? { ...stored, sessionIds: [...stored.sessionIds, roomSessionId], activeSessionId: roomSessionId, updatedAt: now }
+          : item),
+      }
+    })
+    await saveState(next, new AbortController().signal)
+    openSession(childId)
+    setNotice(kind === 'fork' ? t('forkedNotice') : t('revertedNotice'))
   }
 
   const createRoomSession = async (room: ChatRoom, draft = true): Promise<SessionId> => {
@@ -1477,11 +1576,14 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       onSettings: () => { openRoomSettings(activeRoom) },
       onProjectTool: openProjectTool,
       onTemporaryChat: () => { setSidecarOpen(true) },
+      onBranch: (atSeq, kind) => branchRoomSession(activeRoom, currentSessionId, atSeq, kind),
+      messageSeq,
+      onNotice: setNotice,
     })
     return () => {
       if (headerBridgeValue?.sessionId === currentSessionId) publishHeaderBridge(null)
     }
-  }, [activeCoordinator, activeMembers, activeRoom, activeWorkspace?.title, currentSessionId, renderSlot, state.personas, state.roomSessions])
+  }, [activeCoordinator, activeMembers, activeRoom, activeWorkspace?.title, currentSessionId, messageSeq, renderSlot, state.personas, state.roomSessions])
 
   // Publish the speaking Skill's portrait to the document so the transcript can
   // put a face beside the reply. The conversation column is the shell's, drawn

@@ -14,10 +14,11 @@ import type { InputTriggerServiceContract, InputTriggerSource } from '@deepseek-
 import type { UiWorkspace } from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillContactsBrowser, STATE_KEY,
+  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillChatMessageActions, SkillContactsBrowser, STATE_KEY,
 } from './SkillContactsBrowser.tsx'
 import type { ChatBinding, ContactGroup, ExternalSkillContact, SkillContact } from './SkillContactsBrowser.tsx'
 import type { SkillChatState } from './model.ts'
@@ -153,6 +154,29 @@ function registerUi(ctx: Context): void {
     })
   }
 
+  /**
+   * The log sequence one assistant message closed at.
+   *
+   * Forking needs a seq, and the per-message slot hands out a message id only.
+   * The Session's own event window carries both, so the lookup is a scan of
+   * what the client already holds rather than another round trip.
+   * @param sessionId - the Session the message belongs to.
+   * @param messageId - the durable message id from the slot.
+   * @returns the seq, or undefined when the message is outside the loaded window.
+   */
+  const messageSeq = (sessionId: SessionId, messageId: string): number | undefined => {
+    const entries = sessions.binding(sessionId)?.eventSource.getSnapshot().entries ?? []
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index]
+      if (entry === undefined || entry.type !== 'event') continue
+      // `assistant/message` carries the durable id one level in, under the
+      // message it wraps; the event's own `data` has only turn/step/usage.
+      const event = entry.event as { seq?: number; data?: { message?: { id?: string } } }
+      if (event.data?.message?.id === messageId && typeof event.seq === 'number') return event.seq
+    }
+    return undefined
+  }
+
   const mentionSource: InputTriggerSource = {
     trigger: '@',
     name: 'skill-contact',
@@ -219,6 +243,9 @@ function registerUi(ctx: Context): void {
         if (!result.ok) throw new Error(result.error.message)
       },
       startSession: (workspaceId: WorkspaceId) => sessions.create({ workspaceId }),
+      forkSession: (sessionId: SessionId, atSeq: number, increaseTitle: boolean) =>
+        sessions.fork({ sessionId, atSeq, increaseTitle }),
+      messageSeq: (sessionId: SessionId, messageId: string) => messageSeq(sessionId, messageId),
       addWorkspace: async () => {
         const path = await uiWorkspace.pickDirectory()
         if (path === null) return null
@@ -310,6 +337,15 @@ function registerUi(ctx: Context): void {
     name: 'sidebar.brand.name',
     priority: -30,
   }, DSChatBrand))
+
+  // A list slot, so the entry is added beside the shipped actions rather than
+  // replacing them. The per-turn `turnTail` chain carries the seq directly but
+  // is already occupied by deliverables, and taking it would displace them.
+  ctx.slots.inject('conversation.chat.assistant-actions', () => ctx.slots.register({
+    name: 'conversation.chat.assistant-actions',
+    id: 'skill-chat-branch',
+    order: 30,
+  }, SkillChatMessageActions))
 }
 
 export function mergeContacts(

@@ -22,13 +22,15 @@ DeepSeek Harness provides a powerful agent runtime, but its default interface is
 
 - **Persistent rooms** restore the previous conversation instead of silently creating a new session.
 - **Normal chat** works without selecting a Skill.
-- **Personified Skills** appear as recognizable contacts with deterministic names, circular animal avatars, profiles, and original capability metadata.
+- **Personified Skills** appear as recognizable contacts with deterministic names, generated cartoon avatars (24 species × 16 palettes, plus per-Skill expression and accessory), profiles, and original capability metadata.
 - **Group chats** let users search Skills, pull them into a group, choose a coordinator, and define a reusable group system prompt.
 - **Automation entry points** connect scheduled tasks to rooms and conversation history.
 - **Project and terminal sidecars** keep files and command-line work beside the active conversation.
 - **Skin support** allows declarative visual themes without touching Room or automation data.
 
 ## Screenshots
+
+> The images below predate the interface rework in [`docs/UI设计评审与优化方案.md`](docs/UI设计评审与优化方案.md) — the avatars, the sidebar layout and the room header have all changed since. They have not been retaken because a screenshot of a running instance captures whatever conversation is on screen.
 
 ### Create a group with personified Skills
 
@@ -44,13 +46,13 @@ Search installed Skills, add or remove them like group members, choose a circula
 
 | Area | Capability |
 | --- | --- |
-| Social chat | Normal chat, Skill contacts, direct conversations, group chats, collapsible session history |
+| Social chat | Normal chat, Skill contacts, direct conversations and group chats in one recency-sorted room list, with persistent search |
 | Groups | Searchable members, coordinator selection, group system prompt, project binding |
 | Personification | Circular animal avatars, deterministic friendly names, profiles and original Skill metadata |
 | Skills | Installed Skill directory, `skills.sh` search, install and install-then-add flows |
 | Workspace | Project browser, file preview, terminal and sidecar task entry points |
 | Automation | Room-bound definitions, run-now flow and persisted run history |
-| Appearance | Mint and Teamily-inspired skins using the DSH Web Skin Manifest v2 contract |
+| Appearance | Mint, Teamily-inspired and always-dark Nocturne skins using the DSH Web Skin Manifest v2 contract; light and dark schemes follow the shell |
 
 ## Requirements
 

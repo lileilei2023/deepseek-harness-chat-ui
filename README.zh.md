@@ -30,6 +30,8 @@ DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Ses
 
 ## 截图
 
+> 下列图片早于 [`docs/UI设计评审与优化方案.md`](docs/UI设计评审与优化方案.md) 记录的界面改造，头像、侧栏布局与房间头部都已变化。未重拍是因为运行实例的截图会连带记录当时屏幕上的对话内容。
+
 ### 把拟人化 Skill 拉进群聊
 
 可以像社交软件拉群一样搜索已安装 Skill、加入或剔除成员、选择圆形群组头像，并设置用于 System Prompt 的群组职能。
@@ -50,7 +52,7 @@ DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Ses
 | Skills | 已安装目录、`skills.sh` 搜索、安装、安装并加入 |
 | Workspace | 项目文件浏览、文件预览、终端与旁路任务入口 |
 | 自动化 | Room 绑定、立即运行与运行历史 |
-| 外观 | 薄荷工作台、Teamily 柔光以及 DSH Skin Manifest v2 |
+| 外观 | 薄荷工作台、Teamily 柔光、常暗「夜航」三套皮肤，基于 DSH Skin Manifest v2；明暗配色跟随外壳 |
 
 ## 环境要求
 

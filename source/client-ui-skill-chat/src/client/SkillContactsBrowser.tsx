@@ -29,7 +29,7 @@ import './theme.css'
 import { en, zh, type SkillChatKey } from './locales.ts'
 import css from './SkillContactsBrowser.module.css'
 
-type View = 'chats' | 'contacts' | 'automations'
+type View = 'chats' | 'groups' | 'contacts' | 'automations'
 type ContactList = 'frequent' | 'all'
 type ContactMode = 'persona' | 'raw'
 type ProjectToolKind = 'files' | 'terminal' | 'diff' | 'browser'
@@ -306,6 +306,41 @@ function tr(key: SkillChatKey): string {
   return table[key] ?? zh[key]
 }
 
+/**
+ * Close a popover when the pointer goes down outside it, or on Escape.
+ *
+ * Three menus — create, workbench, project picker — only closed by clicking
+ * their own trigger again, which is not how a popover behaves anywhere else:
+ * picking nothing left the panel stuck open over the list. One hook rather than
+ * three backdrops, because a backdrop also swallows scrolling and the first
+ * click that lands on whatever is underneath.
+ * @param open - whether the popover is showing.
+ * @param close - called once to dismiss it.
+ * @returns ref for the popover's own element, so clicks inside are ignored.
+ */
+function useDismiss(open: boolean, close: () => void): React.RefObject<HTMLElement | null> {
+  const ref = useRef<HTMLElement | null>(null)
+  const latest = useRef(close)
+  latest.current = close
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const node = ref.current
+      if (node !== null && event.target instanceof Node && !node.contains(event.target)) latest.current()
+    }
+    const onKeyDown = (event: KeyboardEvent): void => { if (event.key === 'Escape') latest.current() }
+    // Capture, so a trigger that toggles on click still sees its own event
+    // first and a second click on it does not immediately reopen.
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open])
+  return ref
+}
+
 function roomTime(value: number): string {
   const then = new Date(value)
   const now = new Date()
@@ -496,7 +531,9 @@ function useHeaderBridge(): HeaderBridgeValue | null {
 export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: SessionId }): React.JSX.Element | null {
   const bridge = useHeaderBridge()
   const [historyOpen, setHistoryOpen] = useState(false)
+  const historyRef = useDismiss(historyOpen, () => { setHistoryOpen(false) })
   const [workbenchOpen, setWorkbenchOpen] = useState(false)
+  const workbenchRef = useDismiss(workbenchOpen, () => { setWorkbenchOpen(false) })
   if (bridge === null || bridge.sessionId !== sessionId) return null
   const room = bridge.room
   const history = room.sessionIds.toReversed().flatMap(id => bridge.roomSessions.find(item => item.roomSessionId === id) ?? [])
@@ -518,14 +555,14 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
       <span className={css.headerIdentityCopy}><strong>{room.title}</strong><small>{detail}</small></span>
     </span>
       <span className={css.headerActionsCluster}>
-      <span className={css.headerMenuWrap}>
+      <span className={css.headerMenuWrap} ref={workbenchRef as React.RefObject<HTMLSpanElement>}>
         <button className={css.headerTextButton} type="button" aria-expanded={workbenchOpen} onClick={() => { setWorkbenchOpen(open => !open) }}>{tr('workbench')}</button>
         {workbenchOpen ? <span className={css.headerMenu}>{workbenchItems.map(item => <button type="button" key={item.tool} onClick={() => { setWorkbenchOpen(false); bridge.onProjectTool(item.tool) }}>{item.icon}<span>{item.label}</span></button>)}<span className={css.headerMenuSep}/><button type="button" onClick={() => { setWorkbenchOpen(false); bridge.onTemporaryChat() }}><IconNewChatOutline16/><span>{tr('tempChat')}</span></button></span> : null}
       </span>
         <span className={css.headerDivider}/>
         {bridge.headerActions}
         {room.type === 'group' ? <button className={css.headerTextButton} type="button" onClick={bridge.onSettings}>{tr('membersAndRoles')}</button> : null}
-      <span className={css.headerMenuWrap}>
+      <span className={css.headerMenuWrap} ref={historyRef as React.RefObject<HTMLSpanElement>}>
         <button className={css.headerTextButton} type="button" aria-expanded={historyOpen} onClick={() => { setHistoryOpen(open => !open) }}>历史 {history.length}</button>
         {historyOpen ? <span className={css.headerMenu}>{history.map(item => { const current = item.harnessSessionId === sessionId; return <button type="button" data-active={current} disabled={current} key={item.roomSessionId} onClick={() => { bridge.onHistory(item); setHistoryOpen(false) }}><span>{item.title}</span><small>{current ? tr('currentChat') : new Date(item.updatedAt).toLocaleString()}</small></button> })}{history.length <= 1 ? <span className={css.headerMenuHint}>{tr('historySingleHint')}</span> : null}</span> : null}
       </span>
@@ -780,6 +817,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [personaAvatar, setPersonaAvatar] = useState('fox-coral')
   const [groupOpen, setGroupOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const createRef = useDismiss(createOpen, () => { setCreateOpen(false) })
   const [groupMoreOpen, setGroupMoreOpen] = useState(false)
   const [archiveConfirm, setArchiveConfirm] = useState<string | null>(null)
   const [dragRoom, setDragRoom] = useState<string | null>(null)
@@ -796,6 +834,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [memberQuery, setMemberQuery] = useState('')
   const deferredMemberQuery = useDeferredValue(memberQuery.trim().toLocaleLowerCase())
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const workspaceRef = useDismiss(workspaceOpen, () => { setWorkspaceOpen(false) })
   const [roomSettingsOpen, setRoomSettingsOpen] = useState(false)
   const [roomTitleDraft, setRoomTitleDraft] = useState('')
   const [roomPromptDraft, setRoomPromptDraft] = useState('')
@@ -1400,6 +1439,12 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     [visibleRooms],
   )
 
+  const groupResults = useMemo(() => {
+    const needle = deferredQuery.trim().toLocaleLowerCase()
+    if (needle.length === 0) return visibleGroups
+    return visibleGroups.filter(room => room.title.toLocaleLowerCase().includes(needle))
+  }, [deferredQuery, visibleGroups])
+
   const roomAvatar = (room: ChatRoom, compact = false): React.JSX.Element => {
     if (room.type === 'general') return <span className={css.generalAvatar} data-compact={compact || undefined}>✦</span>
     if (room.type === 'group') {
@@ -1741,8 +1786,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       data-active={view === 'automations' || undefined}
       onClick={() => { setView(current => current === 'automations' ? 'chats' : 'automations') }}
     ><span className={css.automationEntryMark} aria-hidden="true">◷</span>{t('automations')}{dueAutomations > 0 ? <span className={css.automationEntryCount}>{dueAutomations}</span> : null}</button>
-    <div className={css.workspaceSection}><div className={css.workspacePicker}><button className={css.workspaceTrigger} type="button" aria-expanded={workspaceOpen} onClick={() => { setWorkspaceOpen(current => !current) }}><span className={css.workspaceIcon}>⌂</span><span>{currentWorkspace?.title ?? t('noWorkspace')}</span><span className={css.chevron}>⌄</span></button>{workspaceOpen ? <div className={css.workspaceMenu}>{workspaces.items.map(workspace => <button type="button" data-active={workspace.workspaceId === workspaceId} key={workspace.workspaceId} onClick={() => { setWorkspaceId(workspace.workspaceId); setWorkspaceOpen(false) }}><span>⌂</span><strong>{workspace.title}</strong>{workspace.workspaceId === workspaceId ? <b>✓</b> : null}</button>)}<span className={css.workspaceMenuSep}/><button type="button" onClick={() => { setWorkspaceOpen(false); void createWorkspace() }}><span>＋</span><strong>{t('addWorkspace')}</strong></button></div> : null}</div></div>
-    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'contacts'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{t(item)}</button>)}</div><span className={css.createWrap}><button className={css.addGroup} type="button" aria-label="新建" aria-expanded={createOpen} onClick={() => { setCreateOpen(open => !open) }}>＋</button>{createOpen ? <div className={css.createMenu}>{[{ id: 'chat', label: t('plainChat'), hint: t('noSkillMode'), run: () => { void beginGeneralChat() } }, { id: 'group', label: t('groupChat'), hint: t('organizeSkills'), run: openGroupCreator }, { id: 'workspace', label: t('projectDir'), hint: t('addWorkspaceHint'), run: () => { void createWorkspace() } }].map(entry => <button type="button" key={entry.id} onClick={() => { setCreateOpen(false); entry.run() }}><strong>{entry.label}</strong><small>{entry.hint}</small></button>)}</div> : null}</span></div>
+    <div className={css.workspaceSection}><div className={css.workspacePicker} ref={workspaceRef as React.RefObject<HTMLDivElement>}><button className={css.workspaceTrigger} type="button" aria-expanded={workspaceOpen} onClick={() => { setWorkspaceOpen(current => !current) }}><span className={css.workspaceIcon}>⌂</span><span>{currentWorkspace?.title ?? t('noWorkspace')}</span><span className={css.chevron}>⌄</span></button>{workspaceOpen ? <div className={css.workspaceMenu}>{workspaces.items.map(workspace => <button type="button" data-active={workspace.workspaceId === workspaceId} key={workspace.workspaceId} onClick={() => { setWorkspaceId(workspace.workspaceId); setWorkspaceOpen(false) }}><span>⌂</span><strong>{workspace.title}</strong>{workspace.workspaceId === workspaceId ? <b>✓</b> : null}</button>)}<span className={css.workspaceMenuSep}/><button type="button" onClick={() => { setWorkspaceOpen(false); void createWorkspace() }}><span>＋</span><strong>{t('addWorkspace')}</strong></button></div> : null}</div></div>
+    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'groups', 'contacts'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{t(item)}</button>)}</div><span className={css.createWrap} ref={createRef as React.RefObject<HTMLSpanElement>}><button className={css.addGroup} type="button" aria-label="新建" aria-expanded={createOpen} onClick={() => { setCreateOpen(open => !open) }}>＋</button>{createOpen ? <div className={css.createMenu}>{[{ id: 'chat', label: t('plainChat'), hint: t('noSkillMode'), run: () => { void beginGeneralChat() } }, { id: 'group', label: t('groupChat'), hint: t('organizeSkills'), run: openGroupCreator }, { id: 'workspace', label: t('projectDir'), hint: t('addWorkspaceHint'), run: () => { void createWorkspace() } }].map(entry => <button type="button" key={entry.id} onClick={() => { setCreateOpen(false); entry.run() }}><strong>{entry.label}</strong><small>{entry.hint}</small></button>)}</div> : null}</span></div>
     <div className={css.searchWrap}><input className={css.search} value={query} onChange={event => { setQuery(event.target.value) }} placeholder={view === 'contacts' ? t('searchAll') : t('searchRoomsPlaceholder')} aria-label={view === 'contacts' ? t('searchAll') : t('searchRooms')} autoComplete="off" spellCheck={false} type="search"/></div>
     {renderSlot('ds-chat.sidebar.before-rooms', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
     {notice !== null ? <button className={css.notice} type="button" onClick={() => { setNotice(null) }}>{notice} ×</button> : null}
@@ -1752,19 +1797,28 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       * you have not spoken to in a while sinks out of sight and there is
       * nowhere to go and look at it. Every messaging client keeps a group
       * section beside its contacts for exactly this reason. */}
-    {view === 'contacts' && deferredQuery.length === 0 && visibleGroups.length > 0
-      ? <div className={css.groupSection}>
-        <div className={css.groupSectionHead}><strong>{t('groupsSection')}</strong><small>{visibleGroups.length}</small></div>
-        {visibleGroups.map(room => <button
-          className={css.groupSectionRow}
-          type="button"
+    {view === 'groups'
+      ? <div className={css.list}>{groupResults.length === 0
+        ? <EmptyState className={css.emptyCard} title={t('noGroupsTitle')}>{t('noGroupsBody')}</EmptyState>
+        : groupResults.map(room => <div
+          className={css.groupSectionRowWrap}
           key={room.roomId}
-          onClick={() => { void openRoom(room) }}
+          onContextMenu={(event) => { event.preventDefault(); setRoomMenu({ roomId: room.roomId, x: event.clientX, y: event.clientY }) }}
         >
-          {roomAvatar(room, true)}
-          <span><strong>{room.title}</strong><small>{room.memberIds.length} {t('peopleCount')}</small></span>
-          {savedRooms.includes(room.roomId) ? <b title={t('savedRoom')}>★</b> : null}
-        </button>)}
+          <button className={css.groupSectionRow} type="button" onClick={() => { void openRoom(room) }}>
+            {roomAvatar(room, true)}
+            <span><strong>{room.title}</strong><small>{room.memberIds.length} {t('peopleCount')}{savedRooms.includes(room.roomId) ? ` · ${t('savedRoom')}` : ''}</small></span>
+          </button>
+          {/* The same actions the message list offers. A group that can be
+            * pinned there and not here is two different objects to the person
+            * using it. */}
+          <button
+            className={css.roomMenuButton}
+            type="button"
+            aria-label={t('roomActions')}
+            onClick={(event) => { event.stopPropagation(); const box = event.currentTarget.getBoundingClientRect(); setRoomMenu({ roomId: room.roomId, x: box.right, y: box.bottom }) }}
+          >⋯</button>
+        </div>)}
       </div>
       : null}
     {view === 'contacts' ? <><div className={css.subtabs}><button data-active={contactList === 'frequent'} onClick={() => { setContactList('frequent') }}>{t('frequentContacts')}</button><button data-active={contactList === 'all'} onClick={() => { setContactList('all') }}>{t('allContacts')}</button></div><div className={css.modeBar}><span>{t('displayMode')}</span><button type="button" data-active={mode === 'persona'} onClick={() => { setMode('persona') }}>{t('personaMode')}</button><button type="button" data-active={mode === 'raw'} onClick={() => { setMode('raw') }}>{t('rawMode')}</button></div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : visibleContacts.map(contactRow)}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>

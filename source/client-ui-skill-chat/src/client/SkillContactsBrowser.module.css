@@ -1616,7 +1616,7 @@
   background: var(--ds-chat-speaker-avatar, none) center / cover no-repeat, var(--ds-chat-hover);
 }
 
-:global([data-skill-chat-welcome='general'])::before { display: none; }
+:global([data-skill-chat-welcome='general'][data-skill-chat-welcome])::before { display: none; }
 
 :global([data-skill-chat-welcome])::after {
   content: attr(data-skill-chat-hint);
@@ -2582,3 +2582,18 @@
 .groupSectionRow strong { font-size: var(--ds-chat-text-body); font-weight: var(--ds-chat-weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .groupSectionRow small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); font-variant-numeric: tabular-nums; }
 .groupSectionRow b { margin-left: auto; color: var(--ds-chat-accent-text); }
+
+/* Wrapper so the group row carries the same trailing action button the message
+ * list has; without a class the CSS-module key is undefined and the element
+ * renders unclassed. */
+.groupSectionRowWrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--ds-chat-space-1);
+}
+
+.groupSectionRowWrap > .groupSectionRow { flex: 1; min-width: 0; }
+.groupSectionRowWrap .roomMenuButton { opacity: 0; }
+.groupSectionRowWrap:hover .roomMenuButton,
+.groupSectionRowWrap:focus-within .roomMenuButton { opacity: 1; }

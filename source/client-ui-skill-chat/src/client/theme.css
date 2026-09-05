@@ -299,6 +299,22 @@ body[data-ds-dark-theme] {
  * light. Colour carries the hierarchy now, at full opacity, so both themes get
  * the same intent and neither loses legibility.
  */
+/*
+ * The shell paints each trace line on a saturated indigo in its dark scheme.
+ * Against this product's mint accent that reads as a second, unrelated colour
+ * system running down the transcript — a wall of blocks rather than a quiet
+ * rail. Light mode is left alone; there the same fill is pale enough to pass
+ * for paper. The doubled attribute out-specifies the shell's own class without
+ * depending on its hashed name.
+ */
+body[data-ds-dark-theme] [data-chat-flow-kind][data-chat-flow-kind] {
+  background: transparent;
+}
+
+body[data-ds-dark-theme] [data-chat-flow-kind][data-chat-flow-kind] > * {
+  background-color: var(--ds-chat-trace-ground);
+}
+
 [data-chat-flow-kind='assistant-step'] [data-disclosure-row],
 [data-chat-flow-kind='tool-call'] [data-disclosure-row] {
   margin-left: 26px;

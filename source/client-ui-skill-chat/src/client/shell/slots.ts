@@ -2,7 +2,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 export interface DSChatSidebarSlotOwner {
-  readonly view: 'chats' | 'contacts' | 'automations'
+  readonly view: 'chats' | 'groups' | 'contacts' | 'automations'
   readonly workspaceId?: WorkspaceId
 }
 

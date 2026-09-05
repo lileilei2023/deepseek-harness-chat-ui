@@ -73,7 +73,17 @@ const VERSION_DIRECTORY = /^v?\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?$/u
 const MAX_METADATA_BYTES = 64 * 1024
 const MAX_CONTACTS = 2_000
 const MAX_DEPTH = 6
-const MAX_INSTALL_FILES = 160
+/*
+ * The per-file path fetches one blob per file, so the count used to be capped
+ * low to bound the request fan-out. That made the cap a property of the
+ * download strategy rather than of what a reasonable Skill contains, and a
+ * Skill carrying templates or assets — a slide deck builder, say — was simply
+ * uninstallable. A bundle past `ARCHIVE_FILE_THRESHOLD` is now fetched as one
+ * repository archive instead, which is a single request whatever the count, so
+ * the cap can describe the Skill rather than the transport.
+ */
+const MAX_INSTALL_FILES = 800
+const ARCHIVE_FILE_THRESHOLD = 60
 const MAX_INSTALL_BYTES = 12 * 1024 * 1024
 const MAX_ARCHIVE_BYTES = 24 * 1024 * 1024
 const MAX_PREVIEW_BYTES = 512 * 1024
@@ -801,9 +811,26 @@ async function installGithubSkill(
   if (skillFile === undefined) throw new Error(`skill-chat: Skill '${request.skillId}' was not found in ${request.source}`)
   const bundleRoot = posix.dirname(skillFile)
   const files = tree.filter(entry => isBundleFile(entry, bundleRoot))
-  if (files.length === 0 || files.length > MAX_INSTALL_FILES) throw new Error('skill-chat: Skill bundle exceeds file-count limit')
+  // Two distinct failures that used to share one message, so a bundle that
+  // resolved to nothing reported having too many files. Both now say what was
+  // found and what the limit is, because otherwise there is no way to tell a
+  // large Skill from a bug in this resolver.
+  if (files.length === 0) {
+    throw new Error(`skill-chat: no files found under '${bundleRoot}' in ${request.source}`)
+  }
+  if (files.length > MAX_INSTALL_FILES) {
+    throw new Error(`skill-chat: Skill bundle has ${files.length} files, over the ${MAX_INSTALL_FILES} limit`)
+  }
   const declaredBytes = files.reduce((total, entry) => total + fileSize(entry), 0)
-  if (declaredBytes > MAX_INSTALL_BYTES) throw new Error('skill-chat: Skill bundle exceeds size limit')
+  if (declaredBytes > MAX_INSTALL_BYTES) {
+    const mib = (value: number): string => `${(value / 1024 / 1024).toFixed(1)} MiB`
+    throw new Error(`skill-chat: Skill bundle is ${mib(declaredBytes)}, over the ${mib(MAX_INSTALL_BYTES)} limit`)
+  }
+  // One archive beats hundreds of blob requests, and avoids tripping GitHub's
+  // rate limit halfway through an install.
+  if (archiveFiles === undefined && files.length > ARCHIVE_FILE_THRESHOLD) {
+    archiveFiles = await githubArchiveFiles(request.source, signal).catch(() => undefined)
+  }
 
   const skillContent = archiveFiles?.get(skillFile) ?? await githubFile(request.source, skillFile, signal)
   const metadata = metadataFromContent(skillContent.toString('utf8'))
@@ -823,7 +850,9 @@ async function installGithubSkill(
       if (!safeRelativePath(relativePath)) throw new Error('skill-chat: unsafe Skill bundle path')
       const content = path === skillFile ? skillContent : archiveFiles?.get(path) ?? await githubFile(request.source, path, signal)
       downloadedBytes += content.byteLength
-      if (downloadedBytes > MAX_INSTALL_BYTES) throw new Error('skill-chat: Skill bundle exceeds size limit')
+      if (downloadedBytes > MAX_INSTALL_BYTES) {
+        throw new Error(`skill-chat: Skill bundle passed the ${(MAX_INSTALL_BYTES / 1024 / 1024).toFixed(0)} MiB limit while downloading`)
+      }
       const destination = join(staging, ...relativePath.split('/'))
       await mkdir(dirname(destination), { recursive: true })
       await writeFile(destination, content, { mode: 0o600 })

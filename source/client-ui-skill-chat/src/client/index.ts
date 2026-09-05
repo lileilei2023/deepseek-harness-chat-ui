@@ -195,7 +195,12 @@ function registerUi(ctx: Context): void {
         if (normalized.length > 0 && !`${member.name} ${member.skill} ${member.description}`.toLocaleLowerCase().includes(normalized)) return []
         return [{
           name: member.name,
-          description: member.description,
+          // The Skill's own name leads the second line: it is what the roster in
+          // the room's brief calls this member, and what the `skill` tool loads,
+          // so a person picking from this list can see the two are the same one.
+          description: member.description === ''
+            ? member.skill
+            : `${member.skill} · ${member.description}`,
           ...member.section === undefined ? {} : { section: member.section },
           value: JSON.stringify({ name: member.name, skill: member.skill, description: member.description }),
         }]
@@ -215,12 +220,17 @@ function registerUi(ctx: Context): void {
     },
     codec: {
       clipboardText(ref) {
-        const value = JSON.parse(ref) as { name: string }
-        return `@${value.name}`
+        const value = JSON.parse(ref) as { skill: string }
+        return `@${value.skill}`
       },
+      // The composer shows the nickname; the model receives the Skill's name.
+      // The room's brief lists members as `@<skill name>`, so serializing the
+      // nickname made the mention a second vocabulary the model had to map onto
+      // the first before it could load anything. Now the token in the message is
+      // the token in the roster, and the nickname rides along for the reply.
       serialize(ref) {
-        const value = JSON.parse(ref) as { name: string; skill: string; description: string }
-        return Promise.resolve(`@${value.name}（原始 Skill：${value.skill}；能力：${value.description}）`)
+        const value = JSON.parse(ref) as { name: string; skill: string }
+        return Promise.resolve(`@${value.skill}（昵称：${value.name}）`)
       },
     },
   }

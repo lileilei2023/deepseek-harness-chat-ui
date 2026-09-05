@@ -123,7 +123,8 @@ const VERSION_DIRECTORY = /^v?\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?$/u;
 const MAX_METADATA_BYTES = 64 * 1024;
 const MAX_CONTACTS = 2e3;
 const MAX_DEPTH = 6;
-const MAX_INSTALL_FILES = 160;
+const MAX_INSTALL_FILES = 800;
+const ARCHIVE_FILE_THRESHOLD = 60;
 const MAX_INSTALL_BYTES = 12 * 1024 * 1024;
 const MAX_ARCHIVE_BYTES = 24 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 512 * 1024;
@@ -1025,8 +1026,14 @@ async function installGithubSkill(workspaceRoot, request, signal) {
 	if (skillFile === void 0) throw new Error(`skill-chat: Skill '${request.skillId}' was not found in ${request.source}`);
 	const bundleRoot = posix.dirname(skillFile);
 	const files = tree.filter((entry) => isBundleFile(entry, bundleRoot));
-	if (files.length === 0 || files.length > MAX_INSTALL_FILES) throw new Error("skill-chat: Skill bundle exceeds file-count limit");
-	if (files.reduce((total, entry) => total + fileSize(entry), 0) > MAX_INSTALL_BYTES) throw new Error("skill-chat: Skill bundle exceeds size limit");
+	if (files.length === 0) throw new Error(`skill-chat: no files found under '${bundleRoot}' in ${request.source}`);
+	if (files.length > MAX_INSTALL_FILES) throw new Error(`skill-chat: Skill bundle has ${files.length} files, over the ${MAX_INSTALL_FILES} limit`);
+	const declaredBytes = files.reduce((total, entry) => total + fileSize(entry), 0);
+	if (declaredBytes > MAX_INSTALL_BYTES) {
+		const mib = (value) => `${(value / 1024 / 1024).toFixed(1)} MiB`;
+		throw new Error(`skill-chat: Skill bundle is ${mib(declaredBytes)}, over the ${mib(MAX_INSTALL_BYTES)} limit`);
+	}
+	if (archiveFiles === void 0 && files.length > ARCHIVE_FILE_THRESHOLD) archiveFiles = await githubArchiveFiles(request.source, signal).catch(() => void 0);
 	const skillContent = archiveFiles?.get(skillFile) ?? await githubFile(request.source, skillFile, signal);
 	const metadata = metadataFromContent(skillContent.toString("utf8"));
 	if (metadata === void 0) throw new Error("skill-chat: downloaded SKILL.md has invalid frontmatter");
@@ -1045,7 +1052,7 @@ async function installGithubSkill(workspaceRoot, request, signal) {
 			if (!safeRelativePath(relativePath)) throw new Error("skill-chat: unsafe Skill bundle path");
 			const content = path === skillFile ? skillContent : archiveFiles?.get(path) ?? await githubFile(request.source, path, signal);
 			downloadedBytes += content.byteLength;
-			if (downloadedBytes > MAX_INSTALL_BYTES) throw new Error("skill-chat: Skill bundle exceeds size limit");
+			if (downloadedBytes > MAX_INSTALL_BYTES) throw new Error(`skill-chat: Skill bundle passed the ${(MAX_INSTALL_BYTES / 1024 / 1024).toFixed(0)} MiB limit while downloading`);
 			const destination = join(staging, ...relativePath.split("/"));
 			await mkdir(dirname(destination), { recursive: true });
 			await writeFile(destination, content, { mode: 384 });

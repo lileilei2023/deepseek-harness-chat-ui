@@ -4780,7 +4780,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 328,
+						"line": 338,
 						"column": 9
 					}
 				},
@@ -4807,7 +4807,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 504,
+						"line": 514,
 						"column": 9
 					}
 				},
@@ -4834,7 +4834,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 451,
+						"line": 461,
 						"column": 9
 					}
 				},
@@ -4853,7 +4853,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 513,
+						"line": 523,
 						"column": 9
 					}
 				},
@@ -4881,7 +4881,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 272,
+						"line": 282,
 						"column": 9
 					}
 				},
@@ -4909,7 +4909,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 295,
+						"line": 305,
 						"column": 9
 					}
 				},
@@ -4928,7 +4928,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 234,
+						"line": 244,
 						"column": 9
 					}
 				},
@@ -4956,7 +4956,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 389,
+						"line": 399,
 						"column": 9
 					}
 				},
@@ -4984,7 +4984,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 577,
+						"line": 587,
 						"column": 9
 					}
 				},
@@ -5012,7 +5012,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 356,
+						"line": 366,
 						"column": 9
 					}
 				},
@@ -5040,7 +5040,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 596,
+						"line": 606,
 						"column": 9
 					}
 				},
@@ -5068,7 +5068,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 240,
+						"line": 250,
 						"column": 9
 					}
 				},
@@ -5096,7 +5096,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 496,
+						"line": 506,
 						"column": 9
 					}
 				},
@@ -5124,7 +5124,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 411,
+						"line": 421,
 						"column": 9
 					}
 				},
@@ -5152,7 +5152,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 462,
+						"line": 472,
 						"column": 9
 					}
 				},
@@ -5180,7 +5180,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 311,
+						"line": 321,
 						"column": 9
 					}
 				}
@@ -11703,7 +11703,7 @@ ${roster}
 						if (normalized.length > 0 && !`${member.name} ${member.skill} ${member.description}`.toLocaleLowerCase().includes(normalized)) return [];
 						return [{
 							name: member.name,
-							description: member.description,
+							description: member.description === "" ? member.skill : `${member.skill} · ${member.description}`,
 							...member.section === void 0 ? {} : { section: member.section },
 							value: JSON.stringify({
 								name: member.name,
@@ -11725,11 +11725,11 @@ ${roster}
 				},
 				codec: {
 					clipboardText(ref) {
-						return `@${JSON.parse(ref).name}`;
+						return `@${JSON.parse(ref).skill}`;
 					},
 					serialize(ref) {
 						const value = JSON.parse(ref);
-						return Promise.resolve(`@${value.name}（原始 Skill：${value.skill}；能力：${value.description}）`);
+						return Promise.resolve(`@${value.skill}（昵称：${value.name}）`);
 					}
 				}
 			};

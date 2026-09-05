@@ -325,7 +325,9 @@ describe('SkillChat browser plugin', () => {
     const candidates = await source!.candidates({ sessionId: 'session' as never }, {
       query: 'design', position: 'inline', drilled: false, signal: new AbortController().signal,
     })
-    expect(candidates).toEqual([expect.objectContaining({ description: 'Design interfaces.' })])
+    // The row leads with the Skill's own name: it is the token the room's brief
+    // uses and the one the `skill` tool loads.
+    expect(candidates).toEqual([expect.objectContaining({ description: 'design · Design interfaces.' })])
     expect(source!.onPick({
       candidate: candidates[0]!, session: { sessionId: 'session' as never }, position: 'inline', via: 'enter', action: 'pick',
       span: { start: 0, end: 3, draftRev: 1 },

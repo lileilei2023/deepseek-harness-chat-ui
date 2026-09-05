@@ -391,7 +391,7 @@ let WorkBuddySkillCatalog = (() => {
 					if (room?.type !== "group") return "";
 					const configuredPrompt = room.systemPrompt?.trim();
 					if (configuredPrompt !== void 0 && configuredPrompt !== "") return configuredPrompt;
-					const members = room.memberIds.map((id) => `@${this.cachedState.personas[id]?.originalName ?? id}`).join("、");
+					const members = room.memberIds.map((id) => `@${this.memberSkillName(room.roomId, id)}`).join("、");
 					return `你是「${room.title}」的协调者。根据用户目标组织群组成员（${members}）协作。没有明确 @ 时你先拆解任务再决定交给谁，有 @ 时优先尊重指定成员。一次需要多个成员时，用 subagent 工具为每个成员各起一个后台子代理并发进行，并在提示里写明「先加载 <成员名> 这个 Skill，再按它的方法完成以下任务」；单个成员能完成时直接自己加载对应 Skill 处理。转述成员结果时该段以「@成员名」开头再换行写内容，界面据此标注发言人。只陈述真实发生的事。`;
 				}
 			}), "workBuddySkillCatalog.roomSystemPrompt()");
@@ -715,6 +715,31 @@ let WorkBuddySkillCatalog = (() => {
 				}
 				throw error;
 			}
+		}
+		/**
+		* The loadable Skill name for one room member.
+		*
+		* A contact id is `<root>:<plugin>:<name>`, and which root owns a duplicated
+		* name depends on the roster the catalog scanned. Widening that roster
+		* therefore re-keys contacts and leaves every existing room pointing at ids
+		* no persona answers to — which is how a group brief came to instruct the
+		* model to delegate to `@claude:pa-market-query:pa-market-query`. That is
+		* neither a name a person recognises nor a Skill the `skill` tool can load.
+		*
+		* Three sources, in order of how much they know: the persona map, the member
+		* snapshot the Room Session captured when it started, and finally the id's
+		* own trailing segment — which is the Skill's name, because that is how the
+		* id was built.
+		* @param roomId - the room the member belongs to.
+		* @param id - the stored contact id.
+		* @returns a name the model can pass to the `skill` tool.
+		*/
+		memberSkillName(roomId, id) {
+			const persona = this.cachedState.personas[id]?.originalName;
+			if (persona !== void 0 && persona !== "") return persona;
+			const snapshot = this.cachedState.roomSessions.filter((item) => item.roomId === roomId).sort((left, right) => right.updatedAt - left.updatedAt).flatMap((item) => item.memberSnapshot.filter((member) => member.skillId === id))[0];
+			if (snapshot?.originalName !== void 0 && snapshot.originalName !== "") return snapshot.originalName;
+			return id.slice(id.lastIndexOf(":") + 1);
 		}
 		/**
 		* Read the pre-`$DSH_HOME` state document, for a Harness whose scoped file

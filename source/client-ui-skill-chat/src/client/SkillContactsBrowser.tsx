@@ -1017,6 +1017,10 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     if (workspaceId !== undefined && !(room.workspaceIds ?? [room.workspaceId]).includes(workspaceId)) {
       updateRoom(room.roomId, { workspaceIds: [...(room.workspaceIds ?? [room.workspaceId]), workspaceId] })
     }
+    // Also on open, not only on creation: rooms built before linking existed
+    // hold members the Host's Skill service has never seen, and their brief
+    // then tells the model to load Skills it cannot find.
+    ensureLinked(room.memberIds)
     const sessionId = activeHarnessSession(room, stateRef.current.roomSessions)
     if (sessionId !== undefined && sessions.byId[sessionId] !== undefined) { openSession(sessionId); return }
     await createRoomSession(room)
@@ -1038,8 +1042,14 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
    * @param ids - contact ids joining a room.
    */
   const ensureLinked = (ids: readonly string[]): void => {
-    const pending = ids.flatMap(id => {
+    const pending = ids.flatMap((id) => {
+      // Matching by id alone misses every member of a room built before the
+      // catalog's roster changed: a contact id is `<root>:<plugin>:<name>`, so
+      // widening the roster re-keys contacts and orphans the stored ids. The
+      // trailing segment is the Skill's name, which is unique after dedup.
+      const name = id.slice(id.lastIndexOf(':') + 1)
       const contact = allContacts.find(item => item.id === id)
+        ?? allContacts.find(item => item.name === name)
       return contact?.source === 'workbuddy' && contact.path !== undefined
         ? [{ path: contact.path, name: contact.name }]
         : []

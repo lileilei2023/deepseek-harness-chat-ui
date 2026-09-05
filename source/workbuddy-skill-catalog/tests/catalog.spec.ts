@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { WorkBuddySkillCatalog, scanSkillRoots, scanWorkBuddySkillContacts } from '../src/index.ts'
@@ -44,7 +44,14 @@ function tarArchive(files: Readonly<Record<string, string>>): Buffer {
 }
 
 describe('WorkBuddy Skill catalog', () => {
-  afterEach(() => { vi.unstubAllGlobals() })
+  // No test may reach the real `$DSH_HOME`. The state document defaults to a
+  // path under it, so a catalog built without an explicit `stateFile` used to
+  // overwrite the Rooms of whoever ran the suite — which is exactly what
+  // happened on this machine before the guard existed.
+  beforeEach(async () => {
+    vi.stubEnv('DSH_HOME', await mkdtemp(join(tmpdir(), 'dsh-home-')))
+  })
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs() })
 
   it('persists Skill Chat state atomically and returns an empty document initially', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-skill-chat-state-'))
@@ -88,6 +95,48 @@ describe('WorkBuddy Skill catalog', () => {
     vi.unstubAllEnvs()
   })
 
+  it('names Room members by a loadable Skill name even when their contact ids went stale', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-skill-chat-members-'))
+    const stateFile = join(root, 'state.json')
+    const catalog = new WorkBuddySkillCatalog(await catalogContext(), { stateFile })
+    const room = {
+      roomId: 'room:group:one', type: 'group' as const, workspaceId: 'w', title: '产业研究',
+      // Three members: one the persona map answers for, one only the Room
+      // Session snapshot knows, and one that nothing knows any more — the state
+      // a widened catalog roster leaves behind, because a contact id carries the
+      // root that owned the name.
+      memberIds: ['known', 'claude:snap:snapshot-only', 'claude:pa-market-query:pa-market-query'],
+      coordinatorId: 'known', sessionIds: [], createdAt: 1, updatedAt: 1,
+    }
+    await catalog.putSkillChatState({
+      version: 2,
+      rooms: [room],
+      roomSessions: [{
+        roomSessionId: 'rs:1', roomId: room.roomId, harnessSessionId: 'session-1', title: '产业研究',
+        memberSnapshot: [{
+          skillId: 'claude:snap:snapshot-only', displayName: '滴滴2',
+          avatarId: 'a', originalName: 'snapshot-only',
+        }],
+        createdAt: 1, updatedAt: 1,
+      }],
+      personas: {
+        known: {
+          skillId: 'known', displayName: '麦麦', avatarId: 'a', originalName: 'kouzhao',
+          roleLabel: 'Claude 专家', bio: '', capabilities: [], source: 'Claude',
+          customizedName: false, customizedAvatar: false, updatedAt: 1,
+        },
+      },
+      automations: [],
+    })
+
+    const names = room.memberIds.map(id => (catalog as unknown as {
+      memberSkillName: (roomId: string, id: string) => string
+    }).memberSkillName(room.roomId, id))
+    // Never the raw id: it is neither a name a person recognises nor something
+    // the `skill` tool can load.
+    expect(names).toEqual(['kouzhao', 'snapshot-only', 'pa-market-query'])
+  })
+
   it('runs an automation in a new Workspace Session and records it in the Room', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-skill-chat-run-'))
     const ctx = await catalogContext()
@@ -117,7 +166,9 @@ describe('WorkBuddy Skill catalog', () => {
 
   it('injects the persisted group function as a Session system prompt', async () => {
     const ctx = await catalogContext()
-    const catalog = new WorkBuddySkillCatalog(ctx)
+    const catalog = new WorkBuddySkillCatalog(ctx, {
+      stateFile: join(await mkdtemp(join(tmpdir(), 'dsh-skill-chat-prompt-')), 'state.json'),
+    })
     await catalog.putSkillChatState({
       version: 2,
       rooms: [{

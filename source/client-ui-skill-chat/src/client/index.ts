@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillContactsBrowser,
+  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillContactsBrowser, STATE_KEY,
 } from './SkillContactsBrowser.tsx'
 import type { ChatBinding, ContactGroup, ExternalSkillContact, SkillContact } from './SkillContactsBrowser.tsx'
 import type { SkillChatState } from './model.ts'
@@ -96,6 +96,63 @@ function registerUi(ctx: Context): void {
     return result.value.contact
   }
 
+  /**
+   * Who can be mentioned in this Session.
+   *
+   * The Room Session's own member snapshot is the record: it was taken when the
+   * Session started, so it survives a catalog whose contact ids shifted. The
+   * legacy per-Session binding map is consulted only for conversations that
+   * predate Rooms.
+   * @param sessionId - the Harness Session the composer belongs to.
+   * @returns mentionable members, possibly empty.
+   */
+  const roomMembers = (sessionId: string): readonly {
+    name: string
+    skill: string
+    description: string
+    section?: string
+  }[] => {
+    const state = readStored<SkillChatStateDocument>(STATE_KEY, {
+      version: 2, rooms: [], roomSessions: [], personas: {}, automations: [],
+    })
+    const roomSession = state.roomSessions.find(item => item.harnessSessionId === sessionId)
+    const room = roomSession === undefined
+      ? undefined
+      : state.rooms.find(item => item.roomId === roomSession.roomId)
+    if (roomSession !== undefined && roomSession.memberSnapshot.length > 0) {
+      return roomSession.memberSnapshot.map(member => ({
+        name: state.personas[member.skillId]?.displayName ?? member.displayName,
+        skill: member.originalName,
+        description: state.personas[member.skillId]?.bio ?? '',
+        ...room?.type === 'group' ? { section: room.title } : {},
+      }))
+    }
+    if (room !== undefined && room.memberIds.length > 0) {
+      return room.memberIds.map((id) => {
+        const persona = state.personas[id]
+        const skill = persona?.originalName ?? id.slice(id.lastIndexOf(':') + 1)
+        return {
+          name: persona?.displayName ?? skill,
+          skill,
+          description: persona?.bio ?? '',
+          ...room.type === 'group' ? { section: room.title } : {},
+        }
+      })
+    }
+    const binding = readStored<Readonly<Record<string, ChatBinding>>>(CHAT_BINDINGS_KEY, {})[sessionId]
+    if (binding === undefined) return []
+    const mode = readStored<'persona' | 'raw'>(MODE_KEY, 'persona')
+    return binding.members.map((contact) => {
+      const display = displayOf(contact, mode)
+      return {
+        name: display.name,
+        skill: contact.name,
+        description: contact.description,
+        ...binding.kind === 'group' ? { section: binding.name } : {},
+      }
+    })
+  }
+
   const mentionSource: InputTriggerSource = {
     trigger: '@',
     name: 'skill-contact',
@@ -103,18 +160,20 @@ function registerUi(ctx: Context): void {
     showGroupTitle: false,
     candidates(session, { query, signal }) {
       signal.throwIfAborted()
-      const binding = readStored<Readonly<Record<string, ChatBinding>>>(CHAT_BINDINGS_KEY, {})[session.sessionId]
-      if (binding === undefined) return Promise.resolve([])
-      const mode = readStored<'persona' | 'raw'>(MODE_KEY, 'persona')
+      // Members come from the Room graph, with the pre-Room binding map as a
+      // fallback. Reading only the binding map meant every Room created since
+      // it stopped being written offered no candidates at all, which is what
+      // made `@` do nothing in a group and left people typing raw contact ids.
+      const members = roomMembers(session.sessionId)
+      if (members.length === 0) return Promise.resolve([])
       const normalized = query.trim().toLocaleLowerCase()
-      return Promise.resolve(binding.members.flatMap((contact) => {
-        const display = displayOf(contact, mode)
-        if (normalized.length > 0 && !`${display.name} ${contact.name} ${contact.description}`.toLocaleLowerCase().includes(normalized)) return []
+      return Promise.resolve(members.flatMap((member) => {
+        if (normalized.length > 0 && !`${member.name} ${member.skill} ${member.description}`.toLocaleLowerCase().includes(normalized)) return []
         return [{
-          name: display.name,
-          description: contact.description,
-          ...binding.kind === 'group' ? { section: binding.name } : {},
-          value: JSON.stringify({ name: display.name, skill: contact.name, description: contact.description }),
+          name: member.name,
+          description: member.description,
+          ...member.section === undefined ? {} : { section: member.section },
+          value: JSON.stringify({ name: member.name, skill: member.skill, description: member.description }),
         }]
       }))
     },

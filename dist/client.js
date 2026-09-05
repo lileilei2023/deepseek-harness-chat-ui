@@ -4780,7 +4780,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 305,
+						"line": 303,
 						"column": 9
 					}
 				},
@@ -4807,7 +4807,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 481,
+						"line": 479,
 						"column": 9
 					}
 				},
@@ -4834,7 +4834,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 428,
+						"line": 426,
 						"column": 9
 					}
 				},
@@ -4853,7 +4853,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 490,
+						"line": 488,
 						"column": 9
 					}
 				},
@@ -4881,7 +4881,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 249,
+						"line": 247,
 						"column": 9
 					}
 				},
@@ -4909,7 +4909,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 272,
+						"line": 270,
 						"column": 9
 					}
 				},
@@ -4928,7 +4928,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 211,
+						"line": 209,
 						"column": 9
 					}
 				},
@@ -4956,7 +4956,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 366,
+						"line": 364,
 						"column": 9
 					}
 				},
@@ -4984,7 +4984,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 525,
+						"line": 552,
 						"column": 9
 					}
 				},
@@ -5012,7 +5012,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 333,
+						"line": 331,
 						"column": 9
 					}
 				},
@@ -5040,7 +5040,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 544,
+						"line": 571,
 						"column": 9
 					}
 				},
@@ -5068,7 +5068,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 217,
+						"line": 215,
 						"column": 9
 					}
 				},
@@ -5096,7 +5096,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 473,
+						"line": 471,
 						"column": 9
 					}
 				},
@@ -5124,7 +5124,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 388,
+						"line": 386,
 						"column": 9
 					}
 				},
@@ -5152,7 +5152,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 439,
+						"line": 437,
 						"column": 9
 					}
 				},
@@ -5180,7 +5180,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 288,
+						"line": 286,
 						"column": 9
 					}
 				}
@@ -8760,6 +8760,7 @@ ${roster}
 			};
 			const openRoom = async (room) => {
 				if (workspaceId !== void 0 && !(room.workspaceIds ?? [room.workspaceId]).includes(workspaceId)) updateRoom(room.roomId, { workspaceIds: [...room.workspaceIds ?? [room.workspaceId], workspaceId] });
+				ensureLinked(room.memberIds);
 				const sessionId = activeHarnessSession(room, stateRef.current.roomSessions);
 				if (sessionId !== void 0 && sessions.byId[sessionId] !== void 0) {
 					openSession(sessionId);
@@ -8784,7 +8785,8 @@ ${roster}
 			*/
 			const ensureLinked = (ids) => {
 				const pending = ids.flatMap((id) => {
-					const contact = allContacts.find((item) => item.id === id);
+					const name = id.slice(id.lastIndexOf(":") + 1);
+					const contact = allContacts.find((item) => item.id === id) ?? allContacts.find((item) => item.name === name);
 					return contact?.source === "workbuddy" && contact.path !== void 0 ? [{
 						path: contact.path,
 						name: contact.name
@@ -11478,6 +11480,54 @@ ${roster}
 				if (!result.ok) throw new Error(result.error.message);
 				return result.value.contact;
 			};
+			/**
+			* Who can be mentioned in this Session.
+			*
+			* The Room Session's own member snapshot is the record: it was taken when the
+			* Session started, so it survives a catalog whose contact ids shifted. The
+			* legacy per-Session binding map is consulted only for conversations that
+			* predate Rooms.
+			* @param sessionId - the Harness Session the composer belongs to.
+			* @returns mentionable members, possibly empty.
+			*/
+			const roomMembers = (sessionId) => {
+				const state = readStored(STATE_KEY, {
+					version: 2,
+					rooms: [],
+					roomSessions: [],
+					personas: {},
+					automations: []
+				});
+				const roomSession = state.roomSessions.find((item) => item.harnessSessionId === sessionId);
+				const room = roomSession === void 0 ? void 0 : state.rooms.find((item) => item.roomId === roomSession.roomId);
+				if (roomSession !== void 0 && roomSession.memberSnapshot.length > 0) return roomSession.memberSnapshot.map((member) => ({
+					name: state.personas[member.skillId]?.displayName ?? member.displayName,
+					skill: member.originalName,
+					description: state.personas[member.skillId]?.bio ?? "",
+					...room?.type === "group" ? { section: room.title } : {}
+				}));
+				if (room !== void 0 && room.memberIds.length > 0) return room.memberIds.map((id) => {
+					const persona = state.personas[id];
+					const skill = persona?.originalName ?? id.slice(id.lastIndexOf(":") + 1);
+					return {
+						name: persona?.displayName ?? skill,
+						skill,
+						description: persona?.bio ?? "",
+						...room.type === "group" ? { section: room.title } : {}
+					};
+				});
+				const binding = readStored(CHAT_BINDINGS_KEY, {})[sessionId];
+				if (binding === void 0) return [];
+				const mode = readStored(MODE_KEY, "persona");
+				return binding.members.map((contact) => {
+					return {
+						name: displayOf(contact, mode).name,
+						skill: contact.name,
+						description: contact.description,
+						...binding.kind === "group" ? { section: binding.name } : {}
+					};
+				});
+			};
 			const mentionSource = {
 				trigger: "@",
 				name: "skill-contact",
@@ -11485,21 +11535,19 @@ ${roster}
 				showGroupTitle: false,
 				candidates(session, { query, signal }) {
 					signal.throwIfAborted();
-					const binding = readStored(CHAT_BINDINGS_KEY, {})[session.sessionId];
-					if (binding === void 0) return Promise.resolve([]);
-					const mode = readStored(MODE_KEY, "persona");
+					const members = roomMembers(session.sessionId);
+					if (members.length === 0) return Promise.resolve([]);
 					const normalized = query.trim().toLocaleLowerCase();
-					return Promise.resolve(binding.members.flatMap((contact) => {
-						const display = displayOf(contact, mode);
-						if (normalized.length > 0 && !`${display.name} ${contact.name} ${contact.description}`.toLocaleLowerCase().includes(normalized)) return [];
+					return Promise.resolve(members.flatMap((member) => {
+						if (normalized.length > 0 && !`${member.name} ${member.skill} ${member.description}`.toLocaleLowerCase().includes(normalized)) return [];
 						return [{
-							name: display.name,
-							description: contact.description,
-							...binding.kind === "group" ? { section: binding.name } : {},
+							name: member.name,
+							description: member.description,
+							...member.section === void 0 ? {} : { section: member.section },
 							value: JSON.stringify({
-								name: display.name,
-								skill: contact.name,
-								description: contact.description
+								name: member.name,
+								skill: member.skill,
+								description: member.description
 							})
 						}];
 					}));

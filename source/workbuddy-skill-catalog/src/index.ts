@@ -180,9 +180,7 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
         // Harness's Skill root and this preset carries a background-capable
         // `subagent` tool, so the old "do not claim parallel execution" line
         // now describes a limitation that no longer exists.
-        const members = room.memberIds
-          .map(id => `@${this.cachedState.personas[id]?.originalName ?? id}`)
-          .join('、')
+        const members = room.memberIds.map(id => `@${this.memberSkillName(room.roomId, id)}`).join('、')
         return `你是「${room.title}」的协调者。根据用户目标组织群组成员（${members}）协作。`
           + '没有明确 @ 时你先拆解任务再决定交给谁，有 @ 时优先尊重指定成员。'
           + '一次需要多个成员时，用 subagent 工具为每个成员各起一个后台子代理并发进行，'
@@ -501,6 +499,35 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
       }
       throw error
     }
+  }
+
+  /**
+   * The loadable Skill name for one room member.
+   *
+   * A contact id is `<root>:<plugin>:<name>`, and which root owns a duplicated
+   * name depends on the roster the catalog scanned. Widening that roster
+   * therefore re-keys contacts and leaves every existing room pointing at ids
+   * no persona answers to — which is how a group brief came to instruct the
+   * model to delegate to `@claude:pa-market-query:pa-market-query`. That is
+   * neither a name a person recognises nor a Skill the `skill` tool can load.
+   *
+   * Three sources, in order of how much they know: the persona map, the member
+   * snapshot the Room Session captured when it started, and finally the id's
+   * own trailing segment — which is the Skill's name, because that is how the
+   * id was built.
+   * @param roomId - the room the member belongs to.
+   * @param id - the stored contact id.
+   * @returns a name the model can pass to the `skill` tool.
+   */
+  private memberSkillName(roomId: string, id: string): string {
+    const persona = this.cachedState.personas[id]?.originalName
+    if (persona !== undefined && persona !== '') return persona
+    const snapshot = this.cachedState.roomSessions
+      .filter(item => item.roomId === roomId)
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .flatMap(item => item.memberSnapshot.filter(member => member.skillId === id))[0]
+    if (snapshot?.originalName !== undefined && snapshot.originalName !== '') return snapshot.originalName
+    return id.slice(id.lastIndexOf(':') + 1)
   }
 
   /**

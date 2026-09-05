@@ -185,6 +185,12 @@ body {
    * community client separates its channel column from its room this way, and
    * without it the whole window is one flat white sheet. */
   --ds-chat-sidebar-ground: color-mix(in srgb, var(--dsw-alias-bg-base) 96%, #4a5568);
+  /* A tinted haze belongs to the light theme, where the page is paper and a
+   * wash of accent reads as a margin note. On a dark ground the same wash goes
+   * muddy, so the rail lifts off the background neutrally instead. */
+  --ds-chat-trace-ground: var(--ds-chat-accent-soft);
+  --ds-chat-trace-ground-hover: var(--ds-chat-accent-soft-strong);
+  --ds-chat-trace-edge: var(--ds-chat-accent-border);
   --ds-chat-text-color: var(--dsw-alias-label-primary);
   --ds-chat-text-secondary: var(--dsw-alias-label-secondary);
   --ds-chat-muted: var(--dsw-alias-label-tertiary);
@@ -195,6 +201,13 @@ body[data-ds-dark-theme] {
 
   /* Darker than the room, not lighter: depth reads downward in a dark scheme. */
   --ds-chat-sidebar-ground: color-mix(in srgb, var(--dsw-alias-bg-base) 88%, #000);
+
+  /* The step rail lifts neutrally here. An accent wash that reads as a margin
+   * note on paper turns into a coloured cast on a dark ground, which is what
+   * made the trace look tinted rather than quiet. */
+  --ds-chat-trace-ground: rgb(255 255 255 / 5%);
+  --ds-chat-trace-ground-hover: rgb(255 255 255 / 9%);
+  --ds-chat-trace-edge: rgb(255 255 255 / 16%);
 
   --ds-chat-hover: rgb(255 255 255 / 8%);
 
@@ -277,21 +290,34 @@ body[data-ds-dark-theme] {
 
 /* Working notes: indented under a shared rail, quieter, and tight, so a run of
  * them reads as one block between two messages. */
+/*
+ * The step rail is secondary to the reply, but it was made secondary with
+ * `opacity: .66`, which is the wrong instrument twice over. Opacity dims the
+ * border and the tint along with the text, so the whole block hazes; and on a
+ * dark ground it pushes light text toward the background instead of away from
+ * it, which is why the rail read as unreadable in dark mode and merely quiet in
+ * light. Colour carries the hierarchy now, at full opacity, so both themes get
+ * the same intent and neither loses legibility.
+ */
 [data-chat-flow-kind='assistant-step'] [data-disclosure-row],
 [data-chat-flow-kind='tool-call'] [data-disclosure-row] {
   margin-left: 26px;
   padding-left: var(--ds-chat-space-3);
-  border-left: 2px solid var(--ds-chat-accent-border);
-  background: var(--ds-chat-accent-soft);
+  border-left: 2px solid var(--ds-chat-trace-edge);
+  color: var(--ds-chat-text-secondary);
+  background: var(--ds-chat-trace-ground);
   font-size: var(--ds-chat-text-footnote);
-  opacity: .66;
-  transition: opacity var(--ds-chat-duration-fast) var(--ds-chat-ease);
+  transition: color var(--ds-chat-duration-fast) var(--ds-chat-ease),
+    background-color var(--ds-chat-duration-fast) var(--ds-chat-ease);
 }
 
 [data-chat-flow-kind='assistant-step'] [data-disclosure-row]:hover,
 [data-chat-flow-kind='tool-call'] [data-disclosure-row]:hover,
 [data-chat-flow-kind='assistant-step'] [data-disclosure-row]:focus-visible,
-[data-chat-flow-kind='tool-call'] [data-disclosure-row]:focus-visible { opacity: 1; }
+[data-chat-flow-kind='tool-call'] [data-disclosure-row]:focus-visible {
+  color: var(--ds-chat-text-color);
+  background: var(--ds-chat-trace-ground-hover);
+}
 
 /* A run of steps is one block, so the gaps inside it close up. */
 [data-chat-flow-kind='assistant-step'] + [data-chat-flow-kind='assistant-step'],

@@ -190,6 +190,31 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
           + '只陈述真实发生的事。'
       },
     }), 'workBuddySkillCatalog.roomSystemPrompt()')
+    // Imported Skills were written against other agents' runtimes. Their
+    // instructions say things like "use the glob tool" or open with `require`,
+    // and once loaded those instructions sit right next to the task and win
+    // over the Host's own contract stated far above — which is how a Skill run
+    // produced `ReferenceError: require is not defined` followed by
+    // `unknown tool "glob"`. Naming the mismatch is cheaper and safer than
+    // rewriting anyone's Skill files.
+    ctx.effect(() => ctx.systemPrompt.section({
+      name: 'skill-chat:imported-skill-runtime',
+      order: ctx.systemPrompt.getSectionOrder('TEAM_POLICY'),
+      text: ({ scope }) => {
+        const sessionId = stringId(scope)
+        if (sessionId === undefined) return ''
+        const roomSession = this.cachedState.roomSessions.find(item => item.harnessSessionId === sessionId)
+        if (roomSession === undefined) return ''
+        return '本会话里的 Skill 多数是从 Claude Code、WorkBuddy、Codex 等其它 agent 工具导入的，'
+          + '它们的说明按各自的运行时写成，与这里的契约不一致。冲突时以下面为准：\n'
+          + '- 只有 `run_code` 可以直接调用。Skill 说明里的「调用 glob / read / bash 工具」，'
+          + '在这里的写法是在程序内 `await tools.glob({...})`。\n'
+          + '- 程序是 ESM，没有 `require`。需要 Node 内置模块时用 `import`；'
+          + '能用 `tools.*` 完成的优先用 `tools.*`。\n'
+          + '- Skill 里的命令行示例仍然有效，但要经 `await tools.bash({ command, description })` 执行。\n'
+          + 'Skill 的方法论照常执行，只把工具的调用方式换成上面这套。'
+      },
+    }), 'workBuddySkillCatalog.importedSkillRuntime()')
     const timer = setInterval(() => {
       void this.dispatchDueAutomations().catch((error: unknown) => {
         this.ctx.logger.warn(`skill-chat automation scan failed: ${String(error)}`)

@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { WorkBuddySkillCatalog, scanWorkBuddySkillContacts } from '../src/index.ts'
+import { WorkBuddySkillCatalog, scanSkillRoots, scanWorkBuddySkillContacts } from '../src/index.ts'
 
 async function writeSkill(root: string, plugin: string, version: string, relativePath: string, content: string): Promise<string> {
   const directory = join(root, plugin, version, relativePath)
@@ -141,6 +141,8 @@ Do work.
       description: 'Handles spreadsheet files.',
       whenToUse: 'Edit an existing workbook. Analyze tabular data.',
       source: 'workbuddy',
+      originId: 'workbuddy',
+      originLabel: 'WorkBuddy',
       plugin: 'sheetagent',
       version: '1.2.3',
       invocable: false,
@@ -159,6 +161,60 @@ Do work.
     const contacts = await scanWorkBuddySkillContacts(root)
     expect(contacts).toHaveLength(1)
     expect(contacts[0]).toMatchObject({ name: 'duplicate', description: 'new', version: '1.10.0' })
+  })
+
+  it('reads a flat root, where SKILL.md sits one level down', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-flat-catalog-'))
+    await mkdir(join(root, 'poster'), { recursive: true })
+    await writeFile(join(root, 'poster', 'SKILL.md'), '---\nname: poster\ndescription: Makes posters.\n---\n')
+    // A bundle directory holding several Skills is still one level of nesting,
+    // and its middle segment is a name rather than a version.
+    await mkdir(join(root, 'legal', 'arbitration'), { recursive: true })
+    await writeFile(join(root, 'legal', 'arbitration', 'SKILL.md'), '---\nname: arbitration\ndescription: Files claims.\n---\n')
+
+    const contacts = await scanSkillRoots([{ id: 'claude', label: 'Claude', path: root, layout: 'flat' }])
+    expect(contacts.map(contact => contact.name)).toEqual(['arbitration', 'poster'])
+    expect(contacts).toContainEqual(expect.objectContaining({
+      id: 'claude:poster:poster',
+      originId: 'claude',
+      originLabel: 'Claude',
+      plugin: 'poster',
+    }))
+    // No version directory in this layout, so no version is claimed.
+    expect(contacts.every(contact => contact.version === undefined)).toBe(true)
+  })
+
+  it('merges roots in precedence order and keeps the first owner of a name', async () => {
+    const first = await mkdtemp(join(tmpdir(), 'dsh-root-a-'))
+    const second = await mkdtemp(join(tmpdir(), 'dsh-root-b-'))
+    await writeSkill(first, 'pack', '1.0.0', '', '---\nname: shared\ndescription: from the first root\n---\n')
+    await mkdir(join(second, 'shared'), { recursive: true })
+    await writeFile(join(second, 'shared', 'SKILL.md'), '---\nname: shared\ndescription: from the second root\n---\n')
+    await mkdir(join(second, 'only-here'), { recursive: true })
+    await writeFile(join(second, 'only-here', 'SKILL.md'), '---\nname: only-here\ndescription: unique\n---\n')
+
+    const contacts = await scanSkillRoots([
+      { id: 'workbuddy', label: 'WorkBuddy', path: first, layout: 'plugin-version' },
+      { id: 'claude', label: 'Claude', path: second, layout: 'flat' },
+    ])
+    expect(contacts.map(contact => contact.name)).toEqual(['only-here', 'shared'])
+    expect(contacts.find(contact => contact.name === 'shared')).toMatchObject({
+      description: 'from the first root',
+      originLabel: 'WorkBuddy',
+    })
+    expect(contacts.find(contact => contact.name === 'only-here')).toMatchObject({ originLabel: 'Claude' })
+  })
+
+  it('skips a Skill whose frontmatter is not valid YAML instead of failing the scan', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'dsh-bad-yaml-'))
+    await mkdir(join(root, 'broken'), { recursive: true })
+    // An unquoted description containing a colon: valid Markdown, invalid YAML.
+    await writeFile(join(root, 'broken', 'SKILL.md'), '---\nname: broken\ndescription: install first: npm i -g thing\n---\n')
+    await mkdir(join(root, 'fine'), { recursive: true })
+    await writeFile(join(root, 'fine', 'SKILL.md'), '---\nname: fine\ndescription: Works.\n---\n')
+
+    const contacts = await scanSkillRoots([{ id: 'claude', label: 'Claude', path: root, layout: 'flat' }])
+    expect(contacts.map(contact => contact.name)).toEqual(['fine'])
   })
 
   it('returns an empty catalog for a missing installation and honors aborts', async () => {

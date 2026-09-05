@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillContactsBrowser,
+  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderIdentity, SkillChatHeaderTools, SkillContactsBrowser,
 } from './SkillContactsBrowser.tsx'
 import type { ChatBinding, ContactGroup, ExternalSkillContact, SkillContact } from './SkillContactsBrowser.tsx'
 import type { SkillChatState } from './model.ts'
@@ -232,6 +232,16 @@ function registerUi(ctx: Context): void {
     inject: () => ({ skinRuntime }),
   }, SkinCenter))
 
+  // The shell renders this slot in place of the plain text title, so the room
+  // header can answer "who am I talking to" the way a chat client does.
+  ctx.slots.inject('conversation.session.header.lineage', () => ctx.slots.register({
+    name: 'conversation.session.header.lineage',
+    // A single slot renders its lowest-priority registration, and the shell
+    // already holds this one at 0; shadowing it is the documented way to
+    // replace the plain title.
+    priority: -10,
+  }, SkillChatHeaderIdentity))
+
   ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
     name: 'conversation.session.header.utilities',
     id: 'skill-chat-tools',
@@ -264,7 +274,12 @@ export function mergeContacts(
       .filter(skill => !nativeNames.has(skill.name))
       .map(skill => ({
         ...skill,
-        sourceLabel: `WorkBuddy · ${skill.plugin}`,
+        // The label names the root the Skill actually came from; before the
+        // catalog scanned more than one, every entry claimed WorkBuddy.
+        sourceLabel: skill.version === undefined
+          ? `${skill.originLabel} · ${skill.plugin}`
+          : `${skill.originLabel} · ${skill.plugin} ${skill.version}`,
+        sourceShort: skill.originLabel,
         modelInvocable: false,
       })),
   ]

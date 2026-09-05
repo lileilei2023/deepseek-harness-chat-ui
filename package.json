@@ -90,7 +90,8 @@
   "scripts": {
     "build": "node scripts/build-with-harness.mjs",
     "check": "node scripts/check-package.mjs",
-    "sync:harness": "node scripts/sync-from-harness.mjs"
+    "sync:harness": "node scripts/sync-from-harness.mjs",
+    "rebuild": "node scripts/rebuild.mjs"
   },
   "keywords": [
     "deepseek-harness",

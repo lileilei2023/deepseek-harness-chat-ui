@@ -1,18 +1,30 @@
+/*
+ * DS Chat UI primitives.
+ *
+ * Every value here reads from ../theme.css. The visual language is flat
+ * material plus a hairline stroke: depth is carried by fill and stroke, and a
+ * shadow appears only where a layer floats above the content it covers.
+ * Controls answer the pointer by changing fill, never by moving — a control
+ * that translates on hover shifts its own hit target out from under the cursor.
+ */
+
 .surface {
   box-sizing: border-box;
-  border: 1px solid var(--ds-chat-border, var(--dsw-alias-border-l3));
-  border-radius: var(--ds-chat-radius-lg, 18px);
-  background: var(--ds-chat-surface, var(--dsw-alias-bg-base));
-  box-shadow: var(--ds-chat-shadow, 0 12px 34px rgb(24 35 46 / 12%)), inset 0 1px 0 rgb(255 255 255 / 72%);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-lg);
+  background: var(--ds-chat-surface);
+  box-shadow: var(--ds-chat-shadow-1);
 }
 
 .surface[data-level='raised'] {
-  background: var(--ds-chat-surface-raised, linear-gradient(145deg, var(--dsw-alias-bg-base), var(--dsw-alias-bg-subtle)));
+  background: var(--ds-chat-surface-raised);
+  box-shadow: var(--ds-chat-shadow-2);
 }
 
 .surface[data-level='sunken'] {
-  background: var(--ds-chat-surface-sunken, var(--dsw-alias-bg-subtle));
-  box-shadow: var(--ds-chat-shadow-inset, inset 0 1px 3px rgb(20 30 40 / 8%));
+  border-color: transparent;
+  background: var(--ds-chat-fill-quaternary);
+  box-shadow: none;
 }
 
 .button,
@@ -21,58 +33,100 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  border: 1px solid var(--ds-chat-border, var(--dsw-alias-border-l3));
-  color: var(--ds-chat-text, var(--dsw-alias-label-primary));
-  background: var(--ds-chat-control, linear-gradient(180deg, var(--dsw-alias-bg-base), var(--dsw-alias-bg-subtle)));
-  box-shadow: var(--ds-chat-control-shadow, 0 3px 8px rgb(19 32 43 / 8%)), inset 0 1px 0 rgb(255 255 255 / 78%);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  color: var(--ds-chat-text-color);
+  background: var(--ds-chat-surface);
   cursor: pointer;
-  font: inherit;
-  font-weight: 650;
-  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+  font-family: var(--ds-chat-font);
+  font-weight: var(--ds-chat-weight-medium);
+  letter-spacing: var(--ds-chat-tracking-body);
+  transition:
+    background var(--ds-chat-duration-fast) var(--ds-chat-ease),
+    border-color var(--ds-chat-duration-fast) var(--ds-chat-ease),
+    opacity var(--ds-chat-duration-fast) var(--ds-chat-ease);
 }
 
-.button { min-height: 34px; gap: 7px; padding: 0 13px; border-radius: var(--ds-chat-radius-control, 11px); font-size: 12px; }
-.button[data-size='small'] { min-height: 28px; padding: 0 10px; font-size: 11px; }
-.button[data-size='large'] { min-height: 40px; padding: 0 17px; font-size: 13px; }
-.iconButton { width: 32px; height: 32px; padding: 0; border-radius: 10px; }
-.iconButton[data-size='small'] { width: 28px; height: 28px; }
-
-.button:hover:not(:disabled),
-.iconButton:hover:not(:disabled) {
-  border-color: var(--ds-chat-accent-border, color-mix(in srgb, #2bb66f 32%, var(--dsw-alias-border-l3)));
-  background: var(--ds-chat-control-hover, var(--dsw-alias-bg-hover));
-  transform: translateY(-1px);
+.button {
+  min-height: 32px;
+  gap: var(--ds-chat-space-2);
+  padding: 0 var(--ds-chat-space-3);
+  border-radius: var(--ds-chat-radius-control);
+  font-size: var(--ds-chat-text-body);
 }
 
+.button[data-size='small'] {
+  min-height: 26px;
+  padding: 0 var(--ds-chat-space-2);
+  border-radius: var(--ds-chat-radius-sm);
+  font-size: var(--ds-chat-text-footnote);
+}
+
+.button[data-size='large'] {
+  min-height: 40px;
+  padding: 0 var(--ds-chat-space-4);
+  border-radius: var(--ds-chat-radius-md);
+  font-size: var(--ds-chat-text-callout);
+}
+
+.iconButton {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--ds-chat-radius-sm);
+  background: transparent;
+}
+
+.iconButton[data-size='small'] { width: 26px; height: 26px; border-radius: var(--ds-chat-radius-xs); }
+
+.button:hover:not(:disabled) { background: var(--ds-chat-hover); }
+.iconButton:hover:not(:disabled) { background: var(--ds-chat-hover); }
+
+/* Press reads as a dim, the way a system control does. */
 .button:active:not(:disabled),
-.iconButton:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: var(--ds-chat-control-pressed, inset 0 2px 5px rgb(20 30 40 / 12%));
-}
+.iconButton:active:not(:disabled) { opacity: .72; }
 
 .button:focus-visible,
 .iconButton:focus-visible,
 .searchInput:focus-visible {
-  outline: 2px solid var(--ds-chat-focus, #36b978);
-  outline-offset: 2px;
+  outline: 2px solid var(--ds-chat-focus);
+  outline-offset: 1px;
 }
 
 .button:disabled,
-.iconButton:disabled { opacity: .48; cursor: default; }
-.button[data-variant='primary'] { border-color: transparent; color: #fff; background: var(--ds-chat-accent, linear-gradient(180deg, #39c879, #1aaa61)); box-shadow: 0 6px 14px rgb(28 171 96 / 22%), inset 0 1px 0 rgb(255 255 255 / 30%); }
-.button[data-variant='ghost'], .iconButton[data-variant='ghost'] { border-color: transparent; background: transparent; box-shadow: none; }
-.button[data-variant='danger'] { color: #c13d3d; background: color-mix(in srgb, #fff0f0 82%, var(--dsw-alias-bg-base)); }
+.iconButton:disabled { opacity: .4; cursor: default; }
+
+.button[data-variant='primary'] {
+  border-color: transparent;
+  color: var(--ds-chat-on-accent);
+  background: var(--ds-chat-accent-solid);
+  font-weight: var(--ds-chat-weight-semibold);
+}
+
+.button[data-variant='primary']:hover:not(:disabled) { background: var(--ds-chat-accent-hover); }
+
+.button[data-variant='ghost'],
+.iconButton[data-variant='ghost'] {
+  border-color: transparent;
+  background: transparent;
+}
+
+.button[data-variant='danger'] {
+  border-color: transparent;
+  color: var(--ds-chat-danger);
+  background: var(--ds-chat-danger-soft);
+}
 
 .avatar {
   --avatar-bg: #fff1e8;
   --avatar-main: #f07f62;
   --avatar-ink: #7b3e31;
-  width: var(--avatar-size, 42px);
-  min-width: var(--avatar-size, 42px);
-  max-width: var(--avatar-size, 42px);
-  height: var(--avatar-size, 42px);
-  min-height: var(--avatar-size, 42px);
-  max-height: var(--avatar-size, 42px);
+  width: var(--avatar-size, 40px);
+  min-width: var(--avatar-size, 40px);
+  max-width: var(--avatar-size, 40px);
+  height: var(--avatar-size, 40px);
+  min-height: var(--avatar-size, 40px);
+  max-height: var(--avatar-size, 40px);
   aspect-ratio: 1;
   position: relative;
   flex: 0 0 auto;
@@ -80,11 +134,12 @@
   place-items: center;
   overflow: hidden;
   box-sizing: border-box;
-  border: max(1px, calc(var(--avatar-size, 42px) / 24)) solid rgb(255 255 255 / 88%);
-  border-radius: 9999px;
+  border-radius: var(--ds-chat-radius-round);
   clip-path: circle(50% at 50% 50%);
-  background: linear-gradient(145deg, color-mix(in srgb, var(--avatar-bg) 88%, white), var(--avatar-bg));
-  box-shadow: var(--ds-chat-avatar-shadow, 0 5px 12px rgb(33 43 54 / 14%)), inset 0 1px 1px rgb(255 255 255 / 90%);
+  /* A flat disc with a hairline ring: the former white ring plus drop shadow
+   * read as a sticker pasted onto the row rather than part of it. */
+  background: var(--avatar-bg);
+  box-shadow: inset 0 0 0 var(--ds-chat-hairline) rgb(0 0 0 / 8%);
 }
 
 .avatar svg { width: 92%; height: 92%; overflow: visible; fill: var(--avatar-main); }
@@ -94,7 +149,7 @@
 .avatarMuzzle { fill: none; stroke: var(--avatar-ink); stroke-width: 1.7; stroke-linecap: round; }
 
 .avatarStack { display: inline-flex; align-items: center; min-width: 0; }
-.avatarStack > * { margin-left: calc(var(--avatar-stack-overlap, 9px) * -1); }
+.avatarStack > * { margin-left: calc(var(--avatar-stack-overlap, 8px) * -1); }
 .avatarStack > :first-child { margin-left: 0; }
 
 .backdrop {
@@ -103,50 +158,142 @@
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 16px;
-  background: rgb(10 18 24 / 32%);
-  backdrop-filter: blur(3px);
+  padding: var(--ds-chat-space-4);
+  background: var(--ds-chat-scrim);
+  backdrop-filter: blur(20px) saturate(140%);
 }
 
 .surface.dialog,
 .surface.drawer {
   background-color: Canvas;
-  background-image: linear-gradient(var(--dsw-alias-bg-base), var(--dsw-alias-bg-base));
+  background-image: linear-gradient(var(--ds-chat-surface), var(--ds-chat-surface));
   backdrop-filter: none;
   opacity: 1;
   isolation: isolate;
 }
 
-.dialog { width: min(560px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 32px)); overflow: auto; overscroll-behavior: contain; }
-.drawer { position: fixed; z-index: 52; top: 0; right: 0; bottom: 0; width: min(620px, calc(100vw - 32px)); border-radius: var(--ds-chat-radius-xl, 22px) 0 0 var(--ds-chat-radius-xl, 22px); overflow: hidden; overscroll-behavior: contain; }
+.dialog {
+  width: min(540px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 32px));
+  border-radius: var(--ds-chat-radius-xl);
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-shadow: var(--ds-chat-shadow-3);
+}
+
+.drawer {
+  position: fixed;
+  z-index: 52;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(600px, calc(100vw - 32px));
+  border: 0;
+  border-left: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: 0;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  box-shadow: var(--ds-chat-shadow-3);
+}
 
 .searchInput {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--ds-chat-border, var(--dsw-alias-border-l3));
-  border-radius: var(--ds-chat-radius-control, 11px);
-  padding: 9px 11px;
-  color: var(--ds-chat-text, var(--dsw-alias-label-primary));
-  background: var(--ds-chat-input, var(--dsw-alias-bg-subtle));
-  font: 12px/1.4 inherit;
+  border: var(--ds-chat-hairline) solid transparent;
+  border-radius: var(--ds-chat-radius-control);
+  padding: 7px var(--ds-chat-space-3);
+  color: var(--ds-chat-text-color);
+  background: var(--ds-chat-fill-quaternary);
+  font-family: var(--ds-chat-font);
+  font-size: var(--ds-chat-text-body);
+  line-height: var(--ds-chat-leading-normal);
+  letter-spacing: var(--ds-chat-tracking-body);
   outline: 0;
+  transition: background var(--ds-chat-duration-fast) var(--ds-chat-ease);
 }
 
-.emptyState { display: grid; place-items: center; gap: 8px; padding: 28px 18px; color: var(--ds-chat-muted, var(--dsw-alias-label-tertiary)); text-align: center; }
-.emptyState strong { color: var(--ds-chat-text, var(--dsw-alias-label-primary)); font-size: 14px; }
-.emptyState p { max-width: 280px; margin: 0; font-size: 12px; line-height: 1.55; }
+.searchInput::placeholder { color: var(--ds-chat-muted); }
+.searchInput:hover { background: var(--ds-chat-fill-tertiary); }
 
-.chatBubble { max-width: 88%; padding: 10px 12px; border-radius: 16px 16px 16px 5px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
-.chatBubble[data-role='assistant'] { align-self: flex-start; background: var(--ds-chat-surface, var(--dsw-alias-bg-base)); box-shadow: 0 5px 14px rgb(25 37 48 / 7%); }
-.chatBubble[data-role='user'] { align-self: flex-end; border-radius: 16px 16px 5px; background: var(--ds-chat-user-bubble, #eaf8f0); }
+.emptyState {
+  display: grid;
+  place-items: center;
+  gap: var(--ds-chat-space-2);
+  padding: var(--ds-chat-space-6) var(--ds-chat-space-4);
+  color: var(--ds-chat-muted);
+  text-align: center;
+}
 
-.roomRow { width: 100%; min-height: 62px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid transparent; border-radius: var(--ds-chat-radius-lg, 17px); color: inherit; background: transparent; text-align: left; cursor: pointer; font: inherit; transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease; }
-.roomRow:hover { border-color: var(--ds-chat-accent-border, rgb(31 190 102 / 18%)); background: var(--ds-chat-row-hover, var(--dsw-alias-bg-hover)); box-shadow: 0 7px 18px rgb(23 34 45 / 8%); transform: translateY(-1px); }
-.roomRow:active { transform: translateY(1px); }
-.roomRow[data-selected='true'] { background: var(--ds-chat-row-selected, #e9f8ef); box-shadow: inset 3px 0 var(--ds-chat-accent-solid, #38ad70); }
+.emptyState strong {
+  color: var(--ds-chat-text-color);
+  font-size: var(--ds-chat-text-body);
+  font-weight: var(--ds-chat-weight-semibold);
+  letter-spacing: var(--ds-chat-tracking-body);
+}
 
-.workbenchPanel { height: 100%; display: flex; flex-direction: column; background: var(--ds-chat-surface, var(--dsw-alias-bg-base)); }
+.emptyState p {
+  max-width: 260px;
+  margin: 0;
+  font-size: var(--ds-chat-text-footnote);
+  line-height: var(--ds-chat-leading-relaxed);
+}
+
+.chatBubble {
+  max-width: 86%;
+  padding: 8px var(--ds-chat-space-3);
+  border-radius: 18px;
+  font-size: var(--ds-chat-text-body);
+  line-height: var(--ds-chat-leading-normal);
+  letter-spacing: var(--ds-chat-tracking-body);
+  white-space: pre-wrap;
+}
+
+.chatBubble[data-role='assistant'] {
+  align-self: flex-start;
+  border-bottom-left-radius: var(--ds-chat-radius-xs);
+  color: var(--ds-chat-text-color);
+  background: var(--ds-chat-fill-quaternary);
+}
+
+.chatBubble[data-role='user'] {
+  align-self: flex-end;
+  border-bottom-right-radius: var(--ds-chat-radius-xs);
+  color: var(--ds-chat-on-accent);
+  background: var(--ds-chat-user-bubble);
+}
+
+.roomRow {
+  width: 100%;
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ds-chat-space-3);
+  padding: var(--ds-chat-space-2) var(--ds-chat-space-2);
+  border: 0;
+  border-radius: var(--ds-chat-radius-control);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--ds-chat-font);
+  transition: background var(--ds-chat-duration-fast) var(--ds-chat-ease);
+}
+
+.roomRow:hover { background: var(--ds-chat-row-hover); }
+.roomRow:active { background: var(--ds-chat-pressed); }
+
+/* Selection is a filled rounded rect, the way a system sidebar marks a row —
+ * no inset bar, no lift, so a selected row keeps the same footprint. */
+.roomRow[data-selected='true'] { background: var(--ds-chat-row-selected); }
+
+.workbenchPanel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-chat-surface);
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .button, .iconButton, .roomRow { transition: none; }
+  .button, .iconButton, .roomRow, .searchInput { transition: none; }
 }

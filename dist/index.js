@@ -51,6 +51,33 @@ var __esDecorate = function(ctor, descriptorIn, decorators, contextIn, initializ
 	done = true;
 };
 const DEFAULT_RELATIVE_ROOT = ".workbuddy/plugins/cache/workbuddy-builtin";
+/**
+* Skill roots scanned when the composition names none. Every entry is a
+* read-only metadata scan of a directory the user already owns: nothing is
+* downloaded, executed, or mounted into the runtime.
+*/
+const DEFAULT_ROOTS = [
+	{
+		id: "workbuddy",
+		label: "WorkBuddy",
+		path: `~/${DEFAULT_RELATIVE_ROOT}`,
+		layout: "plugin-version"
+	},
+	{
+		id: "claude",
+		label: "Claude",
+		path: "~/.claude/skills",
+		layout: "flat"
+	},
+	{
+		id: "claude-plugin",
+		label: "Claude 插件",
+		path: "~/.claude/plugins/marketplaces",
+		layout: "flat"
+	}
+];
+/** A directory whose name is a release, so it is a version rather than a Skill. */
+const VERSION_DIRECTORY = /^v?\d+(?:\.\d+)*(?:[-+][0-9A-Za-z.-]+)?$/u;
 const MAX_METADATA_BYTES = 64 * 1024;
 const MAX_CONTACTS = 2e3;
 const MAX_DEPTH = 6;
@@ -62,6 +89,7 @@ const GITHUB_SOURCE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/u;
 const Config = Schema.object({
 	root: Schema.string(),
+	roots: Schema.array(Schema.any()),
 	skillsShOrigin: Schema.string().default("https://skills.sh"),
 	stateFile: Schema.string()
 });
@@ -269,7 +297,7 @@ let WorkBuddySkillCatalog = (() => {
 			"sessionTitle",
 			"systemPrompt"
 		];
-		root = __runInitializers(this, _instanceExtraInitializers);
+		roots = __runInitializers(this, _instanceExtraInitializers);
 		skillsShOrigin;
 		stateFile;
 		stateWrite = Promise.resolve();
@@ -278,7 +306,7 @@ let WorkBuddySkillCatalog = (() => {
 		sidecars = /* @__PURE__ */ new Map();
 		constructor(ctx, config = {}) {
 			super(ctx, "workBuddySkillCatalog", { namespace: "workbuddySkills" });
-			this.root = resolveRoot(config.root);
+			this.roots = resolveRoots(config);
 			this.skillsShOrigin = config.skillsShOrigin ?? "https://skills.sh";
 			this.stateFile = config.stateFile === void 0 ? join(homedir(), ".workbuddy", "skill-chat", "state.v2.json") : resolve(config.stateFile);
 			this.getSkillChatState().catch(() => {});
@@ -312,9 +340,9 @@ let WorkBuddySkillCatalog = (() => {
 				await Promise.all(handles.map((handle) => handle.dispose().catch(() => {})));
 			}, "workBuddySkillCatalog.sidecars()");
 		}
-		/** List bounded, source-qualified contacts from the configured WorkBuddy cache. */
+		/** List bounded, source-qualified contacts from every configured Skill root. */
 		async list(signal) {
-			return { contacts: await scanWorkBuddySkillContacts(this.root, signal) };
+			return { contacts: await scanSkillRoots(this.roots, signal) };
 		}
 		/** Search the public skills.sh catalog without installing or executing results. */
 		async searchExternal(query, signal) {
@@ -996,14 +1024,68 @@ function safeRelativePath(path) {
 function resolveRoot(configured) {
 	if (configured === void 0) return join(homedir(), DEFAULT_RELATIVE_ROOT);
 	if (configured === "~") return homedir();
-	if (configured.startsWith(`~${sep}`)) return join(homedir(), configured.slice(2));
+	if (configured.startsWith("~/") || configured.startsWith(`~${sep}`)) return join(homedir(), configured.slice(2));
 	return resolve(configured);
 }
-async function scanWorkBuddySkillContacts(root, signal) {
+/**
+* The roots to scan: the configured list, or the defaults with `config.root`
+* still able to relocate the WorkBuddy cache on its own. Duplicate ids would
+* make two roots mint the same contact ids, so the first one wins.
+* @param config - the plugin's configuration.
+* @returns each root with its path expanded and its layout defaulted.
+*/
+function resolveRoots(config) {
+	const configured = config.roots ?? DEFAULT_ROOTS.map((root) => root.id === "workbuddy" && config.root !== void 0 ? {
+		...root,
+		path: config.root
+	} : root);
+	const seen = /* @__PURE__ */ new Set();
+	const resolved = [];
+	for (const root of configured) {
+		const { id, label, path, layout } = root;
+		if (typeof id !== "string" || typeof label !== "string" || typeof path !== "string") throw new Error("skill-chat: each configured Skill root needs a string id, label and path");
+		if (layout !== void 0 && layout !== "plugin-version" && layout !== "flat") throw new Error(`skill-chat: Skill root ${id} has an unknown layout ${String(layout)}`);
+		if (seen.has(id)) continue;
+		seen.add(id);
+		resolved.push({
+			id,
+			label,
+			path: resolveRoot(path),
+			layout: layout ?? "flat"
+		});
+	}
+	return resolved;
+}
+/**
+* Scan every root in order and merge the results. A Skill name discovered in
+* more than one root keeps the first root's entry, so the roster order is the
+* precedence order.
+* @param roots - resolved roots to scan.
+* @param signal - abort signal propagated into each scan.
+* @returns bounded, name-sorted contacts across all roots.
+*/
+async function scanSkillRoots(roots, signal) {
+	const byName = /* @__PURE__ */ new Map();
+	for (const root of roots) {
+		signal?.throwIfAborted();
+		for (const contact of await scanSkillRoot(root, signal)) {
+			if (byName.has(contact.name) || byName.size >= MAX_CONTACTS) continue;
+			byName.set(contact.name, contact);
+		}
+	}
+	return [...byName.values()].toSorted((left, right) => left.name.localeCompare(right.name));
+}
+/**
+* Scan one root for `SKILL.md` files and read each one's frontmatter.
+* @param root - the resolved root to scan.
+* @param signal - abort signal checked between entries.
+* @returns contacts discovered under that root, newest version per id.
+*/
+async function scanSkillRoot(root, signal) {
 	signal?.throwIfAborted();
 	let canonicalRoot;
 	try {
-		canonicalRoot = await realpath(root);
+		canonicalRoot = await realpath(root.path);
 	} catch {
 		return [];
 	}
@@ -1012,7 +1094,7 @@ async function scanWorkBuddySkillContacts(root, signal) {
 	const byId = /* @__PURE__ */ new Map();
 	for (const path of skillFiles.toSorted()) {
 		signal?.throwIfAborted();
-		const contact = await readContact(canonicalRoot, path);
+		const contact = await readContact(canonicalRoot, path, root);
 		if (contact === void 0) continue;
 		const previous = byId.get(contact.id);
 		if (previous === void 0 || compareVersions(previous.version, contact.version) < 0) byId.set(contact.id, contact);
@@ -1039,9 +1121,13 @@ async function collectSkillFiles(root, directory, depth, output, signal) {
 		if (output.length >= MAX_CONTACTS) return;
 	}
 }
-async function readContact(root, path) {
-	const [plugin, version] = relative(root, path).split(sep);
-	if (plugin === void 0 || version === void 0) return void 0;
+async function readContact(root, path, origin) {
+	const pathParts = relative(root, path).split(sep);
+	const [plugin] = pathParts;
+	if (plugin === void 0 || pathParts.length < 2) return void 0;
+	const candidate = pathParts.length > 2 ? pathParts[1] : void 0;
+	const version = candidate !== void 0 && VERSION_DIRECTORY.test(candidate) ? candidate : void 0;
+	if (origin.layout === "plugin-version" && version === void 0) return void 0;
 	const handle = await open(path, "r");
 	try {
 		const buffer = Buffer.alloc(MAX_METADATA_BYTES);
@@ -1053,13 +1139,15 @@ async function readContact(root, path) {
 		if (name === void 0 || description === void 0) return void 0;
 		const whenToUse = extractWhenToUse(buffer.subarray(0, bytesRead).toString("utf8"));
 		return {
-			id: `workbuddy:${plugin}:${name}`,
+			id: `${origin.id}:${plugin}:${name}`,
 			name,
 			description,
 			...whenToUse === void 0 ? {} : { whenToUse },
 			source: "workbuddy",
+			originId: origin.id,
+			originLabel: origin.label,
 			plugin,
-			version,
+			...version === void 0 ? {} : { version },
 			invocable: false
 		};
 	} finally {
@@ -1070,7 +1158,12 @@ function parseFrontmatter(content) {
 	if (!content.startsWith("---\n")) return void 0;
 	const end = content.indexOf("\n---", 4);
 	if (end < 0) return void 0;
-	const value = load(content.slice(4, end));
+	let value;
+	try {
+		value = load(content.slice(4, end));
+	} catch {
+		return;
+	}
 	return typeof value === "object" && value !== null ? value : void 0;
 }
 function stringField(value) {
@@ -1089,10 +1182,25 @@ function isWithin(root, candidate) {
 	return path === "" || !path.startsWith(`..${sep}`) && path !== ".." && !isAbsolute(path);
 }
 function compareVersions(left, right) {
-	return left.localeCompare(right, void 0, {
+	return (left ?? "").localeCompare(right ?? "", void 0, {
 		numeric: true,
 		sensitivity: "base"
 	});
 }
+/**
+* Scan a single WorkBuddy cache root.
+* @param root - filesystem path of the cache.
+* @param signal - abort signal propagated into the scan.
+* @returns contacts discovered under that root.
+* @deprecated Prefer {@link scanSkillRoots}, which scans the configured roster.
+*/
+async function scanWorkBuddySkillContacts(root, signal) {
+	return await scanSkillRoot({
+		id: "workbuddy",
+		label: "WorkBuddy",
+		path: root,
+		layout: "plugin-version"
+	}, signal);
+}
 //#endregion
-export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, scanWorkBuddySkillContacts };
+export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, scanSkillRoot, scanSkillRoots, scanWorkBuddySkillContacts };

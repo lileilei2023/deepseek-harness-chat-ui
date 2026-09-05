@@ -50,7 +50,7 @@ DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Ses
 | Skills | 已安装目录、`skills.sh` 搜索、安装、安装并加入 |
 | Workspace | 项目文件浏览、文件预览、终端与旁路任务入口 |
 | 自动化 | Room 绑定、立即运行与运行历史 |
-| 外观 | 薄荷工作台、Teamily 柔光以及 DSH Skin Manifest v2 |
+| 外观 | 薄荷工作台、Teamily 柔光、常暗「夜航」三套皮肤，基于 DSH Skin Manifest v2；明暗配色跟随外壳 |
 
 ## 环境要求
 
@@ -102,18 +102,41 @@ source/
 DeepSeek Harness 仍处于预发布阶段，其 Web Client Bundler 位于 Harness 仓库内部。重新构建时请使用独立的匹配版本 checkout 或 worktree：
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
+git clone --depth 1 --branch dsh-v0.1.2-alpha.5 https://github.com/deepseek-ai/deepseek-harness.git
 cd deepseek-harness
-git checkout v0.1.2-alpha.5
 pnpm install
 
 cd ../deepseek-harness-chat-ui
 npm install
-DSH_SOURCE=../deepseek-harness npm run build
+npm run rebuild -- ../deepseek-harness
 npm run check
 ```
 
-`npm run build` 会把本仓库的可编辑源码复制到匹配的 Harness checkout，调用官方 Host 和 Web Client 构建流程，再刷新 `dist/`。不要将它指向包含未提交改动的 Harness 工作目录。
+`npm run rebuild` 会在 Harness checkout 的 `packages/experimental` 下物化本仓库的三个插件包，把它们登记进 `tsconfig.host.json` 与 `tsconfig.client.json` 的工程引用，构建 Host 与 Client 两个 face，再刷新 `dist/`。只调 UI 时可以加 `--client-only` 跳过 Host face。不要将它指向包含未提交改动的 Harness 工作目录。
+
+`npm run build` 是原有入口：它驱动 Harness 的完整工作区构建，并要求这三个包已经存在于 `packages/experimental`，而公开 checkout 并没有——那种情况请使用 `npm run rebuild`。
+
+## Skill 来源
+
+目录服务扫描指定目录下的 `SKILL.md` 并把结果列为联系人。这是只读的元数据扫描：不下载、不执行、也不挂载进运行时。默认扫描三个来源：
+
+| 来源 | 路径 | 布局 |
+| --- | --- | --- |
+| WorkBuddy | `~/.workbuddy/plugins/cache/workbuddy-builtin` | `<plugin>/<version>/**` |
+| Claude Code | `~/.claude/skills` | `<skill>/SKILL.md`，另支持一层 bundle |
+| Claude 插件 | `~/.claude/plugins/marketplaces` | 嵌套 |
+
+在 Profile 的 patch 层可以覆盖这份名单：
+
+```yaml
+- id: workbuddy-skill-catalog
+  config:
+    roots:
+      - { id: workbuddy, label: WorkBuddy, path: '~/.workbuddy/plugins/cache/workbuddy-builtin', layout: plugin-version }
+      - { id: team, label: 团队, path: /srv/shared/skills, layout: flat }
+```
+
+同名 Skill 出现在多个来源时保留靠前来源的条目，因此名单顺序即优先级。`config.root` 仍然可以单独改写 WorkBuddy 缓存路径，其余来源保持不变。
 
 ## 兼容性
 

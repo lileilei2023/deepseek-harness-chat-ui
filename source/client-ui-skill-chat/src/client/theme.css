@@ -1,0 +1,321 @@
+/*
+ * DS Chat design tokens.
+ *
+ * One place where every colour, type step, radius, spacing step and elevation
+ * in this plugin is defined. Package stylesheets reference these tokens and
+ * never literal colours: the Harness Web client repaints itself by swapping
+ * `body[data-ds-dark-theme]`, so a literal colour is a value that survives the
+ * swap and breaks in the other scheme.
+ *
+ * Colour tokens resolve onto the host's `--dsw-alias-*` palette wherever the
+ * host has an equivalent, so DS Chat inherits the shell's scheme instead of
+ * maintaining a parallel one. The exceptions are the accent ramp (this
+ * plugin's own identity, overridable by a skin) and the translucent fills,
+ * which the host palette has no counterpart for: in light mode every
+ * `--dsw-alias-bg-layer-*` collapses onto `bg-base`, so a "slightly recessed"
+ * surface has to be drawn as a translucent grey over the base rather than
+ * picked from a layer.
+ */
+
+:root {
+  /* ---- Typography -------------------------------------------------------
+   * Seven steps with fixed roles. Sizes below 11px are deliberately absent:
+   * they fall under the platform minimum for sustained reading.
+   */
+  --ds-chat-font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', system-ui, sans-serif;
+  --ds-chat-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  --ds-chat-text-caption: 11px;   /* timestamps, counts, badges */
+  --ds-chat-text-footnote: 12px;  /* secondary row line, helper text */
+  --ds-chat-text-body: 13px;      /* row titles, body copy, controls */
+  --ds-chat-text-callout: 14px;   /* emphasised body */
+  --ds-chat-text-title3: 15px;    /* section titles inside panels */
+  --ds-chat-text-title2: 17px;    /* panel titles */
+  --ds-chat-text-title1: 20px;    /* dialog titles */
+
+  --ds-chat-weight-regular: 400;
+  --ds-chat-weight-medium: 500;
+  --ds-chat-weight-semibold: 600;
+  --ds-chat-weight-bold: 700;
+
+  --ds-chat-leading-tight: 1.25;
+  --ds-chat-leading-normal: 1.45;
+  --ds-chat-leading-relaxed: 1.6;
+
+  /* Optical tracking: tighter as type grows, matching SF's own metrics. */
+  --ds-chat-tracking-title: -0.022em;
+  --ds-chat-tracking-body: -0.008em;
+  --ds-chat-tracking-caption: 0;
+
+  /* ---- Spacing: 4pt grid ---------------------------------------------- */
+  --ds-chat-space-1: 4px;
+  --ds-chat-space-2: 8px;
+  --ds-chat-space-3: 12px;
+  --ds-chat-space-4: 16px;
+  --ds-chat-space-5: 20px;
+  --ds-chat-space-6: 24px;
+  --ds-chat-space-8: 32px;
+
+  /* ---- Radii ----------------------------------------------------------- */
+  --ds-chat-radius-xs: 6px;
+  --ds-chat-radius-sm: 8px;
+  --ds-chat-radius-control: 10px;
+  --ds-chat-radius-md: 12px;
+  --ds-chat-radius-lg: 16px;
+  --ds-chat-radius-xl: 20px;
+  --ds-chat-radius-round: 999px;
+
+  /* ---- Strokes ----------------------------------------------------------
+   * The host moved its neutral strokes to hairlines; Chromium paints a
+   * sub-device-pixel border as one device pixel, so 1x renders unchanged and
+   * 2x gets a true hairline.
+   */
+  color-scheme: light;
+
+  --ds-chat-hairline: 0.5px;
+  --ds-chat-border: rgb(0 0 0 / 10%);
+  --ds-chat-border-strong: rgb(0 0 0 / 12%);
+
+  /* ---- Surfaces --------------------------------------------------------- */
+  --ds-chat-surface: Canvas;
+  --ds-chat-surface-raised: Canvas;
+  --ds-chat-surface-sunken: var(--ds-chat-fill-quaternary);
+
+  /* Translucent greys for recessed controls. Neutral by design: they read as
+   * the same material over any surface, light or dark. */
+  --ds-chat-fill-primary: rgb(120 120 128 / 20%);
+  --ds-chat-fill-secondary: rgb(120 120 128 / 14%);
+  --ds-chat-fill-tertiary: rgb(118 118 128 / 10%);
+  --ds-chat-fill-quaternary: rgb(116 116 128 / 6%);
+
+  --ds-chat-hover: rgb(38 49 72 / 6%);
+  --ds-chat-pressed: var(--ds-chat-fill-tertiary);
+
+  /* ---- Text ------------------------------------------------------------- */
+  --ds-chat-text-color: CanvasText;
+  --ds-chat-text-secondary: color-mix(in srgb, CanvasText 68%, transparent);
+  --ds-chat-muted: color-mix(in srgb, CanvasText 46%, transparent);
+
+  /* ---- Accent -----------------------------------------------------------
+   * One ramp. A skin overrides `--ds-chat-accent-solid` and the rest follows
+   * through color-mix, so a skin never has to restate six greens.
+   */
+  --ds-chat-accent-solid: #12a05f;
+  --ds-chat-accent-hover: #0e8a50;
+  --ds-chat-accent-text: var(--ds-chat-accent-solid);
+  --ds-chat-on-accent: #fff;
+  --ds-chat-accent-soft: color-mix(in srgb, var(--ds-chat-accent-solid) 10%, transparent);
+  --ds-chat-accent-soft-strong: color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent);
+  --ds-chat-accent-border: color-mix(in srgb, var(--ds-chat-accent-solid) 28%, transparent);
+  --ds-chat-focus: color-mix(in srgb, var(--ds-chat-accent-solid) 70%, transparent);
+
+  /* Skin contract. A skin package sets these names, so each one needs a
+   * default here for the unskinned case; they are aliases over the ramp above
+   * rather than a second palette. */
+  --ds-chat-accent: var(--ds-chat-accent-solid);
+  --ds-chat-accent-faint: var(--ds-chat-accent-soft);
+  --ds-chat-avatar-gradient: var(--ds-chat-accent-soft-strong);
+  --ds-chat-row-hover: var(--ds-chat-hover);
+  --ds-chat-row-selected: var(--ds-chat-accent-soft-strong);
+  --ds-chat-user-bubble: var(--ds-chat-accent-solid);
+  --ds-chat-shadow: var(--ds-chat-shadow-2);
+
+  /* Fixed-brightness accent for surfaces that are dark in both schemes
+   * (terminal, file preview, hover cards): the scheme-following ramp goes dark
+   * green in light mode and disappears against them. */
+  --ds-chat-accent-bright: #32d583;
+
+  /* ---- Always-dark surfaces ---------------------------------------------
+   * A terminal and a source preview stay dark in both schemes, the way system
+   * terminals do, so this small palette is deliberately scheme-independent.
+   */
+  --ds-chat-code-bg: #0d1218;
+  --ds-chat-code-bg-raised: #151b22;
+  --ds-chat-code-fg: #d9e2ea;
+  --ds-chat-code-muted: #8995a3;
+  --ds-chat-code-border: rgb(255 255 255 / 12%);
+
+  /* ---- Status ----------------------------------------------------------- */
+  --ds-chat-danger: #d0342c;
+  --ds-chat-danger-soft: color-mix(in srgb, var(--ds-chat-danger) 10%, transparent);
+  --ds-chat-warning: #b25000;
+  --ds-chat-warning-soft: color-mix(in srgb, var(--ds-chat-warning) 12%, transparent);
+  --ds-chat-info: #3b6fd4;
+  --ds-chat-info-soft: color-mix(in srgb, var(--ds-chat-info) 12%, transparent);
+
+  /* ---- Elevation --------------------------------------------------------
+   * Three steps, all neutral and low-contrast. Depth comes from the stroke
+   * and the fill; the shadow only separates a floating layer from what it
+   * covers.
+   */
+  --ds-chat-shadow-1: 0 1px 2px rgb(0 0 0 / 5%);
+  --ds-chat-shadow-2: 0 4px 14px rgb(0 0 0 / 8%);
+  --ds-chat-shadow-3: 0 16px 40px rgb(0 0 0 / 14%);
+  --ds-chat-scrim: rgb(0 0 0 / 22%);
+
+  /* ---- Motion -----------------------------------------------------------
+   * Short, eased, and never geometric: a control responds by changing its
+   * fill, not by moving out from under the pointer.
+   */
+  --ds-chat-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ds-chat-duration-fast: 120ms;
+  --ds-chat-duration: 200ms;
+}
+
+/*
+ * Host-derived tokens live on `body`, not `:root`.
+ *
+ * The Harness publishes `--dsw-alias-*` on `body`. A token declared on `:root`
+ * that references one resolves against `<html>`, where no alias exists, so it
+ * becomes guaranteed-invalid and inherits into the whole tree as an empty
+ * value — the same failure this file exists to remove.
+ *
+ * These eight follow the host's scheme by design and are deliberately not part
+ * of the skin contract: a skin that pinned a light surface is exactly what made
+ * the dark scheme unusable. A skin states identity (the accent ramp) and shape
+ * (radii); the ground it sits on belongs to the shell.
+ */
+body {
+  --ds-chat-surface: var(--dsw-alias-bg-base);
+  --ds-chat-surface-raised: var(--dsw-alias-bg-layer-2);
+  --ds-chat-border: var(--dsw-alias-border-l2);
+  --ds-chat-border-strong: var(--dsw-alias-border-l3);
+  --ds-chat-hover: var(--dsw-alias-interactive-bg-hover);
+  --ds-chat-text-color: var(--dsw-alias-label-primary);
+  --ds-chat-text-secondary: var(--dsw-alias-label-secondary);
+  --ds-chat-muted: var(--dsw-alias-label-tertiary);
+}
+
+body[data-ds-dark-theme] {
+  color-scheme: dark;
+
+  --ds-chat-hover: rgb(255 255 255 / 8%);
+
+  /* Fills carry more alpha over a dark ground to stay perceptible. */
+  --ds-chat-fill-primary: rgb(142 142 147 / 32%);
+  --ds-chat-fill-secondary: rgb(142 142 147 / 24%);
+  --ds-chat-fill-tertiary: rgb(142 142 147 / 18%);
+  --ds-chat-fill-quaternary: rgb(142 142 147 / 12%);
+
+  /* The light ramp is too dark to read as an accent on a dark ground. */
+  --ds-chat-accent-solid: #32d583;
+  --ds-chat-accent-hover: #4ade9b;
+  --ds-chat-on-accent: #06231a;
+  --ds-chat-accent-soft: color-mix(in srgb, var(--ds-chat-accent-solid) 16%, transparent);
+  --ds-chat-accent-soft-strong: color-mix(in srgb, var(--ds-chat-accent-solid) 24%, transparent);
+
+  --ds-chat-danger: #ff6961;
+  --ds-chat-warning: #ffb340;
+  --ds-chat-info: #6ea8fe;
+
+  /* Shadows over a dark ground read as noise unless they deepen. */
+  --ds-chat-shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
+  --ds-chat-shadow-2: 0 4px 14px rgb(0 0 0 / 40%);
+  --ds-chat-shadow-3: 0 16px 40px rgb(0 0 0 / 55%);
+  --ds-chat-scrim: rgb(0 0 0 / 50%);
+}
+
+/*
+ * Avatar internals.
+ *
+ * Scoped to the portrait itself through the species attribute the generator
+ * stamps, so these plain names cannot leak into the rest of the document.
+ * Colours come from the three custom properties the generator sets per avatar.
+ */
+[data-avatar-species] svg { width: 92%; height: 92%; overflow: visible; }
+[data-avatar-species] .avatarEars {
+  fill: color-mix(in srgb, var(--avatar-main) 78%, var(--avatar-ink));
+  color: var(--avatar-ink);
+}
+[data-avatar-species] .avatarFace { fill: var(--avatar-main); }
+[data-avatar-species] .avatarInner { fill: color-mix(in srgb, var(--avatar-bg) 70%, var(--avatar-main)); }
+[data-avatar-species] .avatarPatch { fill: var(--avatar-ink); opacity: .42; }
+[data-avatar-species] .avatarInk { color: var(--avatar-ink); fill: var(--avatar-ink); }
+[data-avatar-species] .avatarEye { fill: var(--avatar-ink); color: var(--avatar-ink); }
+[data-avatar-species] .avatarGlint { fill: var(--avatar-bg); }
+[data-avatar-species] .avatarNose { fill: var(--avatar-ink); }
+[data-avatar-species] .avatarBeak { fill: #f0a63c; }
+[data-avatar-species] .avatarMuzzle {
+  fill: none;
+  stroke: var(--avatar-ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+[data-avatar-species] .avatarGear { fill: var(--avatar-ink); color: var(--avatar-ink); }
+
+/* ===========================================================================
+ * Conversation: make the transcript read as a chat.
+ *
+ * The shell lays every flow node out at the same level and the same weight, so
+ * a running turn — one question followed by twenty-two thinking steps and
+ * twenty-two tool calls — renders as a single bubble on top of forty-four rows
+ * of terminal log. The left column is a messaging app and the right column is
+ * a console; that seam is what makes the product feel like two products.
+ *
+ * The treatment goes on the *disclosure row*, not on the flow node. A single
+ * `assistant-step` node carries both the collapsed 思考 row and the answer
+ * markdown as siblings, so dimming the node dims the reply itself — which is
+ * the one thing the conversation exists to show.
+ *
+ * The shell already folds a finished turn into one 已思考 summary on its own
+ * (`foldable` in ui-chat), so this only shapes the in-progress state and any
+ * turn the reader has expanded.
+ *
+ * The hooks are the shell's semantic `data-*` attributes rather than its
+ * content-hashed CSS-module class names, which change on every Harness build.
+ * They are still the host's, so this is coupled to the targeted Harness
+ * version; if a later version renames them the rules simply stop matching and
+ * the transcript falls back to the shell's own presentation.
+ * ======================================================================== */
+
+/* Working notes: indented under a shared rail, quieter, and tight, so a run of
+ * them reads as one block between two messages. */
+[data-chat-flow-kind='assistant-step'] [data-disclosure-row],
+[data-chat-flow-kind='tool-call'] [data-disclosure-row] {
+  margin-left: 26px;
+  padding-left: var(--ds-chat-space-3);
+  border-left: 2px solid var(--ds-chat-accent-border);
+  background: var(--ds-chat-accent-soft);
+  font-size: var(--ds-chat-text-footnote);
+  opacity: .66;
+  transition: opacity var(--ds-chat-duration-fast) var(--ds-chat-ease);
+}
+
+[data-chat-flow-kind='assistant-step'] [data-disclosure-row]:hover,
+[data-chat-flow-kind='tool-call'] [data-disclosure-row]:hover,
+[data-chat-flow-kind='assistant-step'] [data-disclosure-row]:focus-visible,
+[data-chat-flow-kind='tool-call'] [data-disclosure-row]:focus-visible { opacity: 1; }
+
+/* A run of steps is one block, so the gaps inside it close up. */
+[data-chat-flow-kind='assistant-step'] + [data-chat-flow-kind='assistant-step'],
+[data-chat-flow-kind='assistant-step'] + [data-chat-flow-kind='tool-call'],
+[data-chat-flow-kind='tool-call'] + [data-chat-flow-kind='tool-call'],
+[data-chat-flow-kind='tool-call'] + [data-chat-flow-kind='assistant-step'] { margin-top: 0; }
+
+/* The reply keeps full weight and sits clear of the rail above it. */
+[data-chat-flow-kind='assistant-step'] [class*='markdown'] { margin-top: var(--ds-chat-space-2); }
+
+/* The person's own turn reads as a message. */
+[data-chat-flow-kind='user'] { margin-block: var(--ds-chat-space-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-chat-flow-kind='assistant-step'] [data-disclosure-row],
+  [data-chat-flow-kind='tool-call'] [data-disclosure-row] { transition: none; }
+}
+
+/*
+ * The shell's settings row sits on a 10 / 270 gutter while its 新会话 button —
+ * the column's most prominent element, and the one the eye reads the edge
+ * from — sits on 14 / 266. The plugin's own rows are aligned to 新会话; this
+ * brings the one remaining outlier onto the same line so the column has a
+ * single edge instead of three.
+ *
+ * Targeted through the shell's stable `data-slot` name rather than its hashed
+ * class, and it only adjusts padding: if a future Harness version changes the
+ * footer, the rule stops matching and the row keeps the shell's own spacing.
+ */
+[data-slot='sidebar.settings'] button {
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin-inline: 4px;
+}

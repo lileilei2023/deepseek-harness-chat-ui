@@ -36,6 +36,13 @@ Search installed Skills, add or remove them like group members, choose a circula
 
 ![Create a DeepSeek Harness multi-agent group](docs/images/deepseek-harness-chat-ui-groups.png)
 
+### Scheduled automations
+
+Every automation runs in the room it belongs to. Pick a scenario to prefill the
+name, prompt and cadence, or start from a blank one.
+
+![DeepSeek Harness Chat UI automations](docs/images/deepseek-harness-chat-ui-automations.png)
+
 ### Theme center
 
 ![DeepSeek Harness Chat UI theme center](docs/images/deepseek-harness-chat-ui-themes.png)

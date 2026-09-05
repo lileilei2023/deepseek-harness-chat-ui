@@ -148,7 +148,12 @@ export function defaultPersona(contact: SkillContact, now = Date.now()): SkillPe
     // only 159 distinct faces.
     avatarId: contact.id,
     originalName: contact.name,
-    roleLabel: contact.source === 'harness' ? '项目内 AI 同事' : contact.source === 'workbuddy' ? 'WorkBuddy 专家' : '社区 Skill 专家',
+    // `source` is the kind discriminator, and every scanned root reports
+    // `workbuddy`; using it for the label called a Claude Skill a WorkBuddy
+    // expert. `sourceShort` names the root the Skill actually came from.
+    roleLabel: contact.source === 'harness'
+      ? '项目内 AI 同事'
+      : contact.source === 'workbuddy' ? `${contact.sourceShort ?? 'WorkBuddy'} 专家` : '社区 Skill 专家',
     bio: contact.description,
     capabilities: capabilityList(contact),
     source: contact.sourceLabel,
@@ -199,6 +204,10 @@ export function ensurePersonas(
       originalName: contact.name,
       bio: contact.description,
       capabilities: capabilityList(contact),
+      // Derived from the contact, never chosen by the user, so it follows the
+      // catalog: personas minted while every root reported WorkBuddy keep
+      // calling a Claude Skill a WorkBuddy expert otherwise.
+      roleLabel: generated.roleLabel,
       source: contact.sourceLabel,
       ...(contact.homepage === undefined ? {} : { homepage: contact.homepage }),
       ...(contact.repository === undefined ? {} : { repository: contact.repository }),

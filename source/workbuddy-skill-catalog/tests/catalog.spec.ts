@@ -67,6 +67,27 @@ describe('WorkBuddy Skill catalog', () => {
     await expect(readFile(stateFile, 'utf8')).resolves.toContain('"room:one"')
   })
 
+  it('scopes the state document to $DSH_HOME rather than sharing one file per machine', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-skill-chat-home-'))
+    vi.stubEnv('DSH_HOME', home)
+    const catalog = new WorkBuddySkillCatalog(await catalogContext())
+
+    const state = {
+      version: 2 as const,
+      rooms: [{
+        roomId: 'room:scoped', type: 'direct' as const, workspaceId: 'workspace', title: '栗子',
+        memberIds: ['skill'], coordinatorId: 'skill', sessionIds: [], createdAt: 1, updatedAt: 1,
+      }],
+      roomSessions: [], personas: {}, automations: [],
+    }
+    await catalog.putSkillChatState(state)
+
+    // The rooms name Harness Session ids, which live under this home; a second
+    // Harness must not see them, and must not overwrite them on its own save.
+    await expect(readFile(join(home, 'skill-chat', 'state.v2.json'), 'utf8')).resolves.toContain('"room:scoped"')
+    vi.unstubAllEnvs()
+  })
+
   it('runs an automation in a new Workspace Session and records it in the Room', async () => {
     const root = await mkdtemp(join(tmpdir(), 'dsh-skill-chat-run-'))
     const ctx = await catalogContext()

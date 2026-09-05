@@ -219,6 +219,31 @@ function templateRunAt(schedule: 'once' | 'recurring'): string {
   return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}T${pad(when.getHours())}:${pad(when.getMinutes())}`
 }
 
+/**
+ * Whether the browser's cached copy should survive a load.
+ *
+ * `localStorage` is a first-paint cache, not a replica: the Host document is
+ * the record. The one case for keeping the local copy is the first run against
+ * a Host that has never stored anything, so that state built before the
+ * document existed is not thrown away.
+ *
+ * Anything looser resurrects deleted data. A browser holding an old snapshot
+ * used to win whenever the Host had no rooms — so opening a stale tab pushed
+ * its rooms back over the Host's, and the newer state was gone.
+ * @param remote - the document the Host returned.
+ * @param local - what this browser had cached.
+ * @returns true when the local copy should be kept.
+ */
+export function preferLocalState(remote: SkillChatState, local: SkillChatState): boolean {
+  const remoteEmpty = remote.rooms.length === 0
+    && remote.automations.length === 0
+    && Object.keys(remote.personas).length === 0
+  const localHasData = local.rooms.length > 0
+    || local.automations.length > 0
+    || Object.keys(local.personas).length > 0
+  return remoteEmpty && localHasData
+}
+
 export const FAVORITES_KEY = 'dsh.skill-chat.favorites.v1'
 export const GROUPS_KEY = 'dsh.skill-chat.groups.v1'
 export const EXTERNAL_KEY = 'dsh.skill-chat.external.v1'
@@ -714,10 +739,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const abort = new AbortController()
     void loadState(abort.signal).then(remoteState => {
       if (abort.signal.aborted) return
-      const localHasData = state.rooms.length > 0 || Object.keys(state.personas).length > 0 || state.automations.length > 0
-      replaceState(remoteState.rooms.length === 0 && localHasData ? stateRef.current : remoteState)
+      replaceState(preferLocalState(remoteState, stateRef.current) ? stateRef.current : remoteState)
       setStateReady(true)
-    }, () => { if (!abort.signal.aborted) setStateReady(true) })
+    }, (error: unknown) => {
+      // Deliberately leaves `stateReady` false, which keeps the save effect from
+      // running: a load that failed gives no basis for replacing the stored
+      // document, and writing the in-memory copy anyway would delete whatever
+      // the Host actually holds.
+      if (abort.signal.aborted) return
+      setNotice(`会话状态加载失败，本次改动不会保存：${error instanceof Error ? error.message : String(error)}`)
+    })
     return () => { abort.abort() }
   }, [loadState])
 
@@ -749,7 +780,20 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const sessionWorkspace = Object.fromEntries(sessions.ids.map(sessionId => [sessionId, workspaces.items.find(workspace => workspace.sessionIds.includes(sessionId))?.workspaceId]))
     const sessionUpdatedAt = Object.fromEntries(sessions.ids.map(sessionId => [sessionId, sessions.byId[sessionId]?.updatedAt ?? 0]))
     const migrated = migrateLegacyState(groups, chatBindings, sessionWorkspace, sessionUpdatedAt)
-    updateState(current => ({ ...current, ...migrated }))
+    // Merged, never spread over the current state. A one-time import of what
+    // this browser kept in `localStorage` may only add: spreading it replaced
+    // `rooms` wholesale, so opening a Host document written before `migratedAt`
+    // existed in a browser with nothing to import deleted every room it held.
+    // Existing entries win on a collision — the Host's copy is the record.
+    updateState(current => ({
+      ...current,
+      ...migrated,
+      rooms: [...current.rooms, ...migrated.rooms.filter(room => !current.rooms.some(item => item.roomId === room.roomId))],
+      roomSessions: [
+        ...current.roomSessions,
+        ...migrated.roomSessions.filter(session => !current.roomSessions.some(item => item.roomSessionId === session.roomSessionId)),
+      ],
+    }))
   }, [chatBindings, groups, sessions.byId, sessions.ids, state.migratedAt, workspaces.items])
 
   useEffect(() => {
@@ -1316,14 +1360,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     {notice !== null ? <button className={css.notice} type="button" onClick={() => { setNotice(null) }}>{notice} ×</button> : null}
 
     {view === 'contacts' ? <><div className={css.subtabs}><button data-active={contactList === 'frequent'} onClick={() => { setContactList('frequent') }}>{t('frequentContacts')}</button><button data-active={contactList === 'all'} onClick={() => { setContactList('all') }}>{t('allContacts')}</button></div><div className={css.modeBar}><span>{t('displayMode')}</span><button type="button" data-active={mode === 'persona'} onClick={() => { setMode('persona') }}>{t('personaMode')}</button><button type="button" data-active={mode === 'raw'} onClick={() => { setMode('raw') }}>{t('rawMode')}</button></div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : visibleContacts.map(contactRow)}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>
-      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>按计划在目标对话中创建独立会话</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>＋ 新建</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <><div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? '单次' : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? '等待运行' : automation.status === 'paused' ? '已暂停' : automation.status === 'completed' ? '已完成' : '失败'}</span><button type="button" onClick={() => { void runAutomation(automation) }}>立即运行</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? '恢复' : '暂停'}</button></footer></article>)}</div></>
+      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>按计划在目标对话中创建独立会话</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>＋ 新建</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? '单次' : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? '等待运行' : automation.status === 'paused' ? '已暂停' : automation.status === 'completed' ? '已完成' : '失败'}</span><button type="button" onClick={() => { void runAutomation(automation) }}>立即运行</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? '恢复' : '暂停'}</button></footer></article>)}<div className={css.templateHeading}>从模板开始</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></div></>
       : <><div className={css.roomList}>{roomResults.length === 0
         ? (query.trim() === ''
           ? <EmptyState className={css.emptyCard} title="还没有对话">用右上角的 ＋ 开始一段普通对话，或建一个 Skill 群组。</EmptyState>
           : <EmptyState className={css.emptyCard} title="没有匹配的对话">换个关键词，或到「联系人」里找 Skill。</EmptyState>)
         : roomResults.map(roomRow)}</div></>}
     {renderSlot('ds-chat.sidebar.after-rooms', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
-    {renderSlot('ds-chat.settings.section', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
+    {/* Wrapped because the slot renders a bare div: there is no attribute or
+      * class on it to hang the pinning and the divider off. */}
+    <div className={css.settingsSection}>{renderSlot('ds-chat.settings.section', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}</div>
 
     {activeRoom !== undefined && currentSessionId !== undefined && currentSessionBlank ? <aside className={css.blankRoomDock}><SkillChatHeaderTools sessionId={currentSessionId}/></aside> : null}
     {activeRoom === undefined ? null : renderSlot('ds-chat.room.drawer', { roomId: activeRoom.roomId, ...(currentSessionId === undefined ? {} : { sessionId: currentSessionId }) })}

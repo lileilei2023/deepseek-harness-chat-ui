@@ -5,9 +5,9 @@ import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   bindLegacyGroups, CHAT_BINDINGS_KEY, groupsForWorkspace, responderForMessage,
-  SkillContactsBrowser, type ContactGroup, type SkillContact, parseDiff } from '../src/client/SkillContactsBrowser.tsx'
+  SkillContactsBrowser, type ContactGroup, type SkillContact, parseDiff, preferLocalState } from '../src/client/SkillContactsBrowser.tsx'
 import {
-  activeHarnessSession, defaultPersona, ensurePersonas, migrateLegacyState, roomForSession,
+  activeHarnessSession, type ChatRoom, defaultPersona, ensurePersonas, migrateLegacyState, roomForSession,
 } from '../src/client/model.ts'
 import { inject, mergeContacts, mountSkillChatUi } from '../src/client/index.ts'
 import { createSkinRuntime, SKIN_PREFERENCE_KEY, validateSkinPackage } from '../src/client/skin/index.ts'
@@ -18,6 +18,45 @@ const REMOTE: TypertRemoteContribution = {
 }
 
 describe('SkillChat browser plugin', () => {
+  it('adds to the stored Rooms when importing legacy local data instead of replacing them', () => {
+    const bindings = {
+      'session-legacy': { kind: 'contact' as const, name: '旧会话', avatar: 'cat-lime', members: [{ id: 'skill', name: 'skill' }] },
+    }
+    const migrated = migrateLegacyState(
+      [], bindings as never,
+      { 'session-legacy': 'w' as ChatRoom['workspaceId'] },
+      { 'session-legacy': 10 },
+    )
+
+    // What the import produces must be additive: a browser with nothing to
+    // import used to spread an empty `rooms` over the Host's and delete it all.
+    const stored: readonly ChatRoom[] = [{
+      roomId: 'room:host', type: 'group', workspaceId: 'w' as ChatRoom['workspaceId'], title: '产品设计小组',
+      memberIds: ['skill'], coordinatorId: 'skill', sessionIds: [], createdAt: 1, updatedAt: 1,
+    }]
+    const merged = [...stored, ...migrated.rooms.filter(room => !stored.some(item => item.roomId === room.roomId))]
+    expect(merged.map(room => room.title)).toEqual(['产品设计小组', '旧会话'])
+  })
+
+  it('lets the Host document win unless the Host has never stored anything', () => {
+    const empty = { version: 2 as const, rooms: [], roomSessions: [], personas: {}, automations: [] }
+    const room = {
+      roomId: 'room:one', type: 'group' as const, workspaceId: 'w' as ChatRoom['workspaceId'], title: '产品设计小组',
+      memberIds: ['skill'], coordinatorId: 'skill', sessionIds: [], createdAt: 1, updatedAt: 1,
+    }
+    const withRoom = { ...empty, rooms: [room] }
+    const withPersonas = { ...empty, personas: { skill: { skillId: 'skill' } } } as never
+
+    // The first run against a Host that has stored nothing keeps what this
+    // browser built before the document existed.
+    expect(preferLocalState(empty, withRoom)).toBe(true)
+    // A Host that holds anything at all wins, so a browser carrying a stale
+    // snapshot cannot push its rooms back over newer state.
+    expect(preferLocalState(withPersonas, withRoom)).toBe(false)
+    expect(preferLocalState(withRoom, withRoom)).toBe(false)
+    expect(preferLocalState(empty, empty)).toBe(false)
+  })
+
   it('creates stable neutral personas with one of the built-in animal avatars', () => {
     const contact = {
       id: 'harness:design', name: 'design', description: 'Design interfaces.',

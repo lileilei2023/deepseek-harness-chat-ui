@@ -522,7 +522,9 @@
 .list {
   min-height: 0;
   overflow-y: auto;
-  padding: 0 8px 16px;
+  /* Extra foot room so a part-scrolled list does not shear a card off flush
+   * against the pinned appearance row below it. */
+  padding: 0 8px 28px;
   content-visibility: auto;
 }
 
@@ -1801,8 +1803,16 @@
 /* Appearance is a preference, not navigation: it drops to the foot of the
  * column, next to the shell's own 设置 entry, instead of sitting above the
  * conversation list. */
-.root > [data-slot-name='ds-chat.settings.section'],
+.settingsSection,
 .root > :last-child:not(.roomList):not(.list) { margin-top: auto; }
+
+/* The scrolling column ends flush against this row, so a part-scrolled list
+ * shears a card at the boundary and reads as being covered by it. The rule
+ * draws the edge the layout already has. */
+.settingsSection {
+  border-top: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  padding-top: var(--ds-chat-space-2);
+}
 
 .root {
   /* Removes the 300ms double-tap delay on touch without disabling zoom. */
@@ -2226,3 +2236,11 @@
 .templateCard:disabled { opacity: .5; cursor: not-allowed; }
 .templateCard strong { font-size: var(--ds-chat-text-body); font-weight: var(--ds-chat-weight-semibold); }
 .templateCard small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); line-height: var(--ds-chat-leading-normal); }
+
+.templateHeading {
+  padding: var(--ds-chat-space-4) var(--ds-chat-space-1) var(--ds-chat-space-2);
+  color: var(--ds-chat-muted);
+  font-size: var(--ds-chat-text-caption);
+  font-weight: var(--ds-chat-weight-semibold);
+  letter-spacing: .04em;
+}

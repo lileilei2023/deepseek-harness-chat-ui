@@ -302,13 +302,15 @@ let WorkBuddySkillCatalog = (() => {
 		stateFile;
 		stateWrite = Promise.resolve();
 		cachedState = emptySkillChatState();
+		inheritLegacyState;
 		activeAutomationRuns = /* @__PURE__ */ new Set();
 		sidecars = /* @__PURE__ */ new Map();
 		constructor(ctx, config = {}) {
 			super(ctx, "workBuddySkillCatalog", { namespace: "workbuddySkills" });
 			this.roots = resolveRoots(config);
 			this.skillsShOrigin = config.skillsShOrigin ?? "https://skills.sh";
-			this.stateFile = config.stateFile === void 0 ? join(homedir(), ".workbuddy", "skill-chat", "state.v2.json") : resolve(config.stateFile);
+			this.inheritLegacyState = config.stateFile === void 0;
+			this.stateFile = config.stateFile === void 0 ? defaultStateFile() : resolve(config.stateFile);
 			this.getSkillChatState().catch(() => {});
 			ctx.effect(() => ctx.systemPrompt.section({
 				name: "skill-chat:room-role",
@@ -593,10 +595,26 @@ let WorkBuddySkillCatalog = (() => {
 				return this.cachedState;
 			} catch (error) {
 				if (error.code === "ENOENT") {
-					this.cachedState = emptySkillChatState();
+					this.cachedState = await this.legacyState();
 					return this.cachedState;
 				}
 				throw error;
+			}
+		}
+		/**
+		* Read the pre-`$DSH_HOME` state document, for a Harness whose scoped file
+		* does not exist yet. The legacy file is left in place rather than moved: a
+		* machine may still be running an older build that reads only that path, and
+		* an upgrade should not empty its sidebar. The first save writes the scoped
+		* file, after which this is never consulted again.
+		* @returns the inherited state, or an empty one.
+		*/
+		async legacyState() {
+			if (!this.inheritLegacyState || this.stateFile === LEGACY_STATE_FILE) return emptySkillChatState();
+			try {
+				return validateSkillChatState(JSON.parse(await readFile(LEGACY_STATE_FILE, "utf8")));
+			} catch {
+				return emptySkillChatState();
 			}
 		}
 		/** Atomically replace the complete Skill Chat state after validating its bounded JSON shape. */
@@ -800,6 +818,22 @@ function nextRecurringAt(schedule, after) {
 	const unit = match[2] === "m" ? 6e4 : match[2] === "h" ? 36e5 : 864e5;
 	return after + Math.max(1, amount) * unit;
 }
+/**
+* Where the room graph lives.
+*
+* This used to be one file under `~/.workbuddy` shared by every Harness on the
+* machine, which is incoherent: `roomSessions` point at Harness session ids,
+* and those are scoped to a `$DSH_HOME`. Two Harnesses sharing the file also
+* clobber each other — the document is written whole, so the second one to
+* save replaces the first one's rooms with its own. Scoping the file to
+* `$DSH_HOME` gives the rooms the same lifetime as the sessions they name.
+* @returns the absolute path of the state document.
+*/
+function defaultStateFile() {
+	return join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "skill-chat", "state.v2.json");
+}
+/** The pre-`$DSH_HOME` location, read once if the scoped file does not exist. */
+const LEGACY_STATE_FILE = join(homedir(), ".workbuddy", "skill-chat", "state.v2.json");
 function emptySkillChatState() {
 	return {
 		version: 2,

@@ -138,6 +138,7 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   private readonly stateFile: string
   private stateWrite = Promise.resolve()
   private cachedState: SkillChatStateDocument = emptySkillChatState()
+  private readonly inheritLegacyState: boolean
   private readonly activeAutomationRuns = new Set<string>()
   private readonly sidecars = new Map<string, AgentHandle>()
 
@@ -145,9 +146,10 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     super(ctx, 'workBuddySkillCatalog', { namespace: 'workbuddySkills' })
     this.roots = resolveRoots(config)
     this.skillsShOrigin = config.skillsShOrigin ?? 'https://skills.sh'
-    this.stateFile = config.stateFile === undefined
-      ? join(homedir(), '.workbuddy', 'skill-chat', 'state.v2.json')
-      : resolve(config.stateFile)
+    // Inheriting only applies to the default path: an explicit `stateFile`
+    // means "use this document", and its absence means an empty one.
+    this.inheritLegacyState = config.stateFile === undefined
+    this.stateFile = config.stateFile === undefined ? defaultStateFile() : resolve(config.stateFile)
     void this.getSkillChatState().catch(() => {})
     ctx.effect(() => ctx.systemPrompt.section({
       name: 'skill-chat:room-role',
@@ -422,10 +424,27 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
       return this.cachedState
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        this.cachedState = emptySkillChatState()
+        this.cachedState = await this.legacyState()
         return this.cachedState
       }
       throw error
+    }
+  }
+
+  /**
+   * Read the pre-`$DSH_HOME` state document, for a Harness whose scoped file
+   * does not exist yet. The legacy file is left in place rather than moved: a
+   * machine may still be running an older build that reads only that path, and
+   * an upgrade should not empty its sidebar. The first save writes the scoped
+   * file, after which this is never consulted again.
+   * @returns the inherited state, or an empty one.
+   */
+  private async legacyState(): Promise<SkillChatStateDocument> {
+    if (!this.inheritLegacyState || this.stateFile === LEGACY_STATE_FILE) return emptySkillChatState()
+    try {
+      return validateSkillChatState(JSON.parse(await readFile(LEGACY_STATE_FILE, 'utf8')) as unknown)
+    } catch {
+      return emptySkillChatState()
     }
   }
 
@@ -584,6 +603,25 @@ function nextRecurringAt(schedule: SkillChatStateDocument['automations'][number]
   const unit = match[2] === 'm' ? 60_000 : match[2] === 'h' ? 3_600_000 : 86_400_000
   return after + Math.max(1, amount) * unit
 }
+
+/**
+ * Where the room graph lives.
+ *
+ * This used to be one file under `~/.workbuddy` shared by every Harness on the
+ * machine, which is incoherent: `roomSessions` point at Harness session ids,
+ * and those are scoped to a `$DSH_HOME`. Two Harnesses sharing the file also
+ * clobber each other — the document is written whole, so the second one to
+ * save replaces the first one's rooms with its own. Scoping the file to
+ * `$DSH_HOME` gives the rooms the same lifetime as the sessions they name.
+ * @returns the absolute path of the state document.
+ */
+function defaultStateFile(): string {
+  const home = process.env.DSH_HOME ?? join(homedir(), '.dsh')
+  return join(home, 'skill-chat', 'state.v2.json')
+}
+
+/** The pre-`$DSH_HOME` location, read once if the scoped file does not exist. */
+const LEGACY_STATE_FILE = join(homedir(), '.workbuddy', 'skill-chat', 'state.v2.json')
 
 function emptySkillChatState(): SkillChatStateDocument {
   return { version: 2, rooms: [], roomSessions: [], personas: {}, automations: [] }

@@ -10062,7 +10062,7 @@ ${roster}
 						children: [notice, " ×"]
 					}) : null,
 					view === "groups" ? (0, react_jsx_runtime.jsx)("div", {
-						className: SkillContactsBrowser_module_css_default.list,
+						className: SkillContactsBrowser_module_css_default.roomList,
 						children: groupResults.length === 0 ? (0, react_jsx_runtime.jsx)(EmptyState, {
 							className: SkillContactsBrowser_module_css_default.emptyCard,
 							title: t("noGroupsTitle"),
@@ -10106,7 +10106,7 @@ ${roster}
 							})]
 						}, room.roomId))
 					}) : null,
-					view === "contacts" ? (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+					view === "groups" ? null : view === "contacts" ? (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
 						(0, react_jsx_runtime.jsxs)("div", {
 							className: SkillContactsBrowser_module_css_default.subtabs,
 							children: [(0, react_jsx_runtime.jsx)("button", {

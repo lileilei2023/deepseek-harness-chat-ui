@@ -17,7 +17,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import {
   ANIMAL_AVATARS, EMPTY_SKILL_CHAT_STATE, activeHarnessSession, defaultPersona, ensurePersonas,
-  migrateLegacyState, roomForSession, type AutomationDefinition, type ChatRoom, type RoomSession,
+  migrateLegacyState, orderRooms, roomForSession, type AutomationDefinition, type ChatRoom, type RoomSession,
   type SkillChatState, type SkillPersona,
 } from './model.ts'
 import type {} from './shell/slots.ts'
@@ -26,6 +26,7 @@ import { avatarDataUri } from './ui/avatar.tsx'
 // Token layer first: every module stylesheet below resolves its colours, type
 // steps and radii from it, and the dark scheme is a token swap alone.
 import './theme.css'
+import { en, zh, type SkillChatKey } from './locales.ts'
 import css from './SkillContactsBrowser.module.css'
 
 type View = 'chats' | 'contacts' | 'automations'
@@ -72,6 +73,7 @@ export interface SkillContact {
   readonly sourceLabel: string
   /** Short provenance badge; falls back to the source discriminator. */
   readonly sourceShort?: string
+  readonly path?: string
   readonly invocable: boolean
   readonly modelInvocable: boolean
   readonly plugin?: string
@@ -124,6 +126,7 @@ interface SkillContactsInjected {
   loadState: (signal: AbortSignal) => Promise<SkillChatState>
   saveState: (state: SkillChatState, signal: AbortSignal) => Promise<void>
   runAutomation: (automationId: string, signal: AbortSignal) => Promise<{ readonly sessionId: SessionId; readonly state: SkillChatState }>
+  linkSkill: (path: string, name: string, signal: AbortSignal) => Promise<{ readonly name: string; readonly target: string }>
   browseProject: (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => Promise<ProjectDirectoryListing>
   readProjectFile: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<ProjectFilePreview>
   openTerminal: (sessionId: SessionId, workspaceId: WorkspaceId, signal: AbortSignal) => Promise<TerminalSnapshot>
@@ -273,6 +276,22 @@ function store(key: string, value: unknown): void {
  * @param value - epoch milliseconds.
  * @returns the shortest label that still disambiguates.
  */
+/**
+ * Translator for everything outside the browser component.
+ *
+ * `t` arrives as a prop, which reaches `SkillContactsBrowser` but not the two
+ * slot-mounted siblings the Host renders elsewhere, nor the helpers defined at
+ * module scope. The Host stamps the chosen locale on `<html lang>`, so reading
+ * it there gives the same answer without threading a prop through every one of
+ * these call sites.
+ * @param key - the message key.
+ * @returns the localized string, falling back to Chinese.
+ */
+function tr(key: SkillChatKey): string {
+  const table = document.documentElement.lang.toLowerCase().startsWith('en') ? en : zh
+  return table[key] ?? zh[key]
+}
+
 function roomTime(value: number): string {
   const then = new Date(value)
   const now = new Date()
@@ -353,7 +372,7 @@ function roomGroup(room: ChatRoom, contacts: readonly SkillContact[]): ContactGr
 
 function generatedGroupPrompt(name: string, members: readonly SkillContact[]): string {
   const roster = members.map(member => `- ${member.name}：${member.description}`).join('\n')
-  return `你是「${name || '协作群组'}」的协调者。根据用户目标组织以下 Skill 协作，优先给出明确、可执行且可验证的结果。\n\n成员能力：\n${roster}\n\n工作规则：没有明确 @ 时由协调者拆解任务并选择合适成员；有 @ 时优先由指定成员处理；不要声称发生了真实并行执行。`
+  return `你是「${name || tr('collabGroup')}」的协调者。根据用户目标组织以下 Skill 协作，优先给出明确、可执行且可验证的结果。\n\n成员能力：\n${roster}\n\n工作规则：没有明确 @ 时由协调者拆解任务并选择合适成员；有 @ 时优先由指定成员处理；不要声称发生了真实并行执行。`
 }
 
 function GroupAvatar({ avatarId, label, small = false }: { readonly avatarId: string; readonly label: string; readonly small?: boolean }): React.JSX.Element {
@@ -415,13 +434,13 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
   // unlabelled glyphs competing with three text buttons made the room header
   // read as a toolbar; behind one labelled entry they read as what they are.
   const workbenchItems: readonly { readonly tool: ProjectToolKind, readonly label: string, readonly icon: React.JSX.Element }[] = [
-    { tool: 'files', label: '项目文件', icon: <IconFolderOpenOutline16/> },
-    { tool: 'terminal', label: '终端', icon: <IconCodeOutline16/> },
-    { tool: 'diff', label: '查看 Diff', icon: <IconBranchOutline16/> },
-    { tool: 'browser', label: '浏览器', icon: <IconGlobeOutline14/> },
+    { tool: 'files', label: tr('projectFiles'), icon: <IconFolderOpenOutline16/> },
+    { tool: 'terminal', label: tr('terminalLabel'), icon: <IconCodeOutline16/> },
+    { tool: 'diff', label: tr('viewDiff'), icon: <IconBranchOutline16/> },
+    { tool: 'browser', label: tr('browserLabel'), icon: <IconGlobeOutline14/> },
   ]
   const detail = room.type === 'group'
-    ? `${room.memberIds.length} 名成员 · ${bridge.coordinatorName ?? '协调者'} 协调`
+    ? `${room.memberIds.length} 名成员 · ${bridge.coordinatorName ?? tr('coordinator')} 协调`
     : `${bridge.workspaceTitle} · 直接对话`
   return <div className={css.headerTools}>
     <span className={css.headerIdentity}>
@@ -430,17 +449,17 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
     </span>
       <span className={css.headerActionsCluster}>
       <span className={css.headerMenuWrap}>
-        <button className={css.headerTextButton} type="button" aria-expanded={workbenchOpen} onClick={() => { setWorkbenchOpen(open => !open) }}>工作台</button>
-        {workbenchOpen ? <span className={css.headerMenu}>{workbenchItems.map(item => <button type="button" key={item.tool} onClick={() => { setWorkbenchOpen(false); bridge.onProjectTool(item.tool) }}>{item.icon}<span>{item.label}</span></button>)}<span className={css.headerMenuSep}/><button type="button" onClick={() => { setWorkbenchOpen(false); bridge.onTemporaryChat() }}><IconNewChatOutline16/><span>临时对话</span></button></span> : null}
+        <button className={css.headerTextButton} type="button" aria-expanded={workbenchOpen} onClick={() => { setWorkbenchOpen(open => !open) }}>{tr('workbench')}</button>
+        {workbenchOpen ? <span className={css.headerMenu}>{workbenchItems.map(item => <button type="button" key={item.tool} onClick={() => { setWorkbenchOpen(false); bridge.onProjectTool(item.tool) }}>{item.icon}<span>{item.label}</span></button>)}<span className={css.headerMenuSep}/><button type="button" onClick={() => { setWorkbenchOpen(false); bridge.onTemporaryChat() }}><IconNewChatOutline16/><span>{tr('tempChat')}</span></button></span> : null}
       </span>
         <span className={css.headerDivider}/>
         {bridge.headerActions}
-        {room.type === 'group' ? <button className={css.headerTextButton} type="button" onClick={bridge.onSettings}>成员与职能</button> : null}
+        {room.type === 'group' ? <button className={css.headerTextButton} type="button" onClick={bridge.onSettings}>{tr('membersAndRoles')}</button> : null}
       <span className={css.headerMenuWrap}>
         <button className={css.headerTextButton} type="button" aria-expanded={historyOpen} onClick={() => { setHistoryOpen(open => !open) }}>历史 {history.length}</button>
-        {historyOpen ? <span className={css.headerMenu}>{history.map(item => { const current = item.harnessSessionId === sessionId; return <button type="button" data-active={current} disabled={current} key={item.roomSessionId} onClick={() => { bridge.onHistory(item); setHistoryOpen(false) }}><span>{item.title}</span><small>{current ? '当前对话' : new Date(item.updatedAt).toLocaleString()}</small></button> })}{history.length <= 1 ? <span className={css.headerMenuHint}>这个房间还只有一段对话。用「＋ 新对话」开始新的一段，旧的会留在这里。</span> : null}</span> : null}
+        {historyOpen ? <span className={css.headerMenu}>{history.map(item => { const current = item.harnessSessionId === sessionId; return <button type="button" data-active={current} disabled={current} key={item.roomSessionId} onClick={() => { bridge.onHistory(item); setHistoryOpen(false) }}><span>{item.title}</span><small>{current ? tr('currentChat') : new Date(item.updatedAt).toLocaleString()}</small></button> })}{history.length <= 1 ? <span className={css.headerMenuHint}>{tr('historySingleHint')}</span> : null}</span> : null}
       </span>
-      <Button className={css.headerNewButton} variant="primary" size="small" onClick={bridge.onNewSession}>＋ 新对话</Button>
+      <Button className={css.headerNewButton} variant="primary" size="small" onClick={bridge.onNewSession}>{tr('newConversation')}</Button>
     </span>
   </div>
 }
@@ -518,11 +537,11 @@ function DiffView({ text }: { readonly text: string }): React.JSX.Element {
   const changes = lines.filter(line => line.kind === 'add' || line.kind === 'remove').length
   const patched = lines.some(line => line.kind === 'file' || line.kind === 'hunk')
   if (text.includes('__DSCHAT_NO_REPO__')) {
-    return <EmptyState className={css.drawerEmpty} title="这个项目不在 Git 仓库里">「查看 Diff」比较的是工作区里未提交的改动，需要项目本身是一个 Git 仓库。</EmptyState>
+    return <EmptyState className={css.drawerEmpty} title="这个项目不在 Git 仓库里">{tr('diffNeedsGit')}</EmptyState>
   }
   // Without a patch there is nothing to colour, and dumping the raw preamble —
   // a prompt echo, or git's own usage text — is worse than saying so plainly.
-  if (!patched) return <EmptyState className={css.drawerEmpty} title="没有未提交的改动">当前工作区是干净的。</EmptyState>
+  if (!patched) return <EmptyState className={css.drawerEmpty} title="没有未提交的改动">{tr('emptyWorkspace')}</EmptyState>
   return <div className={css.diffView}>
     <div className={css.diffSummary}>{changes} 行改动</div>
     <div className={css.diffBody}>
@@ -542,7 +561,7 @@ function fileSize(bytes: number): string {
 }
 
 function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
-  const title = props.tool === 'files' ? '项目文件' : props.tool === 'terminal' ? '终端' : props.tool === 'diff' ? '代码变更' : '浏览器'
+  const title = props.tool === 'files' ? tr('projectFiles') : props.tool === 'terminal' ? tr('terminalLabel') : props.tool === 'diff' ? '代码变更' : tr('browserLabel')
   return <Drawer className={css.workbenchDrawer} label={title} onClose={props.onClose}>
     <WorkbenchPanel>
       <header className={css.workbenchHeader}>
@@ -565,24 +584,24 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
             </>
           })()}</nav>
           <div className={css.projectFileList}>
-            {props.error !== null ? <div className={css.status}>{props.error}</div> : props.listing === null ? <div className={css.status}>正在读取目录…</div> : <>
-              {props.listing.parent === undefined ? null : <button type="button" onClick={() => { props.onBrowse(props.listing?.parent) }}><IconFolderOpenOutline16/><span>.. 返回上级</span></button>}
+            {props.error !== null ? <div className={css.status}>{props.error}</div> : props.listing === null ? <div className={css.status}>{tr('readingDir')}</div> : <>
+              {props.listing.parent === undefined ? null : <button type="button" onClick={() => { props.onBrowse(props.listing?.parent) }}><IconFolderOpenOutline16/><span>{tr('backParent')}</span></button>}
               {props.listing.entries.filter(entry => !entry.hidden).toSorted((left, right) => left.kind === right.kind ? left.name.localeCompare(right.name) : left.kind === 'directory' ? -1 : 1).map(entry => <button type="button" data-selected={props.file?.path === entry.path || undefined} key={entry.path} onClick={() => { if (entry.kind === 'directory') props.onBrowse(entry.path); else props.onPreviewFile(entry.path) }}>{entry.kind === 'directory' ? <IconFolderOpenOutline16/> : <IconCodeOutline16/>}<span>{entry.name}</span></button>)}
             </>}
           </div>
         </div>
         <div className={css.filePreview}>
-          {props.file === null ? <div className={css.drawerEmpty}>选择文件即可在这里预览</div> : <><div className={css.filePreviewMeta}><strong>{props.file.name}</strong><small>{props.file.language} · {fileSize(props.file.size)}{props.file.truncated ? ' · 已截断' : ''}</small></div>{props.file.binary ? <div className={css.drawerEmpty}>这是二进制文件，无法直接预览。</div> : <div className={css.filePreviewBody}>{(props.file.content ?? '').split('\n').map((line, index) => <div className={css.codeLine} key={index}><span className={css.codeLineNo}>{index + 1}</span><span className={css.codeLineText}>{line || '\u00a0'}</span></div>)}</div>}</>}
+          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <><div className={css.filePreviewMeta}><strong>{props.file.name}</strong><small>{props.file.language} · {fileSize(props.file.size)}{props.file.truncated ? tr('truncated') : ''}</small></div>{props.file.binary ? <div className={css.drawerEmpty}>{tr('binaryFile')}</div> : <div className={css.filePreviewBody}>{(props.file.content ?? '').split('\n').map((line, index) => <div className={css.codeLine} key={index}><span className={css.codeLineNo}>{index + 1}</span><span className={css.codeLineText}>{line || '\u00a0'}</span></div>)}</div>}</>}
         </div>
       </div> : null}
       {props.tool === 'diff' ? <div className={css.diffWorkbench}>
         {props.error !== null ? <div className={css.status}>{props.error}</div>
-          : props.terminalBusy && props.terminal === null ? <div className={css.status}>正在读取改动…</div>
+          : props.terminalBusy && props.terminal === null ? <div className={css.status}>{tr('readingDiff')}</div>
           : <DiffView text={props.terminal?.text ?? ''}/>}
       </div> : null}
       {props.tool === 'terminal' ? <div className={css.terminalWorkbench}>
-        <pre className={css.terminalOutput} ref={element => { if (element !== null) element.scrollTop = element.scrollHeight }}>{props.error ?? props.terminal?.text ?? (props.terminalBusy ? '正在启动终端…' : '终端尚未启动')}</pre>
-        {props.tool === 'terminal' ? <form className={css.terminalComposer} onSubmit={event => { event.preventDefault(); props.onTerminalSubmit() }}><span>$</span><input value={props.terminalCommand} onChange={event => { props.onTerminalCommand(event.target.value) }} placeholder="输入命令，例如 pnpm test…" aria-label="终端命令" autoComplete="off" spellCheck={false} autoFocus/><button type="submit" disabled={props.terminalBusy || props.terminal === null}>运行</button></form> : <div className={css.workbenchFootnote}>显示当前项目的真实 `git diff` 输出。</div>}
+        <pre className={css.terminalOutput} ref={element => { if (element !== null) element.scrollTop = element.scrollHeight }}>{props.error ?? props.terminal?.text ?? (props.terminalBusy ? tr('startingTerminal') : tr('terminalIdle'))}</pre>
+        {props.tool === 'terminal' ? <form className={css.terminalComposer} onSubmit={event => { event.preventDefault(); props.onTerminalSubmit() }}><span>$</span><input value={props.terminalCommand} onChange={event => { props.onTerminalCommand(event.target.value) }} placeholder="输入命令，例如 pnpm test…" aria-label="终端命令" autoComplete="off" spellCheck={false} autoFocus/><button type="submit" disabled={props.terminalBusy || props.terminal === null}>{tr('runLabel')}</button></form> : <div className={css.workbenchFootnote}>{tr('diffExplainer')}</div>}
       </div> : null}
       {props.tool === 'browser' ? <div className={css.browserWorkbench}>
         <form className={css.browserBar} onSubmit={event => { event.preventDefault(); props.onBrowserNavigate(props.browserDraft) }}>
@@ -590,10 +609,10 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
           <button type="button" disabled={!props.canGoForward} onClick={props.onBrowserForward}>→</button>
           <button type="button" onClick={props.onBrowserRefresh}>↻</button>
           <input value={props.browserDraft} onChange={event => { props.onBrowserDraft(event.target.value) }} aria-label="浏览器地址"/>
-          <button type="submit">打开</button>
+          <button type="submit">{tr('openLabel')}</button>
         </form>
         <iframe key={props.browserKey} className={css.browserFrame} src={props.browserUrl} title="项目浏览器预览" sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"/>
-        <div className={css.workbenchFootnote}>若目标页面禁止嵌入，可在新窗口打开：<a href={props.browserUrl} target="_blank" rel="noreferrer">{props.browserUrl}</a></div>
+        <div className={css.workbenchFootnote}>{tr('embedBlocked')}<a href={props.browserUrl} target="_blank" rel="noreferrer">{props.browserUrl}</a></div>
       </div> : null}
     </WorkbenchPanel>
   </Drawer>
@@ -612,9 +631,9 @@ interface SidecarDrawerProps {
 
 function SidecarDrawer(props: SidecarDrawerProps): React.JSX.Element {
   return <Drawer className={css.sidecarDrawer} label="临时对话" onClose={props.onClose}>
-    <header className={css.sidecarHeader}><span><strong>临时对话</strong><small>基于「{props.roomTitle}」当前上下文，不影响主会话</small></span><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={props.onClose}>×</IconButton></header>
-    <div className={css.sidecarMessages}>{props.messages.length === 0 ? <EmptyState className={css.sidecarWelcome} title="开一条旁路思路">可以追问、比较方案或验证细节；主对话会保持原位。</EmptyState> : props.messages.map(message => <ChatBubble className={css.sidecarMessage} role={message.role} key={message.id}>{message.text}</ChatBubble>)}{props.busy ? <div className={css.sidecarThinking}>正在思考…</div> : null}{props.error === null ? null : <div className={css.sidecarError}>{props.error}</div>}</div>
-    <form className={css.sidecarComposer} onSubmit={event => { event.preventDefault(); props.onSubmit() }}><textarea value={props.draft} onChange={event => { props.onDraft(event.target.value) }} placeholder="在当前上下文旁边继续问…" aria-label="旁路提问" autoComplete="off"/><Button variant="primary" type="submit" disabled={props.busy || props.draft.trim() === ''}>发送</Button></form>
+    <header className={css.sidecarHeader}><span><strong>{tr('tempChat')}</strong><small>基于「{props.roomTitle}」当前上下文，不影响主会话</small></span><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={props.onClose}>×</IconButton></header>
+    <div className={css.sidecarMessages}>{props.messages.length === 0 ? <EmptyState className={css.sidecarWelcome} title="开一条旁路思路">{tr('sideChatHint')}</EmptyState> : props.messages.map(message => <ChatBubble className={css.sidecarMessage} role={message.role} key={message.id}>{message.text}</ChatBubble>)}{props.busy ? <div className={css.sidecarThinking}>{tr('thinking')}</div> : null}{props.error === null ? null : <div className={css.sidecarError}>{props.error}</div>}</div>
+    <form className={css.sidecarComposer} onSubmit={event => { event.preventDefault(); props.onSubmit() }}><textarea value={props.draft} onChange={event => { props.onDraft(event.target.value) }} placeholder="在当前上下文旁边继续问…" aria-label="旁路提问" autoComplete="off"/><Button variant="primary" type="submit" disabled={props.busy || props.draft.trim() === ''}>{tr('send')}</Button></form>
   </Drawer>
 }
 
@@ -622,6 +641,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
+    linkSkill,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
   const sessions = useSessions(value => value)
@@ -650,6 +670,12 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [createOpen, setCreateOpen] = useState(false)
   const [groupMoreOpen, setGroupMoreOpen] = useState(false)
   const [archiveConfirm, setArchiveConfirm] = useState<string | null>(null)
+  const [dragRoom, setDragRoom] = useState<string | null>(null)
+  const [dropRoom, setDropRoom] = useState<string | null>(null)
+  const [roomMenu, setRoomMenu] = useState<{ readonly roomId: string; readonly x: number; readonly y: number } | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
+  const [rootBusy, setRootBusy] = useState<string | null>(null)
   const [groupName, setGroupName] = useState('')
   const [groupPrompt, setGroupPrompt] = useState('')
   const [groupAvatar, setGroupAvatar] = useState('bear-honey')
@@ -707,7 +733,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     ? currentWorkspace
     : workspaces.items.find(workspace => workspace.workspaceId === activeRoom.workspaceId) ?? currentWorkspace,
   [activeRoom, currentWorkspace, workspaces.items])
-  const visibleRooms = useMemo(() => state.rooms.filter(room => room.workspaceId === workspaceId && room.archivedAt === undefined).sort((a, b) => b.updatedAt - a.updatedAt), [state.rooms, workspaceId])
+  const archivedRooms = useMemo(() => state.rooms.filter(room => room.workspaceId === workspaceId && room.archivedAt !== undefined).sort((left, right) => (right.archivedAt ?? 0) - (left.archivedAt ?? 0)), [state.rooms, workspaceId])
+  const visibleRooms = useMemo(() => orderRooms(state.rooms.filter(room => room.workspaceId === workspaceId && room.archivedAt === undefined)), [state.rooms, workspaceId])
   const filtered = useMemo(() => allContacts.filter(skill => matches(skill, deferredQuery, state.personas)), [allContacts, deferredQuery, state.personas])
   const frequent = useMemo(() => { const pinned = filtered.filter(contact => favorites.includes(contact.id)); return pinned.length > 0 ? pinned : filtered.slice(0, 8) }, [favorites, filtered])
   const visibleContacts = contactList === 'frequent' && deferredQuery.length === 0 ? frequent : filtered
@@ -860,9 +887,9 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const welcome = headline.parentElement?.parentElement
     if (welcome === null || welcome === undefined) return
     const original = headline.textContent
-    headline.textContent = activeRoom.type === 'general' ? '开始一段新对话' : `和「${activeRoom.title}」一起开始`
+    headline.textContent = activeRoom.type === 'general' ? t('startNewChat') : `和「${activeRoom.title}」一起开始`
     welcome.dataset.skillChatWelcome = activeRoom.type
-    welcome.dataset.skillChatHint = activeRoom.type === 'general' ? '直接输入问题，不调用任何 Skill' : activeRoom.type === 'group' ? '输入消息，或用 @ 指定群组成员' : '输入消息，当前 Skill 会协助处理'
+    welcome.dataset.skillChatHint = activeRoom.type === 'general' ? t('plainChatHint') : activeRoom.type === 'group' ? t('composerGroup') : t('composerSkill')
     return () => {
       headline.textContent = original
       delete welcome.dataset.skillChatWelcome
@@ -931,7 +958,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
     const now = Date.now()
     const room: ChatRoom = {
-      roomId: `room:general:${randomUUID()}`, type: 'general', workspaceId, workspaceIds: [workspaceId], title: '普通对话',
+      roomId: `room:general:${randomUUID()}`, type: 'general', workspaceId, workspaceIds: [workspaceId], title: t('plainChat'),
       memberIds: [], coordinatorId: '', sessionIds: [], createdAt: now, updatedAt: now,
     }
     updateState(current => ({ ...current, rooms: [room, ...current.rooms] }))
@@ -980,6 +1007,72 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setEditingPersona(false)
   }
 
+  /** Pin or unpin one room. Pinning clears any manual position: the room is
+   * moving to the other band, where its old index means nothing. */
+  const togglePin = (room: ChatRoom): void => {
+    updateState(current => ({
+      ...current,
+      rooms: current.rooms.map((item) => {
+        if (item.roomId !== room.roomId) return item
+        const { pinnedAt: _pinned, order: _order, ...rest } = item
+        return room.pinnedAt === undefined ? { ...rest, pinnedAt: Date.now() } : rest
+      }),
+    }))
+  }
+
+  /**
+   * Move a dragged room in front of another, writing an explicit position for
+   * every room in the band. Numbering the whole band rather than the two rows
+   * involved keeps one drag from leaving neighbours to fall back to recency
+   * and jump around it.
+   * @param draggedId - the room being moved.
+   * @param targetId - the room it was dropped on.
+   */
+  const reorderRooms = (draggedId: string, targetId: string): void => {
+    if (draggedId === targetId) return
+    const dragged = visibleRooms.find(room => room.roomId === draggedId)
+    const target = visibleRooms.find(room => room.roomId === targetId)
+    if (dragged === undefined || target === undefined) return
+    // Bands are independent lists; dropping across them would need a pin state
+    // change the person did not ask for.
+    if ((dragged.pinnedAt === undefined) !== (target.pinnedAt === undefined)) return
+    const band = visibleRooms.filter(room => (room.pinnedAt === undefined) === (dragged.pinnedAt === undefined))
+    const without = band.filter(room => room.roomId !== draggedId)
+    const at = without.findIndex(room => room.roomId === targetId)
+    const next = [...without.slice(0, at), dragged, ...without.slice(at)]
+    const positions = new Map(next.map((room, index) => [room.roomId, index]))
+    updateState(current => ({
+      ...current,
+      rooms: current.rooms.map(item => positions.has(item.roomId) ? { ...item, order: positions.get(item.roomId) ?? 0 } : item),
+    }))
+  }
+
+  /** Bring an archived room back. The field is dropped rather than set to
+   * `undefined`: the stored document is compared by value, and a key holding
+   * `undefined` is not the same shape as no key at all. */
+  const restoreRoom = (roomId: string): void => {
+    updateState(current => ({
+      ...current,
+      rooms: current.rooms.map((item) => {
+        if (item.roomId !== roomId) return item
+        const { archivedAt: _archived, ...rest } = item
+        return { ...rest, updatedAt: Date.now() }
+      }),
+    }))
+  }
+
+  /** Remove a room and every session record that belonged to it. The Harness
+   * Sessions themselves are left alone: they are the project's history, and
+   * this only drops the chat-shaped view of them. */
+  const deleteRoom = (roomId: string): void => {
+    updateState(current => ({
+      ...current,
+      rooms: current.rooms.filter(item => item.roomId !== roomId),
+      roomSessions: current.roomSessions.filter(item => item.roomId !== roomId),
+      automations: current.automations.filter(item => item.roomId !== roomId),
+    }))
+  }
+
   const updateRoom = (roomId: string, patch: Partial<Pick<ChatRoom, 'title' | 'memberIds' | 'coordinatorId' | 'systemPrompt' | 'avatarId' | 'workspaceId' | 'workspaceIds' | 'archivedAt'>>): void => {
     updateState(current => ({ ...current, rooms: current.rooms.map(room => room.roomId === roomId ? { ...room, ...patch, updatedAt: Date.now() } : room) }))
   }
@@ -1000,7 +1093,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const timestamp = automationWhen === '' ? Date.now() : Date.parse(automationWhen)
     const interval = Math.max(1, Number.parseInt(automationInterval, 10) || 1)
     const automation: AutomationDefinition = {
-      automationId: `automation:${randomUUID()}`, name: automationName.trim() || '新自动化', workspaceId,
+      automationId: `automation:${randomUUID()}`, name: automationName.trim() || t('untitledAutomation'), workspaceId,
       roomId: activeRoom.roomId, intent: 'custom', prompt: automationPrompt.trim(), memberIds: activeRoom.memberIds,
       coordinatorId: activeRoom.coordinatorId,
       schedule: automationSchedule === 'once'
@@ -1013,7 +1106,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     try {
       await saveState(next, new AbortController().signal)
       setAutomationOpen(false); setAutomationName(''); setAutomationPrompt(''); setAutomationWhen(''); setAutomationSchedule('once'); setAutomationInterval('1'); setAutomationUnit('d')
-      setNotice('自动化已创建，可立即运行')
+      setNotice(t('automationCreated'))
     } catch (error) {
       setNotice(`自动化保存失败：${error instanceof Error ? error.message : String(error)}`)
     }
@@ -1026,7 +1119,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       const result = await runAutomationRemote(automation.automationId, abort.signal)
       replaceState(result.state)
       openSession(result.sessionId)
-      setNotice('自动化已在后台创建并启动独立会话')
+      setNotice(t('automationStarted'))
     } catch (error) {
       setNotice(`自动化运行失败：${error instanceof Error ? error.message : String(error)}`)
     }
@@ -1083,7 +1176,12 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
         return [{ id, ...identity }]
       })
       if (members.length === 0) return <GroupAvatar avatarId={room.avatarId ?? ANIMAL_AVATARS[hashOf(room.roomId) % ANIMAL_AVATARS.length] ?? 'bear-honey'} label={room.title} small={compact}/>
-      return <AvatarStack className={`${css.roomAvatarStack} ${compact ? css.roomAvatarStackCompact : ''}`} overlap={compact ? 7 : 10}>{members.map(member => <Avatar key={member.id} avatarId={member.avatar} label={member.name} size={compact ? 20 : 28}/>)}</AvatarStack>
+      // A rounded square, not a row of overlapping circles: the shape is what
+      // says "group" at 30px, the way it does in every messaging client, and
+      // four portraits in a 2x2 read as one object where 1x3 read as clutter.
+      return <span className={css.roomTile} data-count={members.length} data-compact={compact || undefined} title={room.title}>
+        {members.map(member => <Avatar key={member.id} avatarId={member.avatar} label={member.name} size={compact ? 13 : 17}/>)}
+      </span>
     }
     const contact = allContacts.find(item => item.id === room.memberIds[0])
     const identity = contact === undefined ? { name: room.title, avatar: 'fox-coral' } : displayOf(contact, 'persona', state.personas)
@@ -1145,7 +1243,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   const browseCurrentProject = (path: string | undefined): void => {
     if (activeWorkspace === undefined) {
-      setProjectListingError('请先选择项目目录')
+      setProjectListingError(t('pickProjectFirst'))
       return
     }
     const abort = new AbortController()
@@ -1239,7 +1337,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       sessionId: currentSessionId,
       room: activeRoom,
       roomSessions: state.roomSessions,
-      workspaceTitle: activeWorkspace?.title ?? '当前项目',
+      workspaceTitle: activeWorkspace?.title ?? t('currentProject'),
       ...(activeCoordinator === undefined ? {} : { coordinatorName: displayOf(activeCoordinator, 'persona', state.personas).name }),
       memberPersonas: activeMembers.map(member => {
         const display = displayOf(member, 'persona', state.personas)
@@ -1309,8 +1407,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       }
     }
     const homepage = result.homepage ?? `https://skills.sh/${result.id}`
-    const card = <div className={css.hoverProfile}><strong>{result.name}</strong><span>{result.description ?? '来自 skills.sh 的社区 Skill，可安装到当前项目。'}</span><small>{result.source} · {result.installs.toLocaleString()} 次安装</small><a href={homepage} target="_blank" rel="noreferrer">查看 skills.sh 主页 ↗</a></div>
-    return <HoverCard key={result.id} anchor={<div className={css.marketResult}><span className={css.marketAvatar}>↗</span><span className={css.copy}><strong>{result.name}</strong><small>{result.description ?? `${result.source} · ${result.installs.toLocaleString()} 次安装`}</small></span><div className={css.marketActions}><button type="button" disabled={installed !== undefined || installingId === result.id} onClick={() => { void joinExternal(result) }}>{installed !== undefined ? '已安装' : installingId === result.id ? '安装中' : '安装'}</button>{target !== undefined ? <button className={css.installJoin} type="button" disabled={included || installingId === result.id} onClick={installAndJoin}>{included ? '已加入' : installed === undefined ? '安装并加入' : '加入'}</button> : null}</div></div>} content={card} copyLabel="复制 Skill 链接" copiedLabel="已复制" copyText={homepage}/>
+    const card = <div className={css.hoverProfile}><strong>{result.name}</strong><span>{result.description ?? t('skillsShNote')}</span><small>{result.source} · {result.installs.toLocaleString()} 次安装</small><a href={homepage} target="_blank" rel="noreferrer">{t('skillsShHome')}</a></div>
+    return <HoverCard key={result.id} anchor={<div className={css.marketResult}><span className={css.marketAvatar}>↗</span><span className={css.copy}><strong>{result.name}</strong><small>{result.description ?? `${result.source} · ${result.installs.toLocaleString()} 次安装`}</small></span><div className={css.marketActions}><button type="button" disabled={installed !== undefined || installingId === result.id} onClick={() => { void joinExternal(result) }}>{installed !== undefined ? t('installedLabel') : installingId === result.id ? t('installing') : t('installLabel')}</button>{target !== undefined ? <button className={css.installJoin} type="button" disabled={included || installingId === result.id} onClick={installAndJoin}>{included ? t('joinedLabel') : installed === undefined ? t('installAndJoin') : t('joinLabel')}</button> : null}</div></div>} content={card} copyLabel="复制 Skill 链接" copiedLabel="已复制" copyText={homepage}/>
   }
 
   const roomRow = (room: ChatRoom): React.JSX.Element => {
@@ -1330,18 +1428,58 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       .sort((left, right) => right.updatedAt - left.updatedAt)[0]
     // The avatar already says what kind of room this is, so the meta slot only
     // carries what the avatar cannot: how many people are in a group.
-    const meta = room.type === 'group' ? `${room.memberIds.length} 人` : ''
+    const directContact = room.type === 'direct' ? allContacts.find(item => item.id === room.memberIds[0]) : undefined
+    const meta = room.type === 'group' ? `${room.memberIds.length} ${t('peopleCount')}` : ''
     // A fresh session is named after its room, so echoing it under the title
     // would print the same string twice; fall back to something the title does
     // not already say.
     const sessionTitle = latest?.title === room.title ? undefined : latest?.title
     const preview = running
-      ? '正在输入中…'
+      ? t('typing')
       : sessionTitle ?? (room.type === 'group'
-        ? (coordinator === undefined ? '未设置协调者' : `${displayOf(coordinator, 'persona', state.personas).name} 协调`)
-        : room.sessionIds.length > 1 ? `${room.sessionIds.length} 个会话` : '还没有消息')
-    const hover = <div className={css.hoverProfile}><strong>{room.title}</strong><span>{room.systemPrompt?.trim() || (room.type === 'group' ? '固定 Skill 团队协作空间；未指定 @ 时由协调者处理。' : '直接对话，不启用群组职能。')}</span><small>{room.sessionIds.length} 个会话{room.type === 'group' ? ` · ${room.memberIds.length} 名成员` : ''}</small><small>项目：{linked.join('、') || '未绑定'}</small></div>
-    return <HoverCard key={room.roomId} anchor={<RoomRow className={css.roomRow} selected={activeRoom?.roomId === room.roomId} onClick={() => { void openRoom(room) }}><span className={css.avatarStatusWrap}>{roomAvatar(room)}{unread > 0 ? <span className={css.unreadBadge}>{unread > 99 ? '99+' : unread}</span> : null}</span><span className={css.copy}><span className={css.nameLine}><span className={css.name}>{room.title}</span><span className={css.source}>{meta}</span></span><span className={css.description} data-running={running || undefined}>{preview}</span></span><span className={css.time}>{roomTime(room.updatedAt)}</span></RoomRow>} content={hover} copyLabel="复制会话信息" copiedLabel="已复制"/>
+        ? (coordinator === undefined ? t('noCoordinator') : `${displayOf(coordinator, 'persona', state.personas).name} ${t('coordinates')}`)
+        : room.sessionIds.length > 1
+          ? `${room.sessionIds.length} ${t('sessionCount')}`
+          // A room named after a persona says nothing about what the Skill does,
+          // so an empty direct chat borrows the Skill's own one-liner rather
+          // than reporting that nothing has happened yet.
+          : directContact?.description ?? t('noMessages'))
+    // A direct room is a conversation with one Skill, so its card is that
+    // Skill's card: the persona name alone ("湖心 2") says nothing about what
+    // it does, which is the one thing a person hovering wants to know.
+    const hover = <div className={css.hoverProfile}>
+      <strong>{room.title}</strong>
+      <span>{room.type === 'direct'
+        ? directContact?.description ?? t('directRoomFallback')
+        : room.systemPrompt?.trim() || t('groupRoomFallback')}</span>
+      {directContact === undefined ? null : <small translate="no">{t('identifier')}：{directContact.name} · {directContact.sourceLabel}</small>}
+      <small>{room.sessionIds.length} {t('sessionCount')}{room.type === 'group' ? ` · ${room.memberIds.length} ${t('memberCount')}` : ''}</small>
+      <small>{t('projectLabel')}：{linked.join('、') || t('unbound')}</small>
+    </div>
+    const pinned = room.pinnedAt !== undefined
+    return <div
+      className={css.roomRowWrap}
+      key={room.roomId}
+      data-dragging={dragRoom === room.roomId || undefined}
+      data-drop={dropRoom === room.roomId || undefined}
+      draggable
+      onDragStart={(event) => { setDragRoom(room.roomId); event.dataTransfer.effectAllowed = 'move' }}
+      onDragEnd={() => { setDragRoom(null); setDropRoom(null) }}
+      onDragOver={(event) => { if (dragRoom !== null && dragRoom !== room.roomId) { event.preventDefault(); setDropRoom(room.roomId) } }}
+      onDragLeave={() => { setDropRoom(current => current === room.roomId ? null : current) }}
+      onDrop={(event) => { event.preventDefault(); if (dragRoom !== null) reorderRooms(dragRoom, room.roomId); setDragRoom(null); setDropRoom(null) }}
+      onContextMenu={(event) => { event.preventDefault(); setRoomMenu({ roomId: room.roomId, x: event.clientX, y: event.clientY }) }}
+    >
+      <HoverCard anchor={<RoomRow className={css.roomRow} selected={activeRoom?.roomId === room.roomId} onClick={() => { void openRoom(room) }}><span className={css.avatarStatusWrap}>{roomAvatar(room)}{unread > 0 ? <span className={css.unreadBadge}>{unread > 99 ? '99+' : unread}</span> : null}</span><span className={css.copy}><span className={css.nameLine}><span className={css.name}>{room.title}</span><span className={css.source}>{meta}</span></span><span className={css.description} data-running={running || undefined}>{preview}</span></span><span className={css.time}>{pinned ? <span className={css.pinMark} title={t('pinned')}>▴</span> : null}{roomTime(room.updatedAt)}</span></RoomRow>} content={hover} copyLabel={t('copyRoom')} copiedLabel={t('copied')}/>
+      {/* Keyboard and touch reach the same actions the right-click menu holds;
+        * a drag-only or right-click-only affordance is unreachable for both. */}
+      <button
+        className={css.roomMenuButton}
+        type="button"
+        aria-label={t('roomActions')}
+        onClick={(event) => { event.stopPropagation(); const box = event.currentTarget.getBoundingClientRect(); setRoomMenu({ roomId: room.roomId, x: box.right, y: box.bottom }) }}
+      >⋯</button>
+    </div>
   }
 
   if (!wide) return <div className={css.rail}><button className={css.railButton} type="button" onClick={expandSidebar}>●</button></div>
@@ -1349,23 +1487,31 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const contactRow = (contact: SkillContact): React.JSX.Element => {
     const display = displayOf(contact, mode, state.personas)
     const homepage = contact.homepage ?? contact.repository
-    return <HoverCard key={contact.id} anchor={<button className={css.row} type="button" onClick={() => { selectContact(contact) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span className={css.copy}><span className={css.nameLine}><span className={css.name}>{display.name}</span><span className={css.source} data-source={contact.source}>{contact.sourceShort ?? (contact.source === 'harness' ? t('sourceHarnessShort') : contact.source === 'workbuddy' ? t('sourceWorkBuddyShort') : 'skills.sh')}</span></span><span className={css.description}>{mode === 'persona' ? contact.name : contact.description}</span></span>{favorites.includes(contact.id) ? <span className={css.favoriteMark}>★</span> : null}</button>} content={<div className={css.hoverProfile}><strong>{display.name}</strong><span>{contact.description}</span><small>原始 Skill：{contact.name} · {contact.sourceLabel}</small>{homepage === undefined ? null : <a href={homepage} target="_blank" rel="noreferrer">查看主页 ↗</a>}</div>} copyLabel="复制 Skill 信息" copiedLabel="已复制" copyText={homepage}/>
+    return <HoverCard key={contact.id} anchor={<button className={css.row} type="button" onClick={() => { selectContact(contact) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span className={css.copy}><span className={css.nameLine}><span className={css.name}>{display.name}</span><span className={css.source} data-source={contact.source}>{contact.sourceShort ?? (contact.source === 'harness' ? t('sourceHarnessShort') : contact.source === 'workbuddy' ? t('sourceWorkBuddyShort') : 'skills.sh')}</span></span><span className={css.description}>{mode === 'persona' ? contact.name : contact.description}</span></span>{favorites.includes(contact.id) ? <span className={css.favoriteMark}>★</span> : null}</button>} content={<div className={css.hoverProfile}><strong>{display.name}</strong><span>{contact.description}</span><small>原始 Skill：{contact.name} · {contact.sourceLabel}</small>{homepage === undefined ? null : <a href={homepage} target="_blank" rel="noreferrer">{t('viewHomepage')}</a>}</div>} copyLabel="复制 Skill 信息" copiedLabel="已复制" copyText={homepage}/>
   }
 
   return <div className={css.root} data-skill-chat-root>
     <div className={css.workspaceSection}><div className={css.workspacePicker}><button className={css.workspaceTrigger} type="button" aria-expanded={workspaceOpen} onClick={() => { setWorkspaceOpen(current => !current) }}><span className={css.workspaceIcon}>⌂</span><span>{currentWorkspace?.title ?? t('noWorkspace')}</span><span className={css.chevron}>⌄</span></button>{workspaceOpen ? <div className={css.workspaceMenu}>{workspaces.items.map(workspace => <button type="button" data-active={workspace.workspaceId === workspaceId} key={workspace.workspaceId} onClick={() => { setWorkspaceId(workspace.workspaceId); setWorkspaceOpen(false) }}><span>⌂</span><strong>{workspace.title}</strong>{workspace.workspaceId === workspaceId ? <b>✓</b> : null}</button>)}<span className={css.workspaceMenuSep}/><button type="button" onClick={() => { setWorkspaceOpen(false); void createWorkspace() }}><span>＋</span><strong>{t('addWorkspace')}</strong></button></div> : null}</div></div>
-    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'contacts', 'automations'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{item === 'automations' ? '自动化' : t(item)}</button>)}</div><span className={css.createWrap}><button className={css.addGroup} type="button" aria-label="新建" aria-expanded={createOpen} onClick={() => { setCreateOpen(open => !open) }}>＋</button>{createOpen ? <div className={css.createMenu}>{[{ id: 'chat', label: '普通对话', hint: '不启用 Skill，直接与模型交流', run: () => { void beginGeneralChat() } }, { id: 'group', label: '群聊', hint: '把常用 Skill 组织成固定协作空间', run: openGroupCreator }, { id: 'workspace', label: '项目目录', hint: '添加一个新的工作区', run: () => { void createWorkspace() } }].map(entry => <button type="button" key={entry.id} onClick={() => { setCreateOpen(false); entry.run() }}><strong>{entry.label}</strong><small>{entry.hint}</small></button>)}</div> : null}</span></div>
-    <div className={css.searchWrap}><input className={css.search} value={query} onChange={event => { setQuery(event.target.value) }} placeholder={view === 'contacts' ? t('searchAll') : '搜索对话…'} aria-label={view === 'contacts' ? t('searchAll') : '搜索对话'} autoComplete="off" spellCheck={false} type="search"/></div>
+    <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'contacts', 'automations'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{item === 'automations' ? t('automations') : t(item)}</button>)}</div><span className={css.createWrap}><button className={css.addGroup} type="button" aria-label="新建" aria-expanded={createOpen} onClick={() => { setCreateOpen(open => !open) }}>＋</button>{createOpen ? <div className={css.createMenu}>{[{ id: 'chat', label: t('plainChat'), hint: t('noSkillMode'), run: () => { void beginGeneralChat() } }, { id: 'group', label: t('groupChat'), hint: t('organizeSkills'), run: openGroupCreator }, { id: 'workspace', label: t('projectDir'), hint: t('addWorkspaceHint'), run: () => { void createWorkspace() } }].map(entry => <button type="button" key={entry.id} onClick={() => { setCreateOpen(false); entry.run() }}><strong>{entry.label}</strong><small>{entry.hint}</small></button>)}</div> : null}</span></div>
+    <div className={css.searchWrap}><input className={css.search} value={query} onChange={event => { setQuery(event.target.value) }} placeholder={view === 'contacts' ? t('searchAll') : t('searchRoomsPlaceholder')} aria-label={view === 'contacts' ? t('searchAll') : t('searchRooms')} autoComplete="off" spellCheck={false} type="search"/></div>
     {renderSlot('ds-chat.sidebar.before-rooms', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
     {notice !== null ? <button className={css.notice} type="button" onClick={() => { setNotice(null) }}>{notice} ×</button> : null}
 
     {view === 'contacts' ? <><div className={css.subtabs}><button data-active={contactList === 'frequent'} onClick={() => { setContactList('frequent') }}>{t('frequentContacts')}</button><button data-active={contactList === 'all'} onClick={() => { setContactList('all') }}>{t('allContacts')}</button></div><div className={css.modeBar}><span>{t('displayMode')}</span><button type="button" data-active={mode === 'persona'} onClick={() => { setMode('persona') }}>{t('personaMode')}</button><button type="button" data-active={mode === 'raw'} onClick={() => { setMode('raw') }}>{t('rawMode')}</button></div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : visibleContacts.map(contactRow)}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>
-      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>按计划在目标对话中创建独立会话</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>＋ 新建</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? '单次' : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? '等待运行' : automation.status === 'paused' ? '已暂停' : automation.status === 'completed' ? '已完成' : '失败'}</span><button type="button" onClick={() => { void runAutomation(automation) }}>立即运行</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? '恢复' : '暂停'}</button></footer></article>)}<div className={css.templateHeading}>从模板开始</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></div></>
+      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>{t('automationHint')}</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>{t('newItem')}</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? t('onceLabel') : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? t('waitingRun') : automation.status === 'paused' ? t('pausedLabel') : automation.status === 'completed' ? t('completedLabel') : t('failedLabel')}</span><button type="button" onClick={() => { void runAutomation(automation) }}>{t('runNow')}</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? t('restoreLabel') : t('pauseLabel')}</button></footer></article>)}<div className={css.templateHeading}>{t('fromTemplate')}</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></div></>
       : <><div className={css.roomList}>{roomResults.length === 0
         ? (query.trim() === ''
-          ? <EmptyState className={css.emptyCard} title="还没有对话">用右上角的 ＋ 开始一段普通对话，或建一个 Skill 群组。</EmptyState>
-          : <EmptyState className={css.emptyCard} title="没有匹配的对话">换个关键词，或到「联系人」里找 Skill。</EmptyState>)
-        : roomResults.map(roomRow)}</div></>}
+          ? <EmptyState className={css.emptyCard} title="还没有对话">{t('emptyRoomsHint')}</EmptyState>
+          : <EmptyState className={css.emptyCard} title="没有匹配的对话">{t('searchEmptyHint')}</EmptyState>)
+        : roomResults.map(roomRow)}
+      {archivedRooms.length === 0 ? null : <>
+        <button className={css.archivedToggle} type="button" onClick={() => { setShowArchived(current => !current) }}>{t('archivedRooms')} · {archivedRooms.length}<span>{showArchived ? '⌃' : '⌄'}</span></button>
+        {showArchived ? archivedRooms.map(room => <div className={css.archivedRow} key={room.roomId}>
+          <span>{room.title}</span>
+          <button type="button" onClick={() => { restoreRoom(room.roomId) }}>{t('restore')}</button>
+          <button className={css.menuDanger} type="button" onClick={() => { setDeleteConfirm(room.roomId) }}>{t('delete')}</button>
+        </div>) : null}
+      </>}</div></>}
     {renderSlot('ds-chat.sidebar.after-rooms', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
     {/* Wrapped because the slot renders a bare div: there is no attribute or
       * class on it to hang the pinning and the divider off. */}
@@ -1374,29 +1520,29 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     {activeRoom !== undefined && currentSessionId !== undefined && currentSessionBlank ? <aside className={css.blankRoomDock}><SkillChatHeaderTools sessionId={currentSessionId}/></aside> : null}
     {activeRoom === undefined ? null : renderSlot('ds-chat.room.drawer', { roomId: activeRoom.roomId, ...(currentSessionId === undefined ? {} : { sessionId: currentSessionId }) })}
 
-    {selected !== null ? <Dialog className={`${css.panel} ${css.skillProfileDialog}`} label="Skill 资料" onClose={() => { setSelected(null) }}><div className={css.panelTop}><AnimalAvatar avatarId={personaAvatar} label={personaName}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setSelected(null) }}>×</IconButton></div>{editingPersona ? <><label className={css.field}><span>昵称</span><input value={personaName} maxLength={24} onChange={event => { setPersonaName(event.target.value) }}/></label><div className={css.avatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={personaAvatar === avatarId} key={avatarId} onClick={() => { setPersonaAvatar(avatarId) }}><AnimalAvatar avatarId={avatarId} label={avatarId}/></button>)}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={savePersona}>保存身份</Button><Button className={css.secondaryAction} onClick={resetPersona}>恢复默认</Button></div></> : <><h2 className={css.panelTitle}>{displayOf(selected, mode, state.personas).name}</h2><div className={css.role}>{state.personas[selected.id]?.roleLabel}</div><p className={css.bio}>{selected.description}</p>
-      {(state.personas[selected.id]?.capabilities ?? []).length === 0 ? null : <div className={css.profileSection}><h3>擅长什么</h3><div className={css.capabilityChips}>{(state.personas[selected.id]?.capabilities ?? []).map(item => <span key={item}>{item}</span>)}</div></div>}
-      {selected.whenToUse === undefined ? null : <div className={css.profileSection}><h3>什么时候找 TA</h3><p className={css.profileNote}>{selected.whenToUse}</p></div>}
+    {selected !== null ? <Dialog className={`${css.panel} ${css.skillProfileDialog}`} label={t('skillProfile')} onClose={() => { setSelected(null) }}><div className={css.panelTop}><AnimalAvatar avatarId={personaAvatar} label={personaName}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setSelected(null) }}>×</IconButton></div>{editingPersona ? <><label className={css.field}><span>{t('nicknameLabel')}</span><input value={personaName} maxLength={24} onChange={event => { setPersonaName(event.target.value) }}/></label><div className={css.avatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={personaAvatar === avatarId} key={avatarId} onClick={() => { setPersonaAvatar(avatarId) }}><AnimalAvatar avatarId={avatarId} label={avatarId}/></button>)}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={savePersona}>{t('saveIdentity')}</Button><Button className={css.secondaryAction} onClick={resetPersona}>{t('resetDefault')}</Button></div></> : <><h2 className={css.panelTitle}>{displayOf(selected, mode, state.personas).name}</h2><div className={css.role}>{state.personas[selected.id]?.roleLabel}</div><p className={css.bio}>{selected.description}</p>
+      {(state.personas[selected.id]?.capabilities ?? []).length === 0 ? null : <div className={css.profileSection}><h3>{t('goodAt')}</h3><div className={css.capabilityChips}>{(state.personas[selected.id]?.capabilities ?? []).map(item => <span key={item}>{item}</span>)}</div></div>}
+      {selected.whenToUse === undefined ? null : <div className={css.profileSection}><h3>{t('whenToFind')}</h3><p className={css.profileNote}>{selected.whenToUse}</p></div>}
       {(() => {
         const inRooms = visibleRooms.filter(room => room.type === 'group' && room.memberIds.includes(selected.id))
-        return inRooms.length === 0 ? null : <div className={css.profileSection}><h3>在这些群组里</h3><div className={css.profileRooms}>{inRooms.map(room => <button type="button" key={room.roomId} onClick={() => { setSelected(null); void openRoom(room) }}>{roomAvatar(room, true)}<span>{room.title}</span><small>{room.memberIds.length} 人</small></button>)}</div></div>
+        return inRooms.length === 0 ? null : <div className={css.profileSection}><h3>{t('inTheseGroups')}</h3><div className={css.profileRooms}>{inRooms.map(room => <button type="button" key={room.roomId} onClick={() => { setSelected(null); void openRoom(room) }}>{roomAvatar(room, true)}<span>{room.title}</span><small>{room.memberIds.length} 人</small></button>)}</div></div>
       })()}
-      <div className={css.originCard}><span>原始 Skill</span><strong>{selected.name}</strong><small>{selected.sourceLabel}</small></div>
-      {selected.homepage === undefined && selected.repository === undefined ? null : <div className={css.profileLinks}>{selected.homepage === undefined ? null : <a href={selected.homepage} target="_blank" rel="noreferrer">主页 ↗</a>}{selected.repository === undefined ? null : <a href={selected.repository} target="_blank" rel="noreferrer">仓库 ↗</a>}</div>}<div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { void beginContactChat(selected) }}>继续对话</Button><Button className={css.secondaryAction} onClick={() => { setEditingPersona(true) }}>编辑昵称与头像</Button><Button className={css.secondaryAction} onClick={() => { toggleFavorite(selected.id) }}>{favorites.includes(selected.id) ? `★ ${t('frequentContact')}` : `☆ ${t('addFrequent')}`}</Button></div></>}</Dialog> : null}
+      <div className={css.originCard}><span>{t('originalSkill')}</span><strong>{selected.name}</strong><small>{selected.sourceLabel}</small></div>
+      {selected.homepage === undefined && selected.repository === undefined ? null : <div className={css.profileLinks}>{selected.homepage === undefined ? null : <a href={selected.homepage} target="_blank" rel="noreferrer">{t('homepageLink')}</a>}{selected.repository === undefined ? null : <a href={selected.repository} target="_blank" rel="noreferrer">{t('repositoryLink')}</a>}</div>}<div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { void beginContactChat(selected) }}>{t('continueChat')}</Button><Button className={css.secondaryAction} onClick={() => { setEditingPersona(true) }}>{t('editIdentity')}</Button><Button className={css.secondaryAction} onClick={() => { toggleFavorite(selected.id) }}>{favorites.includes(selected.id) ? `★ ${t('frequentContact')}` : `☆ ${t('addFrequent')}`}</Button>{selected.source !== 'workbuddy' || selected.path === undefined ? null : <Button className={css.secondaryAction} disabled={rootBusy === selected.name} onClick={() => { const path = selected.path; if (path === undefined) return; setRootBusy(selected.name); void linkSkill(path, selected.name, new AbortController().signal).then(() => { setNotice(`${t('enabledSkill')}：${selected.name}`); setContactsRevision(current => current + 1) }, (error: unknown) => { setNotice(`${t('enableSkillFailed')}：${error instanceof Error ? error.message : String(error)}`) }).finally(() => { setRootBusy(null) }) }}>{t('enableSkill')}</Button>}</div></>}</Dialog> : null}
 
     {groupOpen ? <Dialog className={css.groupDialog} label={t('newGroup')} onClose={() => { setGroupOpen(false) }}>
         <div className={css.groupHeader}><div><h2>{t('newGroup')}</h2><p>{t('groupWorkspace').replace('{workspace}', currentWorkspace?.title ?? t('noWorkspace'))}</p></div><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setGroupOpen(false) }}>×</IconButton></div>
-        <div className={css.groupBody}><div className={css.groupFormGrid}><div className={css.groupIdentityEditor}><GroupAvatar avatarId={groupAvatar} label={groupName || '新群组'}/><div><strong>群组头像</strong><small>独立圆形标识，与成员 Skill 清晰区分</small></div></div>
-          <label className={css.field}><span>{t('groupName')}</span><input value={groupName} onChange={event => { setGroupName(event.target.value) }} placeholder={t('groupNamePlaceholder')}/></label></div><button className={css.groupMore} type="button" aria-expanded={groupMoreOpen} onClick={() => { setGroupMoreOpen(open => !open) }}><span>更多设置</span><small>头像、群组职能与项目目录</small><b>{groupMoreOpen ? '⌃' : '⌄'}</b></button>{groupMoreOpen ? <div className={css.groupMorePanel}><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={groupAvatar === avatarId} key={avatarId} onClick={() => { setGroupAvatar(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div>
-          <label className={css.field}><span>群组职能</span><textarea value={groupPrompt} onChange={event => { setGroupPrompt(event.target.value) }} placeholder="描述这个群组负责什么、如何协作以及输出标准。它会作为每次对话的系统提示词…"/></label>
-          <button className={css.generatePrompt} type="button" disabled={groupMembers.length === 0} onClick={() => { const members = allContacts.filter(contact => groupMembers.includes(contact.id)); setGroupPrompt(generatedGroupPrompt(groupName.trim() || '协作群组', members)) }}>✦ 根据成员辅助生成</button>
-          <div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>绑定项目目录</strong><small>默认绑定当前项目；新对话使用第一个项目作为主目录</small></span><button type="button" onClick={() => { void addLinkedWorkspace('create') }}>＋ 添加目录</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={groupWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('create', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{groupWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div>
-        </div> : null}<div className={css.memberToolbar}><div><strong>选择成员</strong><small>已选 {groupMembers.length} 个，点击成员可加入或剔出</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder="搜索昵称、原始 Skill、能力或 skills.sh…" aria-label="搜索成员" autoComplete="off" spellCheck={false} type="search"/></div>
+        <div className={css.groupBody}><div className={css.groupFormGrid}><div className={css.groupIdentityEditor}><GroupAvatar avatarId={groupAvatar} label={groupName || t('newGroup')}/><div><strong>{t('groupAvatarLabel')}</strong><small>{t('groupAvatarHint')}</small></div></div>
+          <label className={css.field}><span>{t('groupName')}</span><input value={groupName} onChange={event => { setGroupName(event.target.value) }} placeholder={t('groupNamePlaceholder')}/></label></div><button className={css.groupMore} type="button" aria-expanded={groupMoreOpen} onClick={() => { setGroupMoreOpen(open => !open) }}><span>{t('moreSettings')}</span><small>{t('groupMoreHint')}</small><b>{groupMoreOpen ? '⌃' : '⌄'}</b></button>{groupMoreOpen ? <div className={css.groupMorePanel}><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={groupAvatar === avatarId} key={avatarId} onClick={() => { setGroupAvatar(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div>
+          <label className={css.field}><span>{t('groupRole')}</span><textarea value={groupPrompt} onChange={event => { setGroupPrompt(event.target.value) }} placeholder="描述这个群组负责什么、如何协作以及输出标准。它会作为每次对话的系统提示词…"/></label>
+          <button className={css.generatePrompt} type="button" disabled={groupMembers.length === 0} onClick={() => { const members = allContacts.filter(contact => groupMembers.includes(contact.id)); setGroupPrompt(generatedGroupPrompt(groupName.trim() || t('collabGroup'), members)) }}>{t('generateFromMembers')}</button>
+          <div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>{t('bindProjects')}</strong><small>{t('bindDefaultHint')}</small></span><button type="button" onClick={() => { void addLinkedWorkspace('create') }}>{t('addDirectory')}</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={groupWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('create', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{groupWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div>
+        </div> : null}<div className={css.memberToolbar}><div><strong>{t('pickMembers')}</strong><small>已选 {groupMembers.length} 个，点击成员可加入或剔出</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder="搜索昵称、原始 Skill、能力或 skills.sh…" aria-label={t('searchMembers')} autoComplete="off" spellCheck={false} type="search"/></div>
         <div className={css.groupCandidates}>{visibleMemberContacts.map(contact => { const display = displayOf(contact, 'persona', state.personas); const included = groupMembers.includes(contact.id); return <button className={css.pickRow} data-included={included || undefined} type="button" key={contact.id} onClick={() => { setGroupMembers(current => included ? current.filter(id => id !== contact.id) : [...current, contact.id]) }}><AnimalAvatar avatarId={display.avatar} label={display.name}/><span className={css.pickCopy}><strong>{display.name}</strong><small>{contact.name} · {contact.description}</small></span><b>{included ? '−' : '＋'}</b></button> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'draft-group'))}</div>
         </div><div className={css.groupFooter}><Button className={css.secondary} onClick={() => { setGroupOpen(false) }}>{t('cancel')}</Button><Button className={css.create} variant="primary" disabled={groupMembers.length < 2 || workspaceId === undefined} onClick={createGroup}>{t('create')}</Button></div>
     </Dialog> : null}
 
-    {automationOpen && activeRoom !== undefined ? <div className={css.groupBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) setAutomationOpen(false) }}><section className={css.automationDialog} role="dialog"><div className={css.groupHeader}><div><h2>新建自动化</h2><p>目标对话：{activeRoom.title}</p></div><button className={css.close} onClick={() => { setAutomationOpen(false) }}>×</button></div><label className={css.field}><span>名称</span><input value={automationName} onChange={event => { setAutomationName(event.target.value) }} placeholder="例如：每周研究简报…"/></label><label className={css.field}><span>任务提示词</span><textarea value={automationPrompt} onChange={event => { setAutomationPrompt(event.target.value) }} placeholder="描述需要团队完成的任务…"/></label><div className={css.scheduleChoice}><button type="button" data-active={automationSchedule === 'once'} onClick={() => { setAutomationSchedule('once') }}>单次运行</button><button type="button" data-active={automationSchedule === 'recurring'} onClick={() => { setAutomationSchedule('recurring') }}>周期运行</button></div><label className={css.field}><span>{automationSchedule === 'once' ? '运行时间' : '首次运行时间'}</span><input type="datetime-local" value={automationWhen} onChange={event => { setAutomationWhen(event.target.value) }}/></label>{automationSchedule === 'recurring' ? <div className={css.repeatFields}><label className={css.field}><span>间隔</span><input inputMode="numeric" min="1" type="number" value={automationInterval} onChange={event => { setAutomationInterval(event.target.value) }}/></label><label className={css.field}><span>单位</span><select value={automationUnit} onChange={event => { setAutomationUnit(event.target.value === 'h' ? 'h' : 'd') }}><option value="h">小时</option><option value="d">天</option></select></label></div> : null}<div className={css.automationSummary}><span>团队</span><strong>{activeRoom.memberIds.length === 0 ? '普通对话（不启用 Skill）' : activeRoom.memberIds.map(id => state.personas[id]?.displayName ?? id).join('、')}</strong><small>{activeRoom.memberIds.length === 0 ? '按普通用户提示词执行' : '未指定 @ 时由协调者处理'}</small></div><div className={css.groupFooter}><button className={css.secondary} onClick={() => { setAutomationOpen(false) }}>取消</button><button className={css.create} disabled={automationPrompt.trim() === ''} onClick={() => { void createAutomation() }}>创建自动化</button></div></section></div> : null}
+    {automationOpen && activeRoom !== undefined ? <div className={css.groupBackdrop} onMouseDown={event => { if (event.target === event.currentTarget) setAutomationOpen(false) }}><section className={css.automationDialog} role="dialog"><div className={css.groupHeader}><div><h2>{t('newAutomation')}</h2><p>目标对话：{activeRoom.title}</p></div><button className={css.close} onClick={() => { setAutomationOpen(false) }}>×</button></div><label className={css.field}><span>{t('nameLabel')}</span><input value={automationName} onChange={event => { setAutomationName(event.target.value) }} placeholder={t('automationNamePlaceholder')}/></label><label className={css.field}><span>{t('taskPrompt')}</span><textarea value={automationPrompt} onChange={event => { setAutomationPrompt(event.target.value) }} placeholder={t('automationPromptPlaceholder')}/></label><div className={css.scheduleChoice}><button type="button" data-active={automationSchedule === 'once'} onClick={() => { setAutomationSchedule('once') }}>{t('runOnce')}</button><button type="button" data-active={automationSchedule === 'recurring'} onClick={() => { setAutomationSchedule('recurring') }}>{t('runRecurring')}</button></div><label className={css.field}><span>{automationSchedule === 'once' ? t('runAt') : t('firstRunAt')}</span><input type="datetime-local" value={automationWhen} onChange={event => { setAutomationWhen(event.target.value) }}/></label>{automationSchedule === 'recurring' ? <div className={css.repeatFields}><label className={css.field}><span>{t('intervalLabel')}</span><input inputMode="numeric" min="1" type="number" value={automationInterval} onChange={event => { setAutomationInterval(event.target.value) }}/></label><label className={css.field}><span>{t('unitLabel')}</span><select value={automationUnit} onChange={event => { setAutomationUnit(event.target.value === 'h' ? 'h' : 'd') }}><option value="h">{t('unitHour')}</option><option value="d">{t('unitDay')}</option></select></label></div> : null}<div className={css.automationSummary}><span>{t('teamLabel')}</span><strong>{activeRoom.memberIds.length === 0 ? t('noSkillGroup') : activeRoom.memberIds.map(id => state.personas[id]?.displayName ?? id).join('、')}</strong><small>{activeRoom.memberIds.length === 0 ? t('plainPromptMode') : t('coordinatorHandles')}</small></div><div className={css.groupFooter}><button className={css.secondary} onClick={() => { setAutomationOpen(false) }}>取消</button><button className={css.create} disabled={automationPrompt.trim() === ''} onClick={() => { void createAutomation() }}>{t('createAutomation')}</button></div></section></div> : null}
 
     {projectTool !== null && activeWorkspace !== undefined ? <WorkbenchDrawer
       tool={projectTool}
@@ -1427,9 +1573,24 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
     {sidecarOpen && activeRoom !== undefined ? <SidecarDrawer roomTitle={activeRoom.title} messages={sidecarMessages} draft={sidecarDraft} busy={sidecarBusy} error={sidecarError} onDraft={setSidecarDraft} onSubmit={submitSidecar} onClose={closeTemporaryChat}/> : null}
 
-    {archiveConfirm !== null ? <Dialog className={css.confirmDialog} label="归档群组" onClose={() => { setArchiveConfirm(null) }}><h2>归档这个群组？</h2><p>群组会从列表中移除，历史会话仍保留在项目里。此操作没有撤销入口。</p><div className={css.confirmActions}><Button onClick={() => { setArchiveConfirm(null) }}>取消</Button><Button variant="danger" onClick={() => { updateRoom(archiveConfirm, { archivedAt: Date.now() }); setArchiveConfirm(null); setRoomSettingsOpen(false) }}>归档</Button></div></Dialog> : null}
+    {roomMenu !== null ? (() => {
+      const room = state.rooms.find(item => item.roomId === roomMenu.roomId)
+      if (room === undefined) return null
+      const close = (): void => { setRoomMenu(null) }
+      return <div className={css.menuBackdrop} onMouseDown={close}>
+        <div className={css.roomMenu} style={{ left: `${Math.min(roomMenu.x, window.innerWidth - 190)}px`, top: `${Math.min(roomMenu.y, window.innerHeight - 170)}px` }} onMouseDown={(event) => { event.stopPropagation() }}>
+          <button type="button" onClick={() => { togglePin(room); close() }}>{room.pinnedAt === undefined ? t('pin') : t('unpin')}</button>
+          <button type="button" onClick={() => { updateRoom(room.roomId, { archivedAt: Date.now() }); close() }}>{t('archive')}</button>
+          <button className={css.menuDanger} type="button" onClick={() => { setDeleteConfirm(room.roomId); close() }}>{t('delete')}</button>
+        </div>
+      </div>
+    })() : null}
 
-    {roomSettingsOpen && activeRoom?.type === 'group' ? <Drawer className={`${css.panel} ${css.groupSettingsPanel}`} label="群组设置" onClose={() => { setRoomSettingsOpen(false) }}><div className={css.panelTop}><GroupAvatar avatarId={roomAvatarDraft} label={activeRoom.title}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setRoomSettingsOpen(false) }}>×</IconButton></div><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={roomAvatarDraft === avatarId} key={avatarId} onClick={() => { setRoomAvatarDraft(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div><label className={css.field}><span>群组名称</span><input value={roomTitleDraft} onChange={event => { setRoomTitleDraft(event.target.value) }}/></label><label className={css.field}><span>群组职能 · System Prompt</span><textarea value={roomPromptDraft} onChange={event => { setRoomPromptDraft(event.target.value) }} placeholder="定义群组目标、协作方式和输出标准…"/></label><button className={css.generatePrompt} type="button" onClick={() => { setRoomPromptDraft(generatedGroupPrompt(roomTitleDraft.trim() || activeRoom.title, activeMembers)) }}>✦ 根据当前成员重新生成</button><div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>绑定项目目录</strong><small>可新增、移除并调整新会话使用的主项目</small></span><button type="button" onClick={() => { void addLinkedWorkspace('settings') }}>＋ 添加目录</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={roomWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('settings', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{roomWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div><div className={css.panelHint}>点击已加入成员可设为协调者；＋ 加入，− 剔出。新对话与历史对话都会读取当前群组职能。</div><div className={css.memberToolbar}><div><strong>全部成员</strong><small>{activeRoom.memberIds.length} 个已加入</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder="搜索昵称、Skill 或能力…" aria-label="搜索成员" autoComplete="off" spellCheck={false} type="search"/></div><div className={css.roomMemberGrid}>{visibleMemberContacts.map(contact => { const included = activeRoom.memberIds.includes(contact.id); const coordinator = activeRoom.coordinatorId === contact.id; const display = displayOf(contact, 'persona', state.personas); return <div className={css.roomMemberItem} data-included={included || undefined} key={contact.id}><button type="button" className={css.memberPersona} disabled={!included} onClick={() => { updateRoom(activeRoom.roomId, { coordinatorId: contact.id }) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span><strong>{display.name}</strong><small>{coordinator ? '协调者' : contact.name}</small></span></button><button type="button" className={css.memberToggle} onClick={() => { toggleActiveRoomMember(contact.id) }}>{included ? '−' : '＋'}</button></div> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'active-group'))}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { const linked = roomWorkspaceIds.length === 0 ? [activeRoom.workspaceId] : roomWorkspaceIds; if (roomTitleDraft.trim() !== '') updateRoom(activeRoom.roomId, { title: roomTitleDraft.trim(), systemPrompt: roomPromptDraft.trim(), avatarId: roomAvatarDraft, workspaceId: linked[0] ?? activeRoom.workspaceId, workspaceIds: linked }); setRoomSettingsOpen(false) }}>保存群组</Button><Button className={css.danger} variant="danger" onClick={() => { setArchiveConfirm(activeRoom.roomId) }}>归档群组</Button></div></Drawer> : null}
+    {deleteConfirm !== null ? <Dialog className={css.confirmDialog} label={t('delete')} onClose={() => { setDeleteConfirm(null) }}><h2>{t('deleteRoomTitle')}</h2><p>{t('deleteRoomBody')}</p><div className={css.confirmActions}><Button onClick={() => { setDeleteConfirm(null) }}>{t('cancel')}</Button><Button variant="danger" onClick={() => { deleteRoom(deleteConfirm); setDeleteConfirm(null) }}>{t('delete')}</Button></div></Dialog> : null}
+
+    {archiveConfirm !== null ? <Dialog className={css.confirmDialog} label="归档群组" onClose={() => { setArchiveConfirm(null) }}><h2>{t('archiveGroupTitle')}</h2><p>{t('archiveGroupBody')}</p><div className={css.confirmActions}><Button onClick={() => { setArchiveConfirm(null) }}>取消</Button><Button variant="danger" onClick={() => { updateRoom(archiveConfirm, { archivedAt: Date.now() }); setArchiveConfirm(null); setRoomSettingsOpen(false) }}>归档</Button></div></Dialog> : null}
+
+    {roomSettingsOpen && activeRoom?.type === 'group' ? <Drawer className={`${css.panel} ${css.groupSettingsPanel}`} label={t('groupSettings')} onClose={() => { setRoomSettingsOpen(false) }}><div className={css.panelTop}><GroupAvatar avatarId={roomAvatarDraft} label={activeRoom.title}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setRoomSettingsOpen(false) }}>×</IconButton></div><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={roomAvatarDraft === avatarId} key={avatarId} onClick={() => { setRoomAvatarDraft(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div><label className={css.field}><span>{t('groupNameLabel')}</span><input value={roomTitleDraft} onChange={event => { setRoomTitleDraft(event.target.value) }}/></label><label className={css.field}><span>{t('groupRolePrompt')}</span><textarea value={roomPromptDraft} onChange={event => { setRoomPromptDraft(event.target.value) }} placeholder={t('groupRolePlaceholder')}/></label><button className={css.generatePrompt} type="button" onClick={() => { setRoomPromptDraft(generatedGroupPrompt(roomTitleDraft.trim() || activeRoom.title, activeMembers)) }}>{t('regenerateFromMembers')}</button><div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>{t('bindProjects')}</strong><small>{t('bindingHint')}</small></span><button type="button" onClick={() => { void addLinkedWorkspace('settings') }}>{t('addDirectory')}</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={roomWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('settings', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{roomWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div><div className={css.panelHint}>{t('memberPanelHint')}</div><div className={css.memberToolbar}><div><strong>{t('allMembers')}</strong><small>{activeRoom.memberIds.length} 个已加入</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder={t('searchMembersPlaceholder')} aria-label={t('searchMembers')} autoComplete="off" spellCheck={false} type="search"/></div><div className={css.roomMemberGrid}>{visibleMemberContacts.map(contact => { const included = activeRoom.memberIds.includes(contact.id); const coordinator = activeRoom.coordinatorId === contact.id; const display = displayOf(contact, 'persona', state.personas); return <div className={css.roomMemberItem} data-included={included || undefined} key={contact.id}><button type="button" className={css.memberPersona} disabled={!included} onClick={() => { updateRoom(activeRoom.roomId, { coordinatorId: contact.id }) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span><strong>{display.name}</strong><small>{coordinator ? t('coordinator') : contact.name}</small></span></button><button type="button" className={css.memberToggle} onClick={() => { toggleActiveRoomMember(contact.id) }}>{included ? '−' : '＋'}</button></div> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'active-group'))}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { const linked = roomWorkspaceIds.length === 0 ? [activeRoom.workspaceId] : roomWorkspaceIds; if (roomTitleDraft.trim() !== '') updateRoom(activeRoom.roomId, { title: roomTitleDraft.trim(), systemPrompt: roomPromptDraft.trim(), avatarId: roomAvatarDraft, workspaceId: linked[0] ?? activeRoom.workspaceId, workspaceIds: linked }); setRoomSettingsOpen(false) }}>{t('saveGroup')}</Button><Button className={css.danger} variant="danger" onClick={() => { setArchiveConfirm(activeRoom.roomId) }}>{t('archiveGroup')}</Button></div></Drawer> : null}
   </div>
 }
 

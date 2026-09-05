@@ -166,6 +166,10 @@ Do work.
       originLabel: 'WorkBuddy',
       plugin: 'sheetagent',
       version: '1.2.3',
+      // The bundle directory: linking a Skill into the Harness's own root needs
+      // to know where it actually lives. The scan reports the resolved path, so
+      // the expectation resolves too — on macOS `/var` is a link to `/private/var`.
+      path: join(await realpath(root), 'sheetagent', '1.2.3', 'skills', 'excel-handler'),
       invocable: false,
     }])
   })

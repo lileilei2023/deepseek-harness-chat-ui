@@ -54,6 +54,14 @@ export interface ChatRoom {
   readonly createdAt: number
   readonly updatedAt: number
   readonly archivedAt?: number
+  /** When the room was pinned; pinned rooms sort above the recency list. */
+  readonly pinnedAt?: number
+  /**
+   * Manual position within its band (pinned or unpinned). Absent until the
+   * room is dragged, so an untouched list stays purely recency-ordered and
+   * only the rooms a person has actually arranged hold a fixed place.
+   */
+  readonly order?: number
 }
 
 export type AutomationIntent = 'research' | 'create' | 'review' | 'operate' | 'custom'
@@ -238,6 +246,27 @@ export function activeHarnessSession(
     ? undefined
     : roomSessions.find(item => item.roomSessionId === room.activeSessionId && item.archivedAt === undefined)
   return active?.harnessSessionId
+}
+
+/**
+ * Order the room list.
+ *
+ * Pinned rooms form their own band above the rest. Inside a band a room that
+ * has been dragged holds its position, and everything else falls back to
+ * recency — so arranging two rooms by hand does not freeze the other thirty
+ * into whatever order they happened to have that day.
+ * @param rooms - the rooms to order.
+ * @returns a new array, most relevant first.
+ */
+export function orderRooms(rooms: readonly ChatRoom[]): readonly ChatRoom[] {
+  return [...rooms].sort((left, right) => {
+    const pinned = Number(right.pinnedAt !== undefined) - Number(left.pinnedAt !== undefined)
+    if (pinned !== 0) return pinned
+    const placed = Number(right.order !== undefined) - Number(left.order !== undefined)
+    if (placed !== 0) return placed
+    if (left.order !== undefined && right.order !== undefined) return left.order - right.order
+    return right.updatedAt - left.updatedAt
+  })
 }
 
 export function migrateLegacyState(

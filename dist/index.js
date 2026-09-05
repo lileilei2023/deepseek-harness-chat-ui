@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -64,6 +64,12 @@ const DEFAULT_ROOTS = [
 		layout: "plugin-version"
 	},
 	{
+		id: "workbuddy-user",
+		label: "WorkBuddy",
+		path: "~/.workbuddy/skills",
+		layout: "flat"
+	},
+	{
 		id: "claude",
 		label: "Claude",
 		path: "~/.claude/skills",
@@ -73,6 +79,42 @@ const DEFAULT_ROOTS = [
 		id: "claude-plugin",
 		label: "Claude 插件",
 		path: "~/.claude/plugins/marketplaces",
+		layout: "flat"
+	},
+	{
+		id: "codex",
+		label: "Codex",
+		path: "~/.codex/skills",
+		layout: "flat"
+	},
+	{
+		id: "hermes",
+		label: "Hermes",
+		path: "~/.hermes/skills",
+		layout: "flat"
+	},
+	{
+		id: "doubao",
+		label: "豆包",
+		path: "~/DoubaoWork/skills",
+		layout: "flat"
+	},
+	{
+		id: "trae",
+		label: "Trae",
+		path: "~/.trae/builtin/global/skills",
+		layout: "flat"
+	},
+	{
+		id: "openclaw",
+		label: "OpenClaw",
+		path: "~/.openclaw/skills",
+		layout: "flat"
+	},
+	{
+		id: "agents",
+		label: ".agents",
+		path: "~/.agents/skills",
 		layout: "flat"
 	}
 ];
@@ -100,6 +142,8 @@ let WorkBuddySkillCatalog = (() => {
 	let _list_decorators;
 	let _searchExternal_decorators;
 	let _installExternal_decorators;
+	let _linkSkill_decorators;
+	let _unlinkSkill_decorators;
 	let _browseProject_decorators;
 	let _readProjectFile_decorators;
 	let _openSkillChatTerminal_decorators;
@@ -117,6 +161,8 @@ let WorkBuddySkillCatalog = (() => {
 			_list_decorators = [Remote];
 			_searchExternal_decorators = [Remote];
 			_installExternal_decorators = [Remote];
+			_linkSkill_decorators = [Remote];
+			_unlinkSkill_decorators = [Remote];
 			_browseProject_decorators = [Remote];
 			_readProjectFile_decorators = [Remote];
 			_openSkillChatTerminal_decorators = [Remote];
@@ -158,6 +204,28 @@ let WorkBuddySkillCatalog = (() => {
 				access: {
 					has: (obj) => "installExternal" in obj,
 					get: (obj) => obj.installExternal
+				},
+				metadata: _metadata
+			}, null, _instanceExtraInitializers);
+			__esDecorate(this, null, _linkSkill_decorators, {
+				kind: "method",
+				name: "linkSkill",
+				static: false,
+				private: false,
+				access: {
+					has: (obj) => "linkSkill" in obj,
+					get: (obj) => obj.linkSkill
+				},
+				metadata: _metadata
+			}, null, _instanceExtraInitializers);
+			__esDecorate(this, null, _unlinkSkill_decorators, {
+				kind: "method",
+				name: "unlinkSkill",
+				static: false,
+				private: false,
+				access: {
+					has: (obj) => "unlinkSkill" in obj,
+					get: (obj) => obj.unlinkSkill
 				},
 				metadata: _metadata
 			}, null, _instanceExtraInitializers);
@@ -381,6 +449,53 @@ let WorkBuddySkillCatalog = (() => {
 			if (workspace === void 0) throw new Error("skill-chat: unknown Workspace");
 			if (await workspace.status() !== "ok") throw new Error("skill-chat: Workspace directory is unavailable");
 			return await installGithubSkill(workspace.path, request, signal);
+		}
+		/**
+		* Make one scanned Skill genuinely runnable by linking it into the Harness's
+		* own user root, `$DSH_HOME/skills`.
+		*
+		* A symbolic link rather than a copy: the tool that owns the Skill stays the
+		* source of truth, so editing it there is visible here immediately and there
+		* is no second copy to go stale. The Harness watches that root, so the Skill
+		* becomes invocable without a restart. Linking is per Skill and on demand —
+		* mirroring nine hundred Skills from every installed tool would bury the
+		* model's catalog in entries nobody asked for.
+		* @param request - the Skill directory to link and the name to expose.
+		* @param signal - abort signal.
+		* @returns where the link was created.
+		*/
+		async linkSkill(request, signal) {
+			signal?.throwIfAborted();
+			if (!SKILL_NAME.test(request.name)) throw new Error("skill-chat: invalid Skill name");
+			const source = await realpath(request.path);
+			if ((await stat(join(source, "SKILL.md")).catch(() => void 0))?.isFile() !== true) throw new Error(`skill-chat: no SKILL.md under ${request.path}`);
+			const target = join(this.linkDir(), request.name);
+			await mkdir(dirname(target), { recursive: true });
+			await rm(target, {
+				recursive: true,
+				force: true
+			});
+			await symlink(source, target, "dir");
+			return {
+				name: request.name,
+				source,
+				target
+			};
+		}
+		/** Drop a link previously made by {@link linkSkill}. Only links are removed:
+		* a real directory under the root was put there by someone else. */
+		async unlinkSkill(name, signal) {
+			signal?.throwIfAborted();
+			if (!SKILL_NAME.test(name)) throw new Error("skill-chat: invalid Skill name");
+			const target = join(this.linkDir(), name);
+			const entry = await lstat(target).catch(() => void 0);
+			if (entry === void 0) return;
+			if (!entry.isSymbolicLink()) throw new Error(`skill-chat: ${name} is not a link this plugin made`);
+			await rm(target);
+		}
+		/** `$DSH_HOME/skills`: the Harness's own user-level Skill root. */
+		linkDir() {
+			return join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "skills");
 		}
 		/** List one directory inside a registered Workspace for the project-tools drawer. */
 		async browseProject(request, signal) {
@@ -1181,6 +1296,7 @@ async function readContact(root, path, origin) {
 			originId: origin.id,
 			originLabel: origin.label,
 			plugin,
+			path: dirname(path),
 			...version === void 0 ? {} : { version },
 			invocable: false
 		};

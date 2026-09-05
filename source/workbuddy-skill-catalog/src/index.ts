@@ -1,7 +1,7 @@
 /** Read-only WorkBuddy Skill metadata catalog and Remote namespace. */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path'
 import { gunzipSync } from 'node:zlib'
@@ -31,6 +31,8 @@ import type {
   SkillChatSidecarStartRequest,
   SkillChatSidecarValue,
   SkillChatStateDocument,
+  SkillLinkRequest,
+  SkillLinkValue,
   SkillChatTerminalCloseRequest,
   SkillChatTerminalOpenRequest,
   SkillChatTerminalSendRequest,
@@ -50,9 +52,20 @@ const DEFAULT_RELATIVE_ROOT = '.workbuddy/plugins/cache/workbuddy-builtin'
  * downloaded, executed, or mounted into the runtime.
  */
 const DEFAULT_ROOTS: SkillRoot[] = [
+  // Every agent tool on the machine, scanned in place. A root that does not
+  // exist contributes nothing and costs one failed `readdir`, so listing the
+  // well-known locations is cheaper than making a person configure paths — and
+  // anything missing can still be installed from skills.sh.
   { id: 'workbuddy', label: 'WorkBuddy', path: `~/${DEFAULT_RELATIVE_ROOT}`, layout: 'plugin-version' },
+  { id: 'workbuddy-user', label: 'WorkBuddy', path: '~/.workbuddy/skills', layout: 'flat' },
   { id: 'claude', label: 'Claude', path: '~/.claude/skills', layout: 'flat' },
   { id: 'claude-plugin', label: 'Claude 插件', path: '~/.claude/plugins/marketplaces', layout: 'flat' },
+  { id: 'codex', label: 'Codex', path: '~/.codex/skills', layout: 'flat' },
+  { id: 'hermes', label: 'Hermes', path: '~/.hermes/skills', layout: 'flat' },
+  { id: 'doubao', label: '豆包', path: '~/DoubaoWork/skills', layout: 'flat' },
+  { id: 'trae', label: 'Trae', path: '~/.trae/builtin/global/skills', layout: 'flat' },
+  { id: 'openclaw', label: 'OpenClaw', path: '~/.openclaw/skills', layout: 'flat' },
+  { id: 'agents', label: '.agents', path: '~/.agents/skills', layout: 'flat' },
 ]
 
 /** A directory whose name is a release, so it is a version rather than a Skill. */
@@ -226,6 +239,52 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     if (workspace === undefined) throw new Error('skill-chat: unknown Workspace')
     if (await workspace.status() !== 'ok') throw new Error('skill-chat: Workspace directory is unavailable')
     return await installGithubSkill(workspace.path, request, signal)
+  }
+
+  /**
+   * Make one scanned Skill genuinely runnable by linking it into the Harness's
+   * own user root, `$DSH_HOME/skills`.
+   *
+   * A symbolic link rather than a copy: the tool that owns the Skill stays the
+   * source of truth, so editing it there is visible here immediately and there
+   * is no second copy to go stale. The Harness watches that root, so the Skill
+   * becomes invocable without a restart. Linking is per Skill and on demand —
+   * mirroring nine hundred Skills from every installed tool would bury the
+   * model's catalog in entries nobody asked for.
+   * @param request - the Skill directory to link and the name to expose.
+   * @param signal - abort signal.
+   * @returns where the link was created.
+   */
+  @Remote
+  async linkSkill(request: SkillLinkRequest, signal?: AbortSignal): Promise<SkillLinkValue> {
+    signal?.throwIfAborted()
+    if (!SKILL_NAME.test(request.name)) throw new Error('skill-chat: invalid Skill name')
+    const source = await realpath(request.path)
+    const stats = await stat(join(source, 'SKILL.md')).catch(() => undefined)
+    if (stats?.isFile() !== true) throw new Error(`skill-chat: no SKILL.md under ${request.path}`)
+    const target = join(this.linkDir(), request.name)
+    await mkdir(dirname(target), { recursive: true })
+    await rm(target, { recursive: true, force: true })
+    await symlink(source, target, 'dir')
+    return { name: request.name, source, target }
+  }
+
+  /** Drop a link previously made by {@link linkSkill}. Only links are removed:
+   * a real directory under the root was put there by someone else. */
+  @Remote
+  async unlinkSkill(name: string, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted()
+    if (!SKILL_NAME.test(name)) throw new Error('skill-chat: invalid Skill name')
+    const target = join(this.linkDir(), name)
+    const entry = await lstat(target).catch(() => undefined)
+    if (entry === undefined) return
+    if (!entry.isSymbolicLink()) throw new Error(`skill-chat: ${name} is not a link this plugin made`)
+    await rm(target)
+  }
+
+  /** `$DSH_HOME/skills`: the Harness's own user-level Skill root. */
+  private linkDir(): string {
+    return join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'skills')
   }
 
   /** List one directory inside a registered Workspace for the project-tools drawer. */
@@ -1024,6 +1083,7 @@ async function readContact(
       originId: origin.id,
       originLabel: origin.label,
       plugin,
+      path: dirname(path),
       ...version === undefined ? {} : { version },
       invocable: false,
     }

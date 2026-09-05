@@ -184,6 +184,15 @@ function registerUi(ctx: Context): void {
       loadState,
       saveState,
       runAutomation,
+      linkSkill: async (path: string, name: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.linkSkill({ path, name }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      unlinkSkill: async (name: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.unlinkSkill(name, signal)
+        if (!result.ok) throw new Error(result.error.message)
+      },
       browseProject: async (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => {
         const result = await ctx.remote.workbuddySkills.browseProject({ workspaceId, ...(path === undefined ? {} : { path }) }, signal)
         if (!result.ok) throw new Error(result.error.message)

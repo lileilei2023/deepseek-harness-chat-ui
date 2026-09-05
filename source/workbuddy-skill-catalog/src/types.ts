@@ -16,6 +16,8 @@ export interface WorkBuddySkillContact {
   readonly originLabel: string
   /** Top-level directory under the root that owns the Skill. */
   readonly plugin: string
+  /** Directory holding this Skill's `SKILL.md`, so it can be linked. */
+  readonly path?: string
   /** Version directory, when the root's layout carries one. */
   readonly version?: string
   /** Filesystem catalog entries are not mounted into the Harness runtime. */
@@ -185,6 +187,8 @@ export interface SkillChatRoomDocument {
   readonly createdAt: number
   readonly updatedAt: number
   readonly archivedAt?: number
+  readonly pinnedAt?: number
+  readonly order?: number
 }
 
 export interface SkillChatRoomSessionDocument {
@@ -235,4 +239,38 @@ export interface SkillChatStateDocument {
 export interface SkillChatAutomationRunValue {
   readonly sessionId: string
   readonly state: SkillChatStateDocument
+}
+
+/** One Skill root, as reported to the settings panel. */
+export interface SkillRootStatus {
+  readonly id: string
+  readonly label: string
+  readonly path: string
+  readonly layout: 'flat' | 'plugin-version'
+  /** Whether the catalog is currently scanning this root for contacts. */
+  readonly configured: boolean
+  /** Skills found on this scan; 0 means the tool is absent or empty. */
+  readonly count: number
+  readonly exists: boolean
+}
+
+export interface SkillRootReport {
+  readonly roots: readonly SkillRootStatus[]
+  /** `$DSH_HOME/skills` — where linking makes a Skill runnable. */
+  readonly linkDir: string
+  /** Skill names already linked there. */
+  readonly linked: readonly string[]
+}
+
+export interface SkillLinkRequest {
+  /** Directory holding the Skill's `SKILL.md`. */
+  readonly path: string
+  /** Name to expose it under; also the link's filename. */
+  readonly name: string
+}
+
+export interface SkillLinkValue {
+  readonly name: string
+  readonly source: string
+  readonly target: string
 }

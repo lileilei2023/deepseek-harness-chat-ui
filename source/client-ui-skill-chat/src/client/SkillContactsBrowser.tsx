@@ -1393,11 +1393,22 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const dueAutomations = state.automations
     .filter(item => item.workspaceId === workspaceId && item.status === 'active').length
 
+  // Groups this project can reach, newest first — the same set the room list
+  // shows, minus the one-to-one conversations.
+  const visibleGroups = useMemo(
+    () => visibleRooms.filter(room => room.type === 'group'),
+    [visibleRooms],
+  )
+
   const roomAvatar = (room: ChatRoom, compact = false): React.JSX.Element => {
     if (room.type === 'general') return <span className={css.generalAvatar} data-compact={compact || undefined}>✦</span>
     if (room.type === 'group') {
-      const members = room.memberIds.slice(0, 4).flatMap(id => {
+      const members = room.memberIds.slice(0, 4).flatMap((id) => {
+        // Same fallback the rest of the room code uses: a stored id whose root
+        // prefix went stale still names its Skill in the trailing segment, and
+        // without this the tile drops back to the placeholder mark.
         const contact = allContacts.find(item => item.id === id)
+          ?? allContacts.find(item => item.name === id.slice(id.lastIndexOf(':') + 1))
         if (contact === undefined) return []
         const identity = displayOf(contact, 'persona', state.personas)
         return [{ id, ...identity }]
@@ -1736,6 +1747,26 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     {renderSlot('ds-chat.sidebar.before-rooms', { view, ...(workspaceId === undefined ? {} : { workspaceId }) })}
     {notice !== null ? <button className={css.notice} type="button" onClick={() => { setNotice(null) }}>{notice} ×</button> : null}
 
+    {/* Groups live in the roster, not only in the message list. A group you
+      * built is a standing team; Messages ranks by recent activity, so a group
+      * you have not spoken to in a while sinks out of sight and there is
+      * nowhere to go and look at it. Every messaging client keeps a group
+      * section beside its contacts for exactly this reason. */}
+    {view === 'contacts' && deferredQuery.length === 0 && visibleGroups.length > 0
+      ? <div className={css.groupSection}>
+        <div className={css.groupSectionHead}><strong>{t('groupsSection')}</strong><small>{visibleGroups.length}</small></div>
+        {visibleGroups.map(room => <button
+          className={css.groupSectionRow}
+          type="button"
+          key={room.roomId}
+          onClick={() => { void openRoom(room) }}
+        >
+          {roomAvatar(room, true)}
+          <span><strong>{room.title}</strong><small>{room.memberIds.length} {t('peopleCount')}</small></span>
+          {savedRooms.includes(room.roomId) ? <b title={t('savedRoom')}>★</b> : null}
+        </button>)}
+      </div>
+      : null}
     {view === 'contacts' ? <><div className={css.subtabs}><button data-active={contactList === 'frequent'} onClick={() => { setContactList('frequent') }}>{t('frequentContacts')}</button><button data-active={contactList === 'all'} onClick={() => { setContactList('all') }}>{t('allContacts')}</button></div><div className={css.modeBar}><span>{t('displayMode')}</span><button type="button" data-active={mode === 'persona'} onClick={() => { setMode('persona') }}>{t('personaMode')}</button><button type="button" data-active={mode === 'raw'} onClick={() => { setMode('raw') }}>{t('rawMode')}</button></div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : visibleContacts.map(contactRow)}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>
       : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>{t('automationHint')}</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>{t('newItem')}</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? t('onceLabel') : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? t('waitingRun') : automation.status === 'paused' ? t('pausedLabel') : automation.status === 'completed' ? t('completedLabel') : t('failedLabel')}</span><button type="button" onClick={() => { void runAutomation(automation) }}>{t('runNow')}</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? t('restoreLabel') : t('pauseLabel')}</button></footer></article>)}<div className={css.templateHeading}>{t('fromTemplate')}</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></div></>
       : <><div className={css.roomList}>{roomResults.length === 0

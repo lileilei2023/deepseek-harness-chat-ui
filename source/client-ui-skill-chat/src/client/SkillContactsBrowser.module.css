@@ -2545,3 +2545,40 @@
 
 .messageActions button:hover:not(:disabled) { color: var(--ds-chat-text-color); background: var(--ds-chat-hover); }
 .messageActions button:disabled { opacity: .5; cursor: default; }
+
+/* The roster's group section: same row rhythm as a contact, but tiled avatars
+ * and a member count so a team never reads as a person. */
+.groupSection { padding: var(--ds-chat-space-2) var(--ds-chat-space-2) 0; }
+
+.groupSectionHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--ds-chat-space-2);
+  padding: 0 var(--ds-chat-space-2) var(--ds-chat-space-1);
+  color: var(--ds-chat-muted);
+  font-size: var(--ds-chat-text-caption);
+}
+
+.groupSectionHead strong { color: var(--ds-chat-text-secondary); font-weight: var(--ds-chat-weight-semibold); }
+.groupSectionHead small { font-variant-numeric: tabular-nums; }
+
+.groupSectionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-chat-space-2);
+  width: 100%;
+  padding: 6px var(--ds-chat-space-2);
+  border: none;
+  border-radius: var(--ds-chat-radius-control);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.groupSectionRow:hover { background: var(--ds-chat-hover); }
+.groupSectionRow > span { display: grid; min-width: 0; }
+.groupSectionRow strong { font-size: var(--ds-chat-text-body); font-weight: var(--ds-chat-weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.groupSectionRow small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); font-variant-numeric: tabular-nums; }
+.groupSectionRow b { margin-left: auto; color: var(--ds-chat-accent-text); }

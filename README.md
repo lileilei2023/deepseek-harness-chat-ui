@@ -2,7 +2,7 @@
 
 > A personified, social AI collaboration interface for DeepSeek Harness — Skills become recognizable digital members that users can discover, personalize, message directly, and bring into persistent group chats.
 
-This is **not another ChatGPT-style single-assistant shell**. DS Chat treats every Skill as a social identity with a friendly name, circular animal avatar, profile, direct-message relationship, and a role inside long-lived group rooms.
+This is **not another ChatGPT-style single-assistant shell**. DS Chat treats every Skill as a social identity with a friendly name, a generated portrait, a profile, a direct-message relationship, and a role inside long-lived group rooms. Skills from every agent tool on the machine — Claude Code, WorkBuddy, Codex, Hermes, Doubao, Trae — become contacts you can message and group, and adding one to a room makes it genuinely loadable by the model, not just a name on a card.
 
 [中文说明](README.zh.md) · [Features](#features) · [Install](#install-from-github) · [Development](#development)
 
@@ -12,7 +12,7 @@ This is **not another ChatGPT-style single-assistant shell**. DS Chat treats eve
 
 The demo walks the room list, opens a Skill group, inspects its members and system role, switches rooms and returns with the conversation intact, then scrolls the contact directory — several hundred Skills, each with its own generated identity.
 
-[Watch the 21-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
+[Watch the 26-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI main screen](docs/images/deepseek-harness-chat-ui-main.png)
 
@@ -23,8 +23,8 @@ DeepSeek Harness provides a powerful agent runtime, but its default interface is
 - **Persistent rooms** restore the previous conversation instead of silently creating a new session.
 - **Normal chat** works without selecting a Skill.
 - **Personified Skills** appear as recognizable contacts with deterministic names, illustrated portraits generated per Skill (DiceBear Micah, see Credits), profiles, and original capability metadata.
-- **Group chats** let users search Skills, pull them into a group, choose a coordinator, and define a reusable group system prompt.
-- **Automation entry points** connect scheduled tasks to rooms and conversation history.
+- **Group chats** let users search Skills, pull them into a group, choose a coordinator, and define a reusable group system prompt; a Skill that joins is linked into the Harness's Skill root, so the model can actually load it.
+- **Automation** is a top-level destination beside the shell's own new-chat entry, connecting scheduled tasks to rooms and conversation history.
 - **Project and terminal sidecars** keep files and command-line work beside the active conversation.
 - **Skin support** allows declarative visual themes without touching Room or automation data.
 
@@ -52,12 +52,16 @@ name, prompt and cadence, or start from a blank one.
 | Area | Capability |
 | --- | --- |
 | Social chat | Normal chat, Skill contacts, direct conversations and group chats in one recency-sorted room list, with persistent search |
-| Groups | Searchable members, coordinator selection, group system prompt, project binding |
-| Personification | Circular animal avatars, deterministic friendly names, profiles and original Skill metadata |
-| Skills | Installed Skill directory, `skills.sh` search, install and install-then-add flows |
+| Room management | Pin, drag to reorder, archive, delete, and save a room as a team that follows you across projects |
+| Groups | Searchable members, coordinator selection, group system prompt, project binding; a 2x2 tile of up to four member portraits identifies the room |
+| Personification | Generated portraits, deterministic friendly names, profiles and original Skill metadata |
+| Skills | Every agent tool's Skill directory in one catalog, `skills.sh` search, install and install-then-add flows |
+| Real invocation | Joining a room links the Skill into the Harness's own Skill root, so the model can actually load it |
 | Workspace | Project browser, file preview, terminal and sidecar task entry points |
-| Automation | Room-bound definitions, run-now flow and persisted run history |
+| Automation | A top-level destination beside the shell's own new-chat entry, scenario templates, room-bound definitions, run-now and persisted history |
 | Appearance | Mint, Teamily-inspired and always-dark Nocturne skins using the DSH Web Skin Manifest v2 contract; light and dark schemes follow the shell |
+
+![DeepSeek Harness Chat UI in dark mode](docs/images/deepseek-harness-chat-ui-dark.png)
 
 ## Requirements
 
@@ -125,15 +129,22 @@ npm run check
 
 ## Skill sources
 
-The catalog scans directories for `SKILL.md` files and lists what it finds as contacts. Nothing is downloaded, executed, or mounted into the runtime — it is a read-only metadata scan. Three roots are scanned by default:
+The catalog scans directories for `SKILL.md` files and lists what it finds as contacts. Listing is a read-only metadata scan: nothing is downloaded or executed. Every agent tool's usual location is scanned by default, because a root that does not exist costs one failed `readdir` and asking a person to configure paths costs more:
 
 | Root | Path | Layout |
 | --- | --- | --- |
 | WorkBuddy | `~/.workbuddy/plugins/cache/workbuddy-builtin` | `<plugin>/<version>/**` |
+| WorkBuddy (user) | `~/.workbuddy/skills` | `<skill>/SKILL.md` |
 | Claude Code | `~/.claude/skills` | `<skill>/SKILL.md`, plus one level of bundles |
 | Claude plugins | `~/.claude/plugins/marketplaces` | nested |
+| Codex | `~/.codex/skills` | `<skill>/SKILL.md` |
+| Hermes | `~/.hermes/skills` | `<skill>/SKILL.md` |
+| Doubao | `~/DoubaoWork/skills` | `<skill>/SKILL.md` |
+| Trae | `~/.trae/builtin/global/skills` | `<skill>/SKILL.md` |
+| OpenClaw | `~/.openclaw/skills` | `<skill>/SKILL.md` |
+| Shared | `~/.agents/skills` | `<skill>/SKILL.md` |
 
-Override the roster from the profile's patch layer:
+A Skill name found under more than one root keeps the first root's entry, so roster order is precedence order. Override the roster from the profile's patch layer:
 
 ```yaml
 - id: workbuddy-skill-catalog
@@ -143,7 +154,11 @@ Override the roster from the profile's patch layer:
       - { id: team, label: Team, path: /srv/shared/skills, layout: flat }
 ```
 
-A Skill name found under more than one root keeps the first root's entry, so roster order is precedence order. `config.root` still relocates the WorkBuddy cache on its own and leaves the other roots in place.
+### From contact to callable
+
+A scanned Skill starts as a contact card. The Harness's Skill service has never seen it, so a model asked to load one answers `skill "X" is unknown or no longer available`. Adding the Skill to a room fixes that: DS Chat symlinks the bundle into `$DSH_HOME/skills`, the Harness's own user-level Skill root, which it already watches for changes.
+
+Linking rather than copying is deliberate. The tool's own directory stays the single source of truth, edits there take effect immediately, and there is no sync job to run or forget. Only the Skills you actually put in a room are linked, so a machine with several hundred installed Skills does not push all of them into every session's catalog. Removing a link is one `unlinkSkill` call, and links this plugin did not create are never touched.
 
 ## Credits
 

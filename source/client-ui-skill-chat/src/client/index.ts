@@ -294,6 +294,30 @@ function registerUi(ctx: Context): void {
         if (!result.ok) throw new Error(result.error.message)
         return result.value.files
       },
+      readTerminal: async (sessionId: SessionId, terminalId: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.readSkillChatTerminal({ sessionId, terminalId }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      searchProjectFiles: async (workspaceId: WorkspaceId, query: string, contents: boolean, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.searchProjectFiles({ workspaceId, query, contents }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value.files
+      },
+      revealProjectPath: async (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.revealProjectPath({ workspaceId, path }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+      },
+      attachToComposer: (sessionId: SessionId, text: string) => {
+        // The composer owns its draft, so appending goes through the session's
+        // own input face rather than the DOM: a plugin reaching into the editor
+        // would fight its state machine on the next keystroke.
+        const scope = sessions.scope(sessionId)
+        if (scope === undefined) return false
+        const input = conversation.input.for(scope)
+        input.setDraft(text)
+        return true
+      },
       browseProject: async (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => {
         const result = await ctx.remote.workbuddySkills.browseProject({ workspaceId, ...(path === undefined ? {} : { path }) }, signal)
         if (!result.ok) throw new Error(result.error.message)

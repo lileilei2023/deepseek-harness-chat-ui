@@ -38,7 +38,14 @@ interface ProjectDirectoryListing {
   readonly path: string
   readonly root: string
   readonly parent?: string
-  readonly entries: readonly { readonly name: string; readonly path: string; readonly kind: 'directory' | 'file'; readonly hidden: boolean }[]
+  readonly entries: readonly ProjectEntry[]
+}
+
+interface ProjectEntry {
+  readonly name: string
+  readonly path: string
+  readonly kind: 'directory' | 'file'
+  readonly hidden: boolean
 }
 
 interface ProjectFilePreview {
@@ -129,6 +136,10 @@ interface SkillContactsInjected {
   linkSkill: (path: string, name: string, signal: AbortSignal) => Promise<{ readonly name: string; readonly target: string }>
   forkSession: (sessionId: SessionId, atSeq: number, increaseTitle: boolean) => Promise<SessionId>
   recentProjectFiles: (workspaceId: WorkspaceId, since: number, signal: AbortSignal) => Promise<readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[]>
+  readTerminal: (sessionId: SessionId, terminalId: string, signal: AbortSignal) => Promise<TerminalSnapshot>
+  searchProjectFiles: (workspaceId: WorkspaceId, query: string, contents: boolean, signal: AbortSignal) => Promise<readonly { readonly path: string; readonly name: string; readonly line?: string }[]>
+  revealProjectPath: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<void>
+  attachToComposer: (sessionId: SessionId, text: string) => boolean
   messageSeq: (sessionId: SessionId, messageId: string) => number | undefined
   browseProject: (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => Promise<ProjectDirectoryListing>
   readProjectFile: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<ProjectFilePreview>
@@ -587,6 +598,20 @@ interface WorkbenchDrawerProps {
   readonly artifacts: readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[]
   readonly artifactsBusy: boolean
   readonly artifactRestOpen: boolean
+  readonly fileQuery: string
+  readonly onFileQuery: (value: string) => void
+  readonly fileHits: readonly { readonly path: string; readonly name: string; readonly line?: string }[]
+  readonly terminals: readonly { readonly id: string; readonly label: string }[]
+  readonly activeTerminalId: string | null
+  readonly onAddTerminal: () => void
+  readonly onSelectTerminal: (terminalId: string) => void
+  readonly onCloseTerminal: (terminalId: string) => void
+  readonly onFileMenu: (menu: { path: string; name: string; kind: 'file' | 'directory'; x: number; y: number }) => void
+  readonly openFiles: readonly ProjectFilePreview[]
+  readonly onCloseFile: (path: string) => void
+  readonly expandedDirs: readonly string[]
+  readonly dirListings: Readonly<Record<string, readonly ProjectEntry[]>>
+  readonly onToggleDirectory: (path: string) => void
   readonly onToggleArtifactRest: () => void
   readonly renderedFile: boolean
   readonly onToggleRendered: () => void
@@ -863,14 +888,61 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
               </span>)}
             </>
           })()}</nav>
+          <div className={css.fileFilter}>
+            <input
+              value={props.fileQuery}
+              onChange={(event) => { props.onFileQuery(event.target.value) }}
+              placeholder={tr('filterFiles')}
+              aria-label={tr('filterFiles')}
+              autoComplete="off"
+              spellCheck={false}
+              type="search"
+            />
+          </div>
           <div className={css.projectFileList}>
-            {props.error !== null ? <div className={css.status}>{props.error}</div> : props.listing === null ? <div className={css.status}>{tr('readingDir')}</div> : <>
+            {props.fileQuery.trim() !== ''
+              ? (props.fileHits.length === 0
+                ? <div className={css.status}>{tr('searchingFiles')}</div>
+                : props.fileHits.map(hit => <button
+                  type="button"
+                  key={hit.path}
+                  data-selected={props.file?.path === hit.path || undefined}
+                  onClick={() => { props.onPreviewFile(hit.path) }}
+                  onContextMenu={(event) => { event.preventDefault(); props.onFileMenu({ path: hit.path, name: hit.name, kind: 'file', x: event.clientX, y: event.clientY }) }}
+                ><IconCodeOutline16/><span>{hit.name}</span>{hit.line === undefined ? null : <small>{hit.line}</small>}</button>))
+              :
+            props.error !== null ? <div className={css.status}>{props.error}</div> : props.listing === null ? <div className={css.status}>{tr('readingDir')}</div> : <>
               {props.listing.parent === undefined ? null : <button type="button" onClick={() => { props.onBrowse(props.listing?.parent) }}><IconFolderOpenOutline16/><span>{tr('backParent')}</span></button>}
-              {props.listing.entries.filter(entry => !entry.hidden).toSorted((left, right) => left.kind === right.kind ? left.name.localeCompare(right.name) : left.kind === 'directory' ? -1 : 1).map(entry => <button type="button" data-selected={props.file?.path === entry.path || undefined} key={entry.path} onClick={() => { if (entry.kind === 'directory') props.onBrowse(entry.path); else props.onPreviewFile(entry.path) }}>{entry.kind === 'directory' ? <IconFolderOpenOutline16/> : <IconCodeOutline16/>}<span>{entry.name}</span></button>)}
-            </>}
+              {(function renderEntries(entries: readonly ProjectEntry[], depth: number): React.JSX.Element[] {
+                return entries.filter(entry => !entry.hidden).toSorted((left, right) => left.kind === right.kind ? left.name.localeCompare(right.name) : left.kind === 'directory' ? -1 : 1).flatMap((entry) => {
+                  const open = props.expandedDirs.includes(entry.path)
+                  const row = <button
+                    type="button"
+                    data-selected={props.file?.path === entry.path || undefined}
+                    style={{ paddingLeft: `${8 + depth * 12}px` }}
+                    key={entry.path}
+                    onClick={() => { if (entry.kind === 'directory') props.onToggleDirectory(entry.path); else props.onPreviewFile(entry.path) }}
+                    onContextMenu={(event) => { event.preventDefault(); props.onFileMenu({ path: entry.path, name: entry.name, kind: entry.kind, x: event.clientX, y: event.clientY }) }}
+                  >{entry.kind === 'directory' ? <span className={css.treeCaret}>{open ? '\u25be' : '\u25b8'}</span> : <IconCodeOutline16/>}<span>{entry.name}</span></button>
+                  const children = entry.kind === 'directory' && open ? props.dirListings[entry.path] : undefined
+                  return children === undefined ? [row] : [row, ...renderEntries(children, depth + 1)]
+                })
+              })(props.listing.entries, 0)}
+            </>
+            }
           </div>
         </div>
         <div className={css.filePreview}>
+          {/* Open files stay open. Reading a report and the one it argues with
+            * used to mean losing the first. */}
+          {props.openFiles.length <= 1 ? null : <div className={css.fileTabs}>
+            {props.openFiles.map(item => <button
+              type="button"
+              data-active={props.file?.path === item.path || undefined}
+              key={item.path}
+              onClick={() => { props.onPreviewFile(item.path) }}
+            >{item.name}<b onClick={(event) => { event.stopPropagation(); props.onCloseFile(item.path) }}>×</b></button>)}
+          </div>}
           {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered}/>}
         </div>
       </div> : null}
@@ -880,6 +952,17 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
           : <DiffView text={props.terminal?.text ?? ''}/>}
       </div> : null}
       {props.tool === 'terminal' ? <div className={css.terminalWorkbench}>
+        {/* Several shells, the way any terminal panel has them; switching back
+          * replays what a shell printed while it was off screen. */}
+        <div className={css.terminalTabs}>
+          {props.terminals.map(item => <button
+            type="button"
+            data-active={props.activeTerminalId === item.id || undefined}
+            key={item.id}
+            onClick={() => { props.onSelectTerminal(item.id) }}
+          >{item.label}<b onClick={(event) => { event.stopPropagation(); props.onCloseTerminal(item.id) }}>×</b></button>)}
+          <button className={css.terminalAdd} type="button" aria-label={tr('newTerminal')} onClick={props.onAddTerminal}>＋</button>
+        </div>
         <pre className={css.terminalOutput} ref={element => { if (element !== null) element.scrollTop = element.scrollHeight }}>{props.error ?? props.terminal?.text ?? (props.terminalBusy ? tr('startingTerminal') : tr('terminalIdle'))}</pre>
         {props.tool === 'terminal' ? <form className={css.terminalComposer} onSubmit={event => { event.preventDefault(); props.onTerminalSubmit() }}><span>$</span><input value={props.terminalCommand} onChange={event => { props.onTerminalCommand(event.target.value) }} placeholder="输入命令，例如 pnpm test…" aria-label="终端命令" autoComplete="off" spellCheck={false} autoFocus/><button type="submit" disabled={props.terminalBusy || props.terminal === null}>{tr('runLabel')}</button></form> : <div className={css.workbenchFootnote}>{tr('diffExplainer')}</div>}
       </div> : null}
@@ -921,7 +1004,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
-    linkSkill, forkSession, messageSeq, recentProjectFiles,
+    linkSkill, forkSession, messageSeq, recentProjectFiles, readTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
   const sessions = useSessions(value => value)
@@ -980,6 +1063,18 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [artifactsBusy, setArtifactsBusy] = useState(false)
   const [artifactRestOpen, setArtifactRestOpen] = useState(false)
   const [terminal, setTerminal] = useState<TerminalSnapshot | null>(null)
+  // Several shells, the way any terminal panel has them. Each keeps its own id
+  // and last-seen output so switching back replays rather than starts over.
+  const [terminals, setTerminals] = useState<readonly { id: string; label: string; text: string }[]>([])
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null)
+  // Files stay open until closed, so reading two reports side by side does not
+  // mean losing the first one.
+  const [openFiles, setOpenFiles] = useState<readonly ProjectFilePreview[]>([])
+  const [fileQuery, setFileQuery] = useState('')
+  const [fileHits, setFileHits] = useState<readonly { path: string; name: string; line?: string }[]>([])
+  const [expandedDirs, setExpandedDirs] = useState<readonly string[]>([])
+  const [dirListings, setDirListings] = useState<Readonly<Record<string, readonly ProjectEntry[]>>>({})
+  const [fileMenu, setFileMenu] = useState<{ path: string; name: string; kind: 'file' | 'directory'; x: number; y: number } | null>(null)
   const [terminalCommand, setTerminalCommand] = useState('')
   const [terminalBusy, setTerminalBusy] = useState(false)
   const [browserUrl, setBrowserUrl] = useState('http://127.0.0.1:56517/')
@@ -1706,6 +1801,85 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setRoomSettingsOpen(true)
   }
 
+  /** Open one more shell in this room's workspace. */
+  const addTerminal = (): void => {
+    if (activeWorkspace === undefined || currentSessionId === undefined) return
+    const abort = new AbortController()
+    setTerminalBusy(true)
+    void openTerminal(currentSessionId, activeWorkspace.workspaceId, abort.signal)
+      .then((opened) => {
+        setTerminals(current => [...current, { id: opened.terminalId, label: `${tr('terminalLabel')} ${current.length + 1}`, text: opened.text }])
+        setActiveTerminalId(opened.terminalId)
+        setTerminal(opened)
+      }, (error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
+      .finally(() => { setTerminalBusy(false) })
+  }
+
+  /** Switch to a shell, replaying what it printed while it was off screen. */
+  const selectTerminal = (terminalId: string): void => {
+    if (currentSessionId === undefined) return
+    setActiveTerminalId(terminalId)
+    const known = terminals.find(item => item.id === terminalId)
+    setTerminal(known === undefined ? null : { terminalId, text: known.text, status: 'running', truncated: false })
+    const abort = new AbortController()
+    void readTerminal(currentSessionId, terminalId, abort.signal).then((snapshot) => {
+      setTerminal(snapshot)
+      setTerminals(current => current.map(item => item.id === terminalId ? { ...item, text: snapshot.text } : item))
+    }, () => {})
+  }
+
+  const closeTerminalTab = (terminalId: string): void => {
+    if (currentSessionId !== undefined) void closeTerminal(currentSessionId, terminalId).catch(() => {})
+    const remaining = terminals.filter(item => item.id !== terminalId)
+    setTerminals(remaining)
+    if (activeTerminalId !== terminalId) return
+    const next = remaining[remaining.length - 1]
+    if (next === undefined) { setActiveTerminalId(null); setTerminal(null); return }
+    selectTerminal(next.id)
+  }
+
+  /** Expand or collapse one directory, loading its children the first time. */
+  const toggleDirectory = (path: string): void => {
+    if (expandedDirs.includes(path)) { setExpandedDirs(current => current.filter(item => item !== path)); return }
+    setExpandedDirs(current => [...current, path])
+    if (dirListings[path] !== undefined || activeWorkspace === undefined) return
+    const abort = new AbortController()
+    void browseProject(activeWorkspace.workspaceId, path, abort.signal)
+      .then((listing) => { setDirListings(current => ({ ...current, [path]: listing.entries })) },
+        (error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
+  }
+
+  /**
+   * Put a workspace path into the composer.
+   *
+   * The point of a chat product: a report you just read goes back into the
+   * conversation as a reference rather than being copied by hand. `@` is the
+   * shell's own file-mention syntax, so the model resolves it the same way it
+   * resolves one the person typed.
+   * @param path - absolute path inside the workspace.
+   */
+  const attachPath = (path: string): void => {
+    if (currentSessionId === undefined || activeWorkspace === undefined) return
+    const relative = path.startsWith(activeWorkspace.path) ? path.slice(activeWorkspace.path.length).replace(/^\//u, '') : path
+    const reference = /\s/u.test(relative) ? `@"${relative}"` : `@${relative}`
+    setNotice(attachToComposer(currentSessionId, reference) ? `${tr('attached')}：${relative}` : tr('attachFailed'))
+  }
+
+  useEffect(() => {
+    const needle = fileQuery.trim()
+    if (needle === '' || activeWorkspace === undefined) { setFileHits([]); return }
+    const abort = new AbortController()
+    // A leading `?` searches inside files; without it the needle matches names.
+    const contents = needle.startsWith('?')
+    const query = contents ? needle.slice(1).trim() : needle
+    if (query === '') { setFileHits([]); return }
+    const timer = window.setTimeout(() => {
+      void searchProjectFiles(activeWorkspace.workspaceId, query, contents, abort.signal)
+        .then((files) => { if (!abort.signal.aborted) setFileHits(files) }, () => {})
+    }, 240)
+    return () => { window.clearTimeout(timer); abort.abort() }
+  }, [activeWorkspace, fileQuery, searchProjectFiles])
+
   const openProjectTool = (tool: ProjectToolKind): void => {
     setProjectTool(tool)
     setProjectListing(null)
@@ -1720,8 +1894,18 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       return
     }
     if (tool === 'terminal' || tool === 'diff') {
+      // A terminal already open for this room is reused rather than spawned
+      // again: opening the panel is not a request for another shell.
+      const existing = tool === 'terminal' ? terminals.find(item => item.id === activeTerminalId) : undefined
+      if (existing !== undefined) { selectTerminal(existing.id); return }
       setTerminalBusy(true)
       void openTerminal(currentSessionId, activeWorkspace.workspaceId, abort.signal).then(async opened => {
+        if (tool === 'terminal') {
+          setTerminals(current => current.some(item => item.id === opened.terminalId)
+            ? current
+            : [...current, { id: opened.terminalId, label: `${tr('terminalLabel')} ${current.length + 1}`, text: opened.text }])
+          setActiveTerminalId(opened.terminalId)
+        }
         if (tool !== 'diff') return opened
         // Ask git whether this is a work tree first: run bare, a non-repository
         // answers with its whole usage text, which the panel then had to render.
@@ -1746,11 +1930,23 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     })
   }
 
+  const closeFileTab = (path: string): void => {
+    const remaining = openFiles.filter(item => item.path !== path)
+    setOpenFiles(remaining)
+    if (projectFile?.path !== path) return
+    setProjectFile(remaining[remaining.length - 1] ?? null)
+  }
+
   const previewProjectFile = (path: string): void => {
     if (activeWorkspace === undefined) return
     setProjectListingError(null)
     const abort = new AbortController()
-    void readProjectFile(activeWorkspace.workspaceId, path, abort.signal).then(setProjectFile, (error: unknown) => {
+    void readProjectFile(activeWorkspace.workspaceId, path, abort.signal).then((file) => {
+      setProjectFile(file)
+      // Opening adds to the tab set; re-opening one already there just selects
+      // it, so clicking around the tree cannot grow duplicate tabs.
+      setOpenFiles(current => current.some(item => item.path === file.path) ? current : [...current, file])
+    }, (error: unknown) => {
       if (!abort.signal.aborted) setProjectListingError(error instanceof Error ? error.message : String(error))
     })
   }
@@ -2098,6 +2294,20 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       artifacts={artifacts}
       artifactsBusy={artifactsBusy}
       artifactRestOpen={artifactRestOpen}
+      fileQuery={fileQuery}
+      onFileQuery={setFileQuery}
+      fileHits={fileHits}
+      openFiles={openFiles}
+      onCloseFile={closeFileTab}
+      terminals={terminals}
+      activeTerminalId={activeTerminalId}
+      onAddTerminal={addTerminal}
+      onSelectTerminal={selectTerminal}
+      onCloseTerminal={closeTerminalTab}
+      onFileMenu={setFileMenu}
+      expandedDirs={expandedDirs}
+      dirListings={dirListings}
+      onToggleDirectory={toggleDirectory}
       onToggleArtifactRest={() => { setArtifactRestOpen(current => !current) }}
       renderedFile={renderedFile}
       onToggleRendered={() => { setRenderedFile(current => !current) }}
@@ -2123,6 +2333,29 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     /> : null}
 
     {sidecarOpen && activeRoom !== undefined ? <SidecarDrawer roomTitle={activeRoom.title} messages={sidecarMessages} draft={sidecarDraft} busy={sidecarBusy} error={sidecarError} onDraft={setSidecarDraft} onSubmit={submitSidecar} onClose={closeTemporaryChat}/> : null}
+
+    {fileMenu !== null ? (() => {
+      const close = (): void => { setFileMenu(null) }
+      const target = fileMenu
+      return <div className={css.menuBackdrop} onMouseDown={close}>
+        <div className={css.roomMenu} style={{ left: `${Math.min(target.x, window.innerWidth - 210)}px`, top: `${Math.min(target.y, window.innerHeight - 190)}px` }} onMouseDown={(event) => { event.stopPropagation() }}>
+          <button type="button" onClick={() => { attachPath(target.path); close() }}>{t('attachToChat')}</button>
+          <button type="button" onClick={() => { void navigator.clipboard?.writeText(target.path).then(() => { setNotice(t('copied')) }, () => {}); close() }}>{t('copyPath')}</button>
+          <button type="button" onClick={() => {
+            if (activeWorkspace === undefined) { close(); return }
+            void revealProjectPath(activeWorkspace.workspaceId, target.path, new AbortController().signal)
+              .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
+            close()
+          }}>{t('revealInFinder')}</button>
+          <button type="button" onClick={() => {
+            const directory = target.kind === 'directory' ? target.path : target.path.slice(0, target.path.lastIndexOf('/'))
+            openProjectTool('terminal')
+            setTerminalCommand(`cd ${/\s/u.test(directory) ? `"${directory}"` : directory}`)
+            close()
+          }}>{t('openHere')}</button>
+        </div>
+      </div>
+    })() : null}
 
     {roomMenu !== null ? (() => {
       const room = state.rooms.find(item => item.roomId === roomMenu.roomId)

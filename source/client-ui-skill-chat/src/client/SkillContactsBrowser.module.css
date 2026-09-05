@@ -2685,3 +2685,54 @@
   color: var(--ds-chat-muted) !important;
   font-size: var(--ds-chat-text-caption);
 }
+
+/* Terminal and file tab strips: one row of chips, the active one lifted. */
+.terminalTabs,
+.fileTabs {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  padding: var(--ds-chat-space-1) var(--ds-chat-space-2);
+  border-bottom: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  overflow-x: auto;
+}
+
+.terminalTabs > button,
+.fileTabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 8px;
+  border: none;
+  border-radius: var(--ds-chat-radius-control);
+  color: var(--ds-chat-muted);
+  background: transparent;
+  font: inherit;
+  font-size: var(--ds-chat-text-caption);
+  cursor: pointer;
+}
+
+.terminalTabs > button[data-active],
+.fileTabs > button[data-active] { color: var(--ds-chat-text-color); background: var(--ds-chat-hover); }
+.terminalTabs > button b,
+.fileTabs > button b { font-weight: var(--ds-chat-weight-regular, 400); opacity: .5; }
+.terminalTabs > button b:hover,
+.fileTabs > button b:hover { opacity: 1; }
+.terminalAdd { color: var(--ds-chat-muted); }
+
+.fileFilter { padding: var(--ds-chat-space-2); }
+
+.fileFilter input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px var(--ds-chat-space-2);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-control);
+  color: inherit;
+  background: var(--ds-chat-surface);
+  font: inherit;
+  font-size: var(--ds-chat-text-caption);
+}
+
+.treeCaret { display: inline-block; width: 12px; color: var(--ds-chat-muted); font-size: 10px; }

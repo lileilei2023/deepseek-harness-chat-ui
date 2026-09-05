@@ -91,6 +91,8 @@ const MAX_PREVIEW_BYTES = 512 * 1024
 const ARTIFACT_MAX_DEPTH = 4
 const ARTIFACT_MAX_FILES = 200
 const ARTIFACT_MAX_EXAMINED = 4000
+const SEARCH_MAX_HITS = 100
+const SEARCH_MAX_FILE_BYTES = 512 * 1024
 const ARTIFACT_SKIP_DIRECTORIES = new Set(['node_modules', 'dist', 'build', 'target', 'venv', '__pycache__'])
 const GITHUB_SOURCE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u
 const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/u
@@ -394,6 +396,116 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     await walk(root, 0)
     found.sort((left, right) => right.modifiedAt - left.modifiedAt)
     return { files: found.slice(0, ARTIFACT_MAX_FILES) }
+  }
+
+  /**
+   * Replay one terminal's scrollback.
+   *
+   * A terminal that is switched away from and back to used to come back blank:
+   * the client only ever saw output it had asked for. The backend keeps the
+   * buffer, so reading it is what makes several terminals survivable.
+   * @param request - the Session and terminal.
+   * @returns the buffered output.
+   */
+  @Remote
+  async readSkillChatTerminal(
+    request: { readonly sessionId: string; readonly terminalId: string },
+    signal?: AbortSignal,
+  ): Promise<SkillChatTerminalValue> {
+    signal?.throwIfAborted()
+    const agent = this.ctx.agents.get(SessionId(request.sessionId))
+    if (agent === undefined) throw new Error('skill-chat: Session is not active')
+    const terminals = agent.ctx.get('terminals')
+    if (terminals === undefined) return { terminalId: request.terminalId, text: '', status: 'running', truncated: false }
+    const output = terminals.read(agent, TerminalSessionId(request.terminalId), { count: 2_000 })
+    return { terminalId: request.terminalId, text: output.text, status: 'running', truncated: output.truncated }
+  }
+
+  /**
+   * Find files in a Workspace by name, or by what they contain.
+   *
+   * A one-level listing makes a person walk to a file they can already name.
+   * Contents search is the same walk with a bounded read per file, which is why
+   * both live here rather than in two remotes with two sets of bounds.
+   * @param request - the Workspace, the needle, and whether to read contents.
+   * @returns matching paths, newest first, capped.
+   */
+  @Remote
+  async searchProjectFiles(
+    request: { readonly workspaceId: string; readonly query: string; readonly contents: boolean },
+    signal?: AbortSignal,
+  ): Promise<{ readonly files: readonly { readonly path: string; readonly name: string; readonly line?: string }[] }> {
+    signal?.throwIfAborted()
+    const needle = request.query.trim().toLocaleLowerCase()
+    if (needle === '') return { files: [] }
+    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId))
+    if (workspace === undefined) throw new Error('skill-chat: unknown Workspace')
+    if (await workspace.status() !== 'ok') throw new Error('skill-chat: Workspace directory is unavailable')
+    const root = await realpath(workspace.path)
+    const hits: { path: string; name: string; line?: string }[] = []
+    let examined = 0
+    const walk = async (directory: string, depth: number): Promise<void> => {
+      if (depth > ARTIFACT_MAX_DEPTH || examined >= ARTIFACT_MAX_EXAMINED || hits.length >= SEARCH_MAX_HITS) return
+      signal?.throwIfAborted()
+      for (const entry of await readdir(directory, { withFileTypes: true }).catch(() => [])) {
+        if (hits.length >= SEARCH_MAX_HITS || examined >= ARTIFACT_MAX_EXAMINED) return
+        if (entry.isSymbolicLink() || entry.name.startsWith('.')) continue
+        const full = join(directory, entry.name)
+        if (entry.isDirectory()) {
+          if (ARTIFACT_SKIP_DIRECTORIES.has(entry.name)) continue
+          await walk(full, depth + 1)
+          continue
+        }
+        if (!entry.isFile()) continue
+        examined += 1
+        if (!request.contents) {
+          if (entry.name.toLocaleLowerCase().includes(needle)) hits.push({ path: full, name: entry.name })
+          continue
+        }
+        const info = await stat(full).catch(() => undefined)
+        if (info === undefined || info.size > SEARCH_MAX_FILE_BYTES) continue
+        const text = await readFile(full, 'utf8').catch(() => undefined)
+        if (text === undefined) continue
+        const line = text.split('\n').find(candidate => candidate.toLocaleLowerCase().includes(needle))
+        if (line !== undefined) hits.push({ path: full, name: entry.name, line: line.trim().slice(0, 160) })
+      }
+    }
+    await walk(root, 0)
+    return { files: hits }
+  }
+
+  /**
+   * Show one Workspace path in the desktop file manager.
+   *
+   * The browser cannot open a native window, so the Host runs the platform's
+   * own reveal command. Confined to the Workspace for the same reason browsing
+   * is: a path from the client is not a permission.
+   * @param request - the Workspace and the path to reveal.
+   */
+  @Remote
+  async revealProjectPath(
+    request: { readonly workspaceId: string; readonly path: string },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    signal?.throwIfAborted()
+    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId))
+    if (workspace === undefined) throw new Error('skill-chat: unknown Workspace')
+    const root = await realpath(workspace.path)
+    const target = await realpath(request.path)
+    if (!isWithin(root, target)) throw new Error('skill-chat: path escapes Workspace')
+    const subprocess = this.ctx.get('subprocess')
+    if (subprocess === undefined) throw new Error('skill-chat: this Host has no subprocess service')
+    const argv = process.platform === 'darwin'
+      ? ['open', '-R', target]
+      : process.platform === 'win32' ? ['explorer', `/select,${target}`] : ['xdg-open', dirname(target)]
+    const handle = subprocess.spawn({
+      argv,
+      cwd: root,
+      stdio: { stdin: 'ignore', stdout: { maxBytes: 4096 }, stderr: { maxBytes: 4096 } },
+      graceMs: 1_000,
+      ...signal === undefined ? {} : { signal },
+    })
+    await handle.done
   }
 
   /** List one directory inside a registered Workspace for the project-tools drawer. */

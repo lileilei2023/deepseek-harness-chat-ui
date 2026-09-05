@@ -22,6 +22,7 @@ import {
 } from './model.ts'
 import type {} from './shell/slots.ts'
 import { Avatar, AvatarStack, Button, ChatBubble, Dialog, Drawer, EmptyState, IconButton, RoomRow, WorkbenchPanel } from './ui/index.tsx'
+import { avatarDataUri } from './ui/avatar.tsx'
 // Token layer first: every module stylesheet below resolves its colours, type
 // steps and radii from it, and the dark scheme is a token swap alone.
 import './theme.css'
@@ -1146,6 +1147,27 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       if (headerBridgeValue?.sessionId === currentSessionId) publishHeaderBridge(null)
     }
   }, [activeCoordinator, activeMembers, activeRoom, activeWorkspace?.title, currentSessionId, renderSlot, state.personas, state.roomSessions])
+
+  // Publish the speaking Skill's portrait to the document so the transcript can
+  // put a face beside the reply. The conversation column is the shell's, drawn
+  // outside this component's tree, so a custom property is the only handle the
+  // plugin has on it — and it costs nothing when no DS Chat room is open.
+  useEffect(() => {
+    const speaker = activeCoordinator ?? activeMembers[0]
+    const identity = speaker === undefined ? undefined : displayOf(speaker, 'persona', state.personas)
+    const root = document.documentElement
+    if (activeRoom === undefined || identity === undefined) {
+      root.style.removeProperty('--ds-chat-speaker-avatar')
+      root.removeAttribute('data-ds-chat-room')
+      return
+    }
+    root.style.setProperty('--ds-chat-speaker-avatar', `url("${avatarDataUri(identity.avatar, 64)}")`)
+    root.setAttribute('data-ds-chat-room', activeRoom.type)
+    return () => {
+      root.style.removeProperty('--ds-chat-speaker-avatar')
+      root.removeAttribute('data-ds-chat-room')
+    }
+  }, [activeCoordinator, activeMembers, activeRoom, state.personas])
 
   useEffect(() => {
     if (activeRoom === undefined || currentSessionId === undefined) return

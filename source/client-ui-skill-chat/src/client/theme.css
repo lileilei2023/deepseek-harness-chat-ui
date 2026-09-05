@@ -324,3 +324,53 @@ body[data-ds-dark-theme] {
   width: calc(100% - 8px);
   margin-inline: 4px;
 }
+
+/*
+ * The reply, as a message.
+ *
+ * The shell renders an assistant answer as bare markdown in the column — no
+ * speaker, no bubble — so a room full of personified Skills still read like a
+ * document. Only applied while a DS Chat room is open (`data-ds-chat-room` on
+ * the root), so ordinary Harness sessions keep the shell's own presentation.
+ *
+ * The portrait comes through `--ds-chat-speaker-avatar`, which the sidebar sets
+ * for the room's coordinator: the conversation column is outside the plugin's
+ * tree, and a custom property is the only handle it has on it.
+ */
+:root[data-ds-chat-room] [data-chat-flow-kind='assistant-step'] [class*='markdown'] {
+  position: relative;
+  max-width: min(760px, 100%);
+  margin-top: var(--ds-chat-space-2);
+  margin-left: 44px;
+  padding: var(--ds-chat-space-3) var(--ds-chat-space-4);
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: var(--ds-chat-radius-lg);
+  border-top-left-radius: var(--ds-chat-radius-xs);
+  background: var(--ds-chat-surface);
+  box-shadow: var(--ds-chat-shadow-1);
+}
+
+/* The speaker's face sits in the gutter the bubble's margin opened up. */
+:root[data-ds-chat-room] [data-chat-flow-kind='assistant-step'] [class*='markdown']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -44px;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--ds-chat-radius-round);
+  background-image: var(--ds-chat-speaker-avatar);
+  background-position: center;
+  background-size: cover;
+  box-shadow: inset 0 0 0 var(--ds-chat-hairline) rgb(0 0 0 / 8%);
+}
+
+/* The working notes indent to the same gutter, so a turn reads as one column:
+ * face, then what it did, then what it said. */
+:root[data-ds-chat-room] [data-chat-flow-kind='assistant-step'] [data-disclosure-row],
+:root[data-ds-chat-room] [data-chat-flow-kind='tool-call'] [data-disclosure-row] { margin-left: 44px; }
+
+@media (max-width: 900px) {
+  :root[data-ds-chat-room] [data-chat-flow-kind='assistant-step'] [class*='markdown'] { margin-left: 0; }
+  :root[data-ds-chat-room] [data-chat-flow-kind='assistant-step'] [class*='markdown']::before { display: none; }
+}

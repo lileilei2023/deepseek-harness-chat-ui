@@ -1543,23 +1543,31 @@
 .workspaceMenu strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .workspaceMenu b { color: var(--ds-chat-accent-solid); }
 
+/* Shape says what kind of thing a row is: a portrait is a circle because it
+ * stands for a person, a group is a squircle tile of member portraits. A plain
+ * chat is a room with no face, so it takes the tile's shape and box rather than
+ * a person's circle — which also ends the 38-vs-40 ragged left edge. The fill
+ * is the tile's neutral ground, with the accent left to the mark, so the row
+ * does not sit heavier than its neighbours. */
 .generalAvatar {
-  width: 36px;
-  height: 36px;
+  box-sizing: border-box;
+  width: 40px;
+  height: 40px;
   flex: none;
   display: grid;
   place-items: center;
-  border: 1px solid var(--ds-chat-accent-border, var(--ds-chat-accent-border));
-  border-radius: 50%;
-  color: var(--ds-chat-accent-solid);
-  background: var(--ds-chat-avatar-gradient, var(--ds-chat-accent-soft-strong));
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: 12px;
+  color: var(--ds-chat-accent-text);
+  background: var(--ds-chat-surface-sunken, var(--ds-chat-hover));
   box-shadow: none;
-  font-size: var(--ds-chat-text-title2);
+  font-size: var(--ds-chat-text-title3);
 }
 .generalAvatar[data-compact='true'] {
   width: 30px;
   height: 30px;
-  font-size: var(--ds-chat-text-title3);
+  border-radius: 9px;
+  font-size: var(--ds-chat-text-body);
 }
 .historyRow .avatar,
 .historyRow .generalAvatar { width: 32px; height: 32px; }
@@ -1605,7 +1613,13 @@
 /* The room's portrait, published as a data URI by the browser component. The
  * rule is skipped entirely when there is no room, because a `var()` with no
  * fallback makes the whole declaration invalid and the box never paints. */
-:global([data-skill-chat-welcome][data-skill-chat-welcome])::before {
+/* The room's portrait. Gated on the attribute the browser component only sets
+ * when it actually has one, because `var()` with a `none` fallback still paints
+ * the box — which left an empty grey tile above the greeting whenever the
+ * coordinator could not be resolved. The same attribute carries the room type,
+ * so a plain chat, which has no face by definition, is excluded here rather
+ * than switched off by a second rule. */
+:global(html[data-ds-chat-room]:not([data-ds-chat-room='general']) [data-skill-chat-welcome])::before {
   content: '';
   display: block;
   width: 52px;
@@ -1613,10 +1627,8 @@
   margin: 0 auto 12px;
   border: var(--ds-chat-hairline) solid var(--ds-chat-border);
   border-radius: 50%;
-  background: var(--ds-chat-speaker-avatar, none) center / cover no-repeat, var(--ds-chat-hover);
+  background: var(--ds-chat-speaker-avatar) center / cover no-repeat, var(--ds-chat-hover);
 }
-
-:global([data-skill-chat-welcome='general'][data-skill-chat-welcome])::before { display: none; }
 
 :global([data-skill-chat-welcome])::after {
   content: attr(data-skill-chat-hint);
@@ -2324,13 +2336,12 @@
 
 .roomMenuButton {
   position: absolute;
-  top: 50%;
+  top: 6px;
   right: 6px;
   display: none;
   width: 24px;
   height: 24px;
   padding: 0;
-  transform: translateY(-50%);
   border: none;
   border-radius: var(--ds-chat-radius-control);
   color: var(--ds-chat-muted);
@@ -2342,6 +2353,11 @@
 
 .roomRowWrap:hover .roomMenuButton,
 .roomMenuButton:focus-visible { display: block; }
+
+/* The two share one slot, so the time steps aside while the action is showing
+ * rather than being covered by it. */
+.roomRowWrap:hover .roomRow [class*='time'],
+.roomRowWrap:focus-within .roomRow [class*='time'] { visibility: hidden; }
 .roomMenuButton:hover { color: var(--ds-chat-text-color); background: var(--ds-chat-hover); }
 
 .pinMark { margin-right: 3px; color: var(--ds-chat-accent); }

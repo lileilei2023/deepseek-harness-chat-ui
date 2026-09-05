@@ -902,8 +902,24 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       || state.roomSessions.some(session => session.roomId === room.roomId && session.title.toLowerCase().includes(needle)))
   }, [deferredQuery, state.roomSessions, visibleRooms])
   const visibleMemberContacts = useMemo(() => allContacts.filter(contact => matches(contact, deferredMemberQuery, state.personas)), [allContacts, deferredMemberQuery, state.personas])
-  const activeMembers = activeRoom?.memberIds.flatMap(id => allContacts.find(contact => contact.id === id) ?? []) ?? []
-  const activeCoordinator = activeMembers.find(member => member.id === activeRoom?.coordinatorId) ?? activeMembers[0]
+  /**
+   * Resolve a stored member id to a contact.
+   *
+   * A contact id is `<root>:<plugin>:<name>`, so widening the catalog's roster
+   * re-keys contacts and orphans ids already stored in rooms. The trailing
+   * segment is the Skill's name, which is unique after dedup, so it recovers
+   * the member without a migration.
+   * @param id - the stored contact id.
+   * @returns the contact, or undefined when the Skill is gone entirely.
+   */
+  const memberContact = (id: string): SkillContact | undefined =>
+    allContacts.find(contact => contact.id === id)
+      ?? allContacts.find(contact => contact.name === id.slice(id.lastIndexOf(':') + 1))
+
+  const activeMembers = activeRoom?.memberIds.flatMap(id => memberContact(id) ?? []) ?? []
+  const activeCoordinator = activeRoom === undefined
+    ? undefined
+    : memberContact(activeRoom.coordinatorId) ?? activeMembers[0]
   const currentSessionBlank = currentSessionId === undefined ? false : sessions.byId[currentSessionId]?.blank === true
 
   const replaceState = (next: SkillChatState): SkillChatState => {
@@ -1185,9 +1201,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       // catalog's roster changed: a contact id is `<root>:<plugin>:<name>`, so
       // widening the roster re-keys contacts and orphans the stored ids. The
       // trailing segment is the Skill's name, which is unique after dedup.
-      const name = id.slice(id.lastIndexOf(':') + 1)
-      const contact = allContacts.find(item => item.id === id)
-        ?? allContacts.find(item => item.name === name)
+      const contact = memberContact(id)
       return contact?.source === 'workbuddy' && contact.path !== undefined
         ? [{ path: contact.path, name: contact.name }]
         : []
@@ -1452,8 +1466,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
         // Same fallback the rest of the room code uses: a stored id whose root
         // prefix went stale still names its Skill in the trailing segment, and
         // without this the tile drops back to the placeholder mark.
-        const contact = allContacts.find(item => item.id === id)
-          ?? allContacts.find(item => item.name === id.slice(id.lastIndexOf(':') + 1))
+        const contact = memberContact(id)
         if (contact === undefined) return []
         const identity = displayOf(contact, 'persona', state.personas)
         return [{ id, ...identity }]

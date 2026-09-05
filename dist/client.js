@@ -11257,20 +11257,12 @@ ${roster}
 					id: "ds-chat-nocturne",
 					name: "夜航",
 					nameEn: "DS Chat Nocturne",
-					version: "1.0.0",
+					version: "2.0.0",
 					author: "DS Chat",
-					tagline: "常暗底色、蓝紫强调，社群聊天风格",
-					description: "参考 Discord 的社群聊天观感：无论系统明暗都保持深色底，强调色为蓝紫，圆角更大、层级靠明度而非描边。",
-					tags: [
-						"builtin",
-						"dark",
-						"community"
-					],
+					tagline: "蓝紫强调、紧凑圆角，社群聊天风格",
+					description: "参考 Discord 的社群聊天观感：蓝紫强调色，圆角更小、层级靠明度而非描边。跟随系统与应用的明暗开关。",
+					tags: ["builtin", "community"],
 					accent: "#5865f2",
-					preview: {
-						light: "#2b2d31",
-						dark: "#2b2d31"
-					},
 					order: 20,
 					contributes: { stylesheet: "skin.css" }
 				},
@@ -11278,67 +11270,23 @@ ${roster}
     --ds-chat-accent-solid: #5865f2;
     --ds-chat-accent-hover: #4752c4;
     --ds-chat-on-accent: #fff;
-    --ds-chat-accent-soft: color-mix(in srgb, #5865f2 18%, transparent);
-    --ds-chat-accent-soft-strong: color-mix(in srgb, #5865f2 28%, transparent);
-    --ds-chat-accent-border: color-mix(in srgb, #5865f2 46%, transparent);
-    --ds-chat-accent-text: #c3c8ff;
+    --ds-chat-accent-text: #4752c4;
     --ds-chat-radius-control: 8px;
     --ds-chat-radius-sm: 6px;
     --ds-chat-radius-md: 10px;
     --ds-chat-radius-lg: 12px;
     --ds-chat-radius-xl: 16px;
   }
-  html[data-dsh-skin="ds-chat-nocturne"] body {
-    color-scheme: dark;
-    --ds-chat-surface: #313338;
-    --ds-chat-surface-raised: #383a40;
-    --ds-chat-text-color: #dbdee1;
-    --ds-chat-text-secondary: #b5bac1;
-    --ds-chat-muted: #949ba4;
-    --ds-chat-border: rgb(255 255 255 / 6%);
-    --ds-chat-border-strong: rgb(255 255 255 / 10%);
-    --ds-chat-hover: rgb(255 255 255 / 6%);
-    --ds-chat-fill-quaternary: rgb(255 255 255 / 4%);
-    --ds-chat-fill-tertiary: rgb(255 255 255 / 8%);
-    --ds-chat-fill-secondary: rgb(255 255 255 / 12%);
-    --ds-chat-fill-primary: rgb(255 255 255 / 16%);
-    --ds-chat-shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
-    --ds-chat-shadow-2: 0 4px 14px rgb(0 0 0 / 42%);
-    --ds-chat-shadow-3: 0 16px 40px rgb(0 0 0 / 58%);
-    --ds-chat-scrim: rgb(0 0 0 / 60%);
-    --ds-chat-danger: #f23f43;
-    --ds-chat-warning: #f0b132;
-    --ds-chat-info: #00a8fc;
+  html[data-dsh-skin="ds-chat-nocturne"] body[data-ds-dark-theme] {
+    --ds-chat-accent-solid: #7d88ff;
+    --ds-chat-accent-hover: #99a2ff;
+    --ds-chat-accent-text: #c3c8ff;
+    --ds-chat-on-accent: #12163a;
   }
-  /* An always-dark skin has to reach the shell's own palette as well: the
-     conversation column is drawn by the host from --dsw-alias-*, so a skin
-     that only redefines the plugin's tokens leaves a dark sidebar beside a
-     white room. These map the host's aliases onto the same palette, which is
-     the same mechanism the host uses for its own dark scheme. */
-  html[data-dsh-skin="ds-chat-nocturne"] body {
-    --dsw-alias-bg-base: #313338;
-    --dsw-alias-bg-layer-1: #2b2d31;
-    --dsw-alias-bg-layer-2: #383a40;
-    --dsw-alias-bg-layer-3: #404249;
-    --dsw-alias-label-primary: #dbdee1;
-    --dsw-alias-label-secondary: #b5bac1;
-    --dsw-alias-label-tertiary: #949ba4;
-    --dsw-alias-border-l2: rgb(255 255 255 / 6%);
-    --dsw-alias-border-l3: rgb(255 255 255 / 10%);
-    --dsw-alias-border-l4: rgb(255 255 255 / 14%);
-    --dsw-alias-interactive-bg-hover: rgb(255 255 255 / 6%);
-    --dsw-alias-interactive-bg-hover-solid: #404249;
-    --dsw-alias-bg-overlay: #232428;
-    --dsw-alias-bg-skeleton: rgb(255 255 255 / 8%);
-  }
-  /* The sidebar sits one step darker than the room, the way a community client
-     separates its channel list from its conversation. */
-  html[data-dsh-skin="ds-chat-nocturne"] [data-skill-chat-root] {
-    --ds-chat-surface: #2b2d31;
-    background: #2b2d31;
-  }
+  /* Selection reads by lightness rather than a border, which is this skin's
+     one structural idea and costs nothing on either ground. */
   html[data-dsh-skin="ds-chat-nocturne"] [data-skill-chat-root] [class*="roomRow"][data-selected="true"] {
-    background: rgb(255 255 255 / 10%);
+    background: var(--ds-chat-accent-soft-strong);
   }`
 			}
 		];

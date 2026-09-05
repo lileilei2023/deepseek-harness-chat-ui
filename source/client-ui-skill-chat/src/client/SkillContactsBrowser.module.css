@@ -2671,3 +2671,17 @@
 }
 
 .previewToggle:hover { color: var(--ds-chat-text-color); background: var(--ds-chat-hover); }
+
+/* Rendered Markdown gets reading measure and the panel's own scroll. */
+.filePreviewMarkdown {
+  overflow: auto;
+  height: 100%;
+  padding: var(--ds-chat-space-4) var(--ds-chat-space-5);
+  font-size: var(--ds-chat-text-body);
+  line-height: var(--ds-chat-leading-relaxed, 1.7);
+}
+
+.artifactMore {
+  color: var(--ds-chat-muted) !important;
+  font-size: var(--ds-chat-text-caption);
+}

@@ -289,6 +289,11 @@ function registerUi(ctx: Context): void {
         const result = await ctx.remote.workbuddySkills.unlinkSkill(name, signal)
         if (!result.ok) throw new Error(result.error.message)
       },
+      recentProjectFiles: async (workspaceId: WorkspaceId, since: number, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.recentProjectFiles({ workspaceId, since }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value.files
+      },
       browseProject: async (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => {
         const result = await ctx.remote.workbuddySkills.browseProject({ workspaceId, ...(path === undefined ? {} : { path }) }, signal)
         if (!result.ok) throw new Error(result.error.message)

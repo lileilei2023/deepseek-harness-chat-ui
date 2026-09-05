@@ -128,6 +128,18 @@ const ARCHIVE_FILE_THRESHOLD = 60;
 const MAX_INSTALL_BYTES = 12 * 1024 * 1024;
 const MAX_ARCHIVE_BYTES = 24 * 1024 * 1024;
 const MAX_PREVIEW_BYTES = 512 * 1024;
+/** Bounds for the artifact walk; see `recentProjectFiles`. */
+const ARTIFACT_MAX_DEPTH = 4;
+const ARTIFACT_MAX_FILES = 200;
+const ARTIFACT_MAX_EXAMINED = 4e3;
+const ARTIFACT_SKIP_DIRECTORIES = new Set([
+	"node_modules",
+	"dist",
+	"build",
+	"target",
+	"venv",
+	"__pycache__"
+]);
 const GITHUB_SOURCE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u;
 const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/u;
 const Config = Schema.object({
@@ -145,6 +157,7 @@ let WorkBuddySkillCatalog = (() => {
 	let _installExternal_decorators;
 	let _linkSkill_decorators;
 	let _unlinkSkill_decorators;
+	let _recentProjectFiles_decorators;
 	let _browseProject_decorators;
 	let _readProjectFile_decorators;
 	let _openSkillChatTerminal_decorators;
@@ -164,6 +177,7 @@ let WorkBuddySkillCatalog = (() => {
 			_installExternal_decorators = [Remote];
 			_linkSkill_decorators = [Remote];
 			_unlinkSkill_decorators = [Remote];
+			_recentProjectFiles_decorators = [Remote];
 			_browseProject_decorators = [Remote];
 			_readProjectFile_decorators = [Remote];
 			_openSkillChatTerminal_decorators = [Remote];
@@ -227,6 +241,17 @@ let WorkBuddySkillCatalog = (() => {
 				access: {
 					has: (obj) => "unlinkSkill" in obj,
 					get: (obj) => obj.unlinkSkill
+				},
+				metadata: _metadata
+			}, null, _instanceExtraInitializers);
+			__esDecorate(this, null, _recentProjectFiles_decorators, {
+				kind: "method",
+				name: "recentProjectFiles",
+				static: false,
+				private: false,
+				access: {
+					has: (obj) => "recentProjectFiles" in obj,
+					get: (obj) => obj.recentProjectFiles
 				},
 				metadata: _metadata
 			}, null, _instanceExtraInitializers);
@@ -507,6 +532,60 @@ let WorkBuddySkillCatalog = (() => {
 		/** `$DSH_HOME/skills`: the Harness's own user-level Skill root. */
 		linkDir() {
 			return join(process.env.DSH_HOME ?? join(homedir(), ".dsh"), "skills");
+		}
+		/**
+		* Files in this Workspace touched since a moment.
+		*
+		* A room hands back reports, and finding them meant walking a project tree of
+		* forty entries looking for a name someone had to be told. What a room
+		* produced is exactly what changed while it was running, so the Workspace is
+		* walked once and filtered by modification time — no bookkeeping to keep in
+		* sync with the filesystem, and it catches whatever the members wrote however
+		* they wrote it.
+		*
+		* Bounded the same way browsing is: no symlinks, nothing outside the
+		* Workspace, a depth cap, and a result cap so a build directory cannot turn
+		* this into an unbounded walk. Directories that only ever hold machinery are
+		* skipped outright.
+		* @param request - the Workspace and the epoch-millisecond floor.
+		* @returns newest first, capped.
+		*/
+		async recentProjectFiles(request, signal) {
+			signal?.throwIfAborted();
+			const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId));
+			if (workspace === void 0) throw new Error("skill-chat: unknown Workspace");
+			if (await workspace.status() !== "ok") throw new Error("skill-chat: Workspace directory is unavailable");
+			const root = await realpath(workspace.path);
+			const found = [];
+			let examined = 0;
+			const walk = async (directory, depth) => {
+				if (depth > ARTIFACT_MAX_DEPTH || examined >= ARTIFACT_MAX_EXAMINED) return;
+				signal?.throwIfAborted();
+				const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+				for (const entry of entries) {
+					if (examined >= ARTIFACT_MAX_EXAMINED) return;
+					if (entry.isSymbolicLink() || entry.name.startsWith(".")) continue;
+					const full = join(directory, entry.name);
+					if (entry.isDirectory()) {
+						if (ARTIFACT_SKIP_DIRECTORIES.has(entry.name)) continue;
+						await walk(full, depth + 1);
+						continue;
+					}
+					if (!entry.isFile()) continue;
+					examined += 1;
+					const info = await stat(full).catch(() => void 0);
+					if (info === void 0 || info.mtimeMs < request.since) continue;
+					found.push({
+						path: full,
+						name: entry.name,
+						size: info.size,
+						modifiedAt: Math.round(info.mtimeMs)
+					});
+				}
+			};
+			await walk(root, 0);
+			found.sort((left, right) => right.modifiedAt - left.modifiedAt);
+			return { files: found.slice(0, ARTIFACT_MAX_FILES) };
 		}
 		/** List one directory inside a registered Workspace for the project-tools drawer. */
 		async browseProject(request, signal) {

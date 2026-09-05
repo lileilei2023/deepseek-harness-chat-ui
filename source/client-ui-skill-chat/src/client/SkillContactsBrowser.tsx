@@ -9,6 +9,7 @@ import {
   IconFolderOpenOutline16,
   IconGlobeOutline14,
   IconNewChatOutline16,
+  MarkdownText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
@@ -31,7 +32,7 @@ import css from './SkillContactsBrowser.module.css'
 
 type View = 'chats' | 'groups' | 'contacts' | 'automations'
 type ContactMode = 'persona' | 'raw'
-type ProjectToolKind = 'files' | 'terminal' | 'diff' | 'browser'
+type ProjectToolKind = 'artifacts' | 'files' | 'terminal' | 'diff' | 'browser'
 
 interface ProjectDirectoryListing {
   readonly path: string
@@ -127,6 +128,7 @@ interface SkillContactsInjected {
   runAutomation: (automationId: string, signal: AbortSignal) => Promise<{ readonly sessionId: SessionId; readonly state: SkillChatState }>
   linkSkill: (path: string, name: string, signal: AbortSignal) => Promise<{ readonly name: string; readonly target: string }>
   forkSession: (sessionId: SessionId, atSeq: number, increaseTitle: boolean) => Promise<SessionId>
+  recentProjectFiles: (workspaceId: WorkspaceId, since: number, signal: AbortSignal) => Promise<readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[]>
   messageSeq: (sessionId: SessionId, messageId: string) => number | undefined
   browseProject: (workspaceId: WorkspaceId, path: string | undefined, signal: AbortSignal) => Promise<ProjectDirectoryListing>
   readProjectFile: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<ProjectFilePreview>
@@ -540,6 +542,7 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
   // unlabelled glyphs competing with three text buttons made the room header
   // read as a toolbar; behind one labelled entry they read as what they are.
   const workbenchItems: readonly { readonly tool: ProjectToolKind, readonly label: string, readonly icon: React.JSX.Element }[] = [
+    { tool: 'artifacts', label: tr('artifacts'), icon: <IconCodeOutline16/> },
     { tool: 'files', label: tr('projectFiles'), icon: <IconFolderOpenOutline16/> },
     { tool: 'terminal', label: tr('terminalLabel'), icon: <IconCodeOutline16/> },
     { tool: 'diff', label: tr('viewDiff'), icon: <IconBranchOutline16/> },
@@ -581,6 +584,10 @@ interface WorkbenchDrawerProps {
   readonly terminalCommand: string
   readonly terminalBusy: boolean
   readonly browserUrl: string
+  readonly artifacts: readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[]
+  readonly artifactsBusy: boolean
+  readonly artifactRestOpen: boolean
+  readonly onToggleArtifactRest: () => void
   readonly renderedFile: boolean
   readonly onToggleRendered: () => void
   readonly browserDraft: string
@@ -714,13 +721,81 @@ function DiffView({ text }: { readonly text: string }): React.JSX.Element {
  * @returns true when a rendered view is offered.
  */
 function isRenderable(file: ProjectFilePreview): boolean {
-  return !file.binary && !file.truncated && /\.html?$/i.test(file.name)
+  return !file.binary && !file.truncated && /\.(html?|md|markdown)$/i.test(file.name)
+}
+
+/** Whether the rendered view for this file is Markdown rather than an HTML frame. */
+function isMarkdownFile(file: ProjectFilePreview): boolean {
+  return /\.(md|markdown)$/i.test(file.name)
+}
+
+/**
+ * Chrome for the Markdown renderer. Defined once at module scope because the
+ * component discards its render cache when this object's identity changes.
+ */
+const MARKDOWN_LABELS = {
+  code: { copyLabel: '复制', copiedLabel: '已复制' },
+  footnotes: '脚注',
 }
 
 function fileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+/**
+ * One previewed file, in whichever form reads best.
+ *
+ * Shared by the artifacts and files panes so the two cannot drift into
+ * different ideas of what opening a file means.
+ * @param props - the file, and the rendered/source toggle.
+ * @returns the preview body.
+ */
+/**
+ * Whether a produced file is something a person reads.
+ *
+ * "Everything modified since the room started" catches the reports and also
+ * every intermediate a member's script wrote — two hundred `circle_*.json`
+ * ahead of the one report someone wants. A deliverable is a document, so
+ * documents lead and the rest is collapsed behind a count rather than dropped:
+ * the data is often worth reaching, just never worth ranking first.
+ * @param name - the file's name.
+ * @returns true for readable document types.
+ */
+function isDeliverable(name: string): boolean {
+  return /\.(md|markdown|html?|pdf|docx?|pptx?|xlsx?|csv|txt)$/i.test(name)
+}
+
+function ProjectFileView(
+  { file, rendered, onToggle }: {
+    readonly file: ProjectFilePreview
+    readonly rendered: boolean
+    readonly onToggle: () => void
+  },
+): React.JSX.Element {
+  return <>
+    <div className={css.filePreviewMeta}>
+      <strong>{file.name}</strong>
+      <small>{file.language} · {fileSize(file.size)}{file.truncated ? tr('truncated') : ''}</small>
+      {isRenderable(file) ? <button className={css.previewToggle} type="button" onClick={onToggle}>{rendered ? tr('viewSource') : tr('viewRendered')}</button> : null}
+    </div>
+    {file.binary
+      ? <div className={css.drawerEmpty}>{tr('binaryFile')}</div>
+      : rendered && isMarkdownFile(file)
+        // Most of what a room hands back is Markdown, and it was printed as
+        // numbered source. The shell's own renderer draws it, so a report reads
+        // here the way it reads in the transcript.
+        ? <div className={css.filePreviewMarkdown}><MarkdownText text={file.content ?? ''} labels={MARKDOWN_LABELS}/></div>
+        : rendered
+          // Self-contained HTML is the other deliverable. `srcdoc` renders it
+          // from the content already read, so no route has to serve the
+          // workspace over HTTP — and `file://` in an iframe would be blocked
+          // from this origin anyway. The sandbox withholds same-origin, so the
+          // report cannot reach this page or its data.
+          ? <iframe className={css.filePreviewFrame} title={file.name} srcDoc={file.content ?? ''} sandbox="allow-scripts allow-popups"/>
+          : <div className={css.filePreviewBody}>{(file.content ?? '').split('\n').map((line, index) => <div className={css.codeLine} key={index}><span className={css.codeLineNo}>{index + 1}</span><span className={css.codeLineText}>{line || '\u00a0'}</span></div>)}</div>}
+  </>
 }
 
 function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
@@ -732,6 +807,48 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
         <span><strong>{title}</strong><small>{props.workspaceTitle}</small></span>
         <IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={props.onClose}>×</IconButton>
       </header>
+      {/* What this room produced, rather than everything the project holds. The
+        * files pane beside it still answers "what is in here"; this one answers
+        * "where is the thing the team just made", which is the question people
+        * actually arrive with. */}
+      {props.tool === 'artifacts' ? <div className={css.fileWorkbench}>
+        <div className={css.fileBrowser}>
+          <div className={css.projectFileList}>
+            {props.artifactsBusy && props.artifacts.length === 0
+              ? <div className={css.status}>{tr('loading')}</div>
+              : props.artifacts.length === 0
+                ? <div className={css.drawerEmpty}>{tr('noArtifacts')}</div>
+                : <>
+                  {props.artifacts.filter(item => isDeliverable(item.name)).map(item => <button
+                    type="button"
+                    data-selected={props.file?.path === item.path || undefined}
+                    key={item.path}
+                    onClick={() => { props.onPreviewFile(item.path) }}
+                  ><IconCodeOutline16/><span>{item.name}</span></button>)}
+                  {(() => {
+                    const rest = props.artifacts.filter(item => !isDeliverable(item.name))
+                    if (rest.length === 0) return null
+                    return <>
+                      <button className={css.artifactMore} type="button" onClick={props.onToggleArtifactRest}>
+                        {props.artifactRestOpen ? '▾' : '▸'} {tr('otherFiles')} · {rest.length}
+                      </button>
+                      {props.artifactRestOpen ? rest.map(item => <button
+                        type="button"
+                        data-selected={props.file?.path === item.path || undefined}
+                        key={item.path}
+                        onClick={() => { props.onPreviewFile(item.path) }}
+                      ><IconCodeOutline16/><span>{item.name}</span></button>) : null}
+                    </>
+                  })()}
+                </>}
+          </div>
+        </div>
+        <div className={css.filePreview}>
+          {props.file === null
+            ? <div className={css.drawerEmpty}>{tr('pickArtifactHint')}</div>
+            : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered}/>}
+        </div>
+      </div> : null}
       {props.tool === 'files' ? <div className={css.fileWorkbench}>
         <div className={css.fileBrowser}>
           <nav className={css.pathBar} aria-label="路径">{(() => {
@@ -754,17 +871,7 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
           </div>
         </div>
         <div className={css.filePreview}>
-          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <><div className={css.filePreviewMeta}><strong>{props.file.name}</strong><small>{props.file.language} · {fileSize(props.file.size)}{props.file.truncated ? tr('truncated') : ''}</small>{isRenderable(props.file) ? <button className={css.previewToggle} type="button" onClick={props.onToggleRendered}>{props.renderedFile ? tr('viewSource') : tr('viewRendered')}</button> : null}</div>{props.file.binary
-            ? <div className={css.drawerEmpty}>{tr('binaryFile')}</div>
-            : props.renderedFile
-              // Self-contained HTML is the deliverable these research Skills
-              // produce, and the source view showed it as code. `srcdoc` renders
-              // it from the content already read, so no route has to serve the
-              // workspace over HTTP — and `file://` in an iframe would be
-              // blocked from this origin anyway. The sandbox withholds
-              // same-origin, so the report cannot reach this page or its data.
-              ? <iframe className={css.filePreviewFrame} title={props.file.name} srcDoc={props.file.content ?? ''} sandbox="allow-scripts allow-popups"/>
-              : <div className={css.filePreviewBody}>{(props.file.content ?? '').split('\n').map((line, index) => <div className={css.codeLine} key={index}><span className={css.codeLineNo}>{index + 1}</span><span className={css.codeLineText}>{line || '\u00a0'}</span></div>)}</div>}</>}
+          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered}/>}
         </div>
       </div> : null}
       {props.tool === 'diff' ? <div className={css.diffWorkbench}>
@@ -814,7 +921,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
-    linkSkill, forkSession, messageSeq,
+    linkSkill, forkSession, messageSeq, recentProjectFiles,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
   const sessions = useSessions(value => value)
@@ -869,6 +976,9 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   // A rendered report is what a person opening an HTML deliverable wants first;
   // the source is one click away and stays the default for everything else.
   const [renderedFile, setRenderedFile] = useState(true)
+  const [artifacts, setArtifacts] = useState<readonly { path: string; name: string; size: number; modifiedAt: number }[]>([])
+  const [artifactsBusy, setArtifactsBusy] = useState(false)
+  const [artifactRestOpen, setArtifactRestOpen] = useState(false)
   const [terminal, setTerminal] = useState<TerminalSnapshot | null>(null)
   const [terminalCommand, setTerminalCommand] = useState('')
   const [terminalBusy, setTerminalBusy] = useState(false)
@@ -1308,6 +1418,25 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     // whoever started them, and must not each grow a room of their own.
     void adoptSession(currentSessionId)
   }, [currentSessionBlank, currentSessionId, stateReady, state.roomSessions, workspaceId])
+
+  useEffect(() => {
+    if (projectTool !== 'artifacts' || workspaceId === undefined || activeRoom === undefined) return
+    // From the room's oldest surviving session: that is the window in which this
+    // team could have produced anything, and it survives a reload where a
+    // per-turn record would not.
+    const since = state.roomSessions
+      .filter(item => item.roomId === activeRoom.roomId)
+      .reduce((oldest, item) => Math.min(oldest, item.createdAt), Date.now())
+    const abort = new AbortController()
+    setArtifactsBusy(true)
+    void recentProjectFiles(workspaceId, since, abort.signal)
+      .then(
+        (files) => { if (!abort.signal.aborted) setArtifacts(files) },
+        (error: unknown) => { if (!abort.signal.aborted) setNotice(error instanceof Error ? error.message : String(error)) },
+      )
+      .finally(() => { if (!abort.signal.aborted) setArtifactsBusy(false) })
+    return () => { abort.abort() }
+  }, [activeRoom, projectTool, recentProjectFiles, state.roomSessions, workspaceId])
 
   const createGroup = (): void => {
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
@@ -1966,6 +2095,10 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       workspacePath={activeWorkspace.path}
       listing={projectListing}
       file={projectFile}
+      artifacts={artifacts}
+      artifactsBusy={artifactsBusy}
+      artifactRestOpen={artifactRestOpen}
+      onToggleArtifactRest={() => { setArtifactRestOpen(current => !current) }}
       renderedFile={renderedFile}
       onToggleRendered={() => { setRenderedFile(current => !current) }}
       error={projectListingError}

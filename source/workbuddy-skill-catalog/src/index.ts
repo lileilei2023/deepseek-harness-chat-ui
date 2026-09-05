@@ -87,6 +87,11 @@ const ARCHIVE_FILE_THRESHOLD = 60
 const MAX_INSTALL_BYTES = 12 * 1024 * 1024
 const MAX_ARCHIVE_BYTES = 24 * 1024 * 1024
 const MAX_PREVIEW_BYTES = 512 * 1024
+/** Bounds for the artifact walk; see `recentProjectFiles`. */
+const ARTIFACT_MAX_DEPTH = 4
+const ARTIFACT_MAX_FILES = 200
+const ARTIFACT_MAX_EXAMINED = 4000
+const ARTIFACT_SKIP_DIRECTORIES = new Set(['node_modules', 'dist', 'build', 'target', 'venv', '__pycache__'])
 const GITHUB_SOURCE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u
 const SKILL_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,95}$/u
 
@@ -331,6 +336,64 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   /** `$DSH_HOME/skills`: the Harness's own user-level Skill root. */
   private linkDir(): string {
     return join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'skills')
+  }
+
+  /**
+   * Files in this Workspace touched since a moment.
+   *
+   * A room hands back reports, and finding them meant walking a project tree of
+   * forty entries looking for a name someone had to be told. What a room
+   * produced is exactly what changed while it was running, so the Workspace is
+   * walked once and filtered by modification time — no bookkeeping to keep in
+   * sync with the filesystem, and it catches whatever the members wrote however
+   * they wrote it.
+   *
+   * Bounded the same way browsing is: no symlinks, nothing outside the
+   * Workspace, a depth cap, and a result cap so a build directory cannot turn
+   * this into an unbounded walk. Directories that only ever hold machinery are
+   * skipped outright.
+   * @param request - the Workspace and the epoch-millisecond floor.
+   * @returns newest first, capped.
+   */
+  @Remote
+  async recentProjectFiles(
+    request: { readonly workspaceId: string; readonly since: number },
+    signal?: AbortSignal,
+  ): Promise<{ readonly files: readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[] }> {
+    signal?.throwIfAborted()
+    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId))
+    if (workspace === undefined) throw new Error('skill-chat: unknown Workspace')
+    if (await workspace.status() !== 'ok') throw new Error('skill-chat: Workspace directory is unavailable')
+    const root = await realpath(workspace.path)
+    const found: { path: string; name: string; size: number; modifiedAt: number }[] = []
+    // Two separate bounds. `examined` caps the work; the result cap is applied
+    // after sorting, so the answer is the newest files rather than whichever
+    // ones the walk happened to reach first — a directory of intermediates
+    // otherwise eats the whole quota before the walk gets to the report.
+    let examined = 0
+    const walk = async (directory: string, depth: number): Promise<void> => {
+      if (depth > ARTIFACT_MAX_DEPTH || examined >= ARTIFACT_MAX_EXAMINED) return
+      signal?.throwIfAborted()
+      const entries = await readdir(directory, { withFileTypes: true }).catch(() => [])
+      for (const entry of entries) {
+        if (examined >= ARTIFACT_MAX_EXAMINED) return
+        if (entry.isSymbolicLink() || entry.name.startsWith('.')) continue
+        const full = join(directory, entry.name)
+        if (entry.isDirectory()) {
+          if (ARTIFACT_SKIP_DIRECTORIES.has(entry.name)) continue
+          await walk(full, depth + 1)
+          continue
+        }
+        if (!entry.isFile()) continue
+        examined += 1
+        const info = await stat(full).catch(() => undefined)
+        if (info === undefined || info.mtimeMs < request.since) continue
+        found.push({ path: full, name: entry.name, size: info.size, modifiedAt: Math.round(info.mtimeMs) })
+      }
+    }
+    await walk(root, 0)
+    found.sort((left, right) => right.modifiedAt - left.modifiedAt)
+    return { files: found.slice(0, ARTIFACT_MAX_FILES) }
   }
 
   /** List one directory inside a registered Workspace for the project-tools drawer. */

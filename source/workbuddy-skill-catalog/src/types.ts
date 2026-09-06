@@ -126,12 +126,48 @@ export interface SkillChatTerminalCloseRequest {
   readonly terminalId: string
 }
 
+/**
+ * Read one backward scrollback page.
+ *
+ * The panel polls this while a command runs, so it carries the same paging
+ * vocabulary the backend uses rather than a fixed tail: `offset` is what lets
+ * a long build log be walked upward instead of silently truncated.
+ */
+export interface SkillChatTerminalReadRequest {
+  readonly sessionId: string
+  readonly terminalId: string
+  /** Offset from the newest retained line; omitted reads the newest page. */
+  readonly offset?: number
+  /** Requested line count; the backend's own bound still applies. */
+  readonly count?: number
+}
+
+/** Deliver one interruption signal to a terminal's foreground process group. */
+export interface SkillChatTerminalSignalRequest {
+  readonly sessionId: string
+  readonly terminalId: string
+  readonly signal: 'SIGINT' | 'SIGTERM'
+}
+
 /** Current terminal identity and bounded scrollback. */
 export interface SkillChatTerminalValue {
   readonly terminalId: string
   readonly text: string
   readonly status: 'running' | 'exited'
   readonly truncated: boolean
+  /**
+   * True while a command this panel started has not settled.
+   *
+   * The shell session's own `status` stays `running` between commands, so it
+   * cannot answer "is it still working"; this flag is tracked per send.
+   */
+  readonly busy: boolean
+  /** Lines the backend currently retains. */
+  readonly totalLines: number
+  /** Inclusive newest-relative offset of the first returned line. */
+  readonly lineBegin: number
+  /** Exclusive newest-relative offset after the returned page. */
+  readonly lineEnd: number
 }
 
 /** Start a temporary side conversation from the visible Room context. */

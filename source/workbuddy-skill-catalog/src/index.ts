@@ -35,7 +35,9 @@ import type {
   SkillLinkValue,
   SkillChatTerminalCloseRequest,
   SkillChatTerminalOpenRequest,
+  SkillChatTerminalReadRequest,
   SkillChatTerminalSendRequest,
+  SkillChatTerminalSignalRequest,
   SkillChatTerminalValue,
   SkillChatAutomationRunValue,
   WorkBuddySkillContact,
@@ -91,6 +93,24 @@ const MAX_PREVIEW_BYTES = 512 * 1024
 const ARTIFACT_MAX_DEPTH = 4
 const ARTIFACT_MAX_FILES = 200
 const ARTIFACT_MAX_EXAMINED = 4000
+/**
+ * Lines returned by one scrollback page.
+ *
+ * The panel polls, so a page is what it can render without re-parsing a whole
+ * build log every 300 ms; older output stays reachable through `offset`.
+ */
+const TERMINAL_PAGE_LINES = 2_000
+/** In-memory cap per collected stream of one fallback command. */
+const ONESHOT_STREAM_BYTES = 4 * 1024 * 1024
+/**
+ * Transcript kept for one fallback shell.
+ *
+ * A shell without a PTY has no scrollback of its own, so the transcript is the
+ * buffer. It is bounded the same way a real one is, dropping the head.
+ */
+const ONESHOT_TRANSCRIPT_BYTES = 512 * 1024
+/** Said once when a shell opens without a PTY, so the missing keys are explained. */
+const ONESHOT_NOTICE = '[no PTY in this Session — commands run one at a time, without an interactive shell]'
 const SEARCH_MAX_HITS = 100
 const SEARCH_MAX_FILE_BYTES = 512 * 1024
 const ARTIFACT_SKIP_DIRECTORIES = new Set(['node_modules', 'dist', 'build', 'target', 'venv', '__pycache__'])
@@ -171,6 +191,26 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   private readonly inheritLegacyState: boolean
   private readonly activeAutomationRuns = new Set<string>()
   private readonly sidecars = new Map<string, AgentHandle>()
+  /**
+   * Terminals with a send that has not settled yet.
+   *
+   * The shell session stays `running` between commands, so its own status
+   * cannot say whether the thing you just typed is still working. The panel
+   * needs that answer on every poll, and only the side that started the send
+   * knows it.
+   */
+  private readonly runningSends = new Set<string>()
+  /**
+   * Shells for Sessions with no PTY service.
+   *
+   * The Web composition does not always mount `terminals`, and the fallback
+   * used to run one detached command per send and return its whole output at
+   * once. That leaves nothing for the panel to poll, so each poll answered with
+   * an empty buffer and wiped what the person was reading. Keeping a transcript
+   * and the live handle here gives the fallback the same shape as a real PTY:
+   * output that grows, a run state, and something to interrupt.
+   */
+  private readonly oneshots = new Map<string, OneshotTerminal>()
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'workBuddySkillCatalog', { namespace: 'workbuddySkills' })
@@ -336,6 +376,79 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   }
 
   /** `$DSH_HOME/skills`: the Harness's own user-level Skill root. */
+  /**
+   * Find one fallback shell, recreating it if the process restarted under it.
+   * @param terminalId - the `oneshot:` id the client holds.
+   * @returns the shell's record.
+   */
+  private oneshot(terminalId: string): OneshotTerminal {
+    const known = this.oneshots.get(terminalId)
+    if (known !== undefined) return known
+    // A client that outlived a restart still holds the old id. The suffix was
+    // the Workspace id in the first version of this fallback, so it is the only
+    // thing left to go on; a wrong guess surfaces as a plain Workspace error.
+    const created: OneshotTerminal = {
+      workspaceId: terminalId.slice('oneshot:'.length),
+      transcript: `${ONESHOT_NOTICE}\n`,
+      handle: undefined,
+      outOffset: 0,
+      errOffset: 0,
+      running: false,
+      truncated: false,
+    }
+    this.oneshots.set(terminalId, created)
+    return created
+  }
+
+  /**
+   * Append to a transcript, dropping its head once it outgrows the bound.
+   * @param entry - the shell to append to.
+   * @param text - the text to add.
+   */
+  private appendOneshot(entry: OneshotTerminal, text: string): void {
+    entry.transcript += text
+    if (entry.transcript.length <= ONESHOT_TRANSCRIPT_BYTES) return
+    entry.transcript = entry.transcript.slice(-ONESHOT_TRANSCRIPT_BYTES)
+    entry.truncated = true
+  }
+
+  /**
+   * Move whatever the running command has printed into the transcript.
+   *
+   * Offsets are whole-stream coordinates the caller owns, so repeated polling
+   * appends each byte exactly once.
+   * @param entry - the shell to drain.
+   */
+  private drainOneshot(entry: OneshotTerminal): void {
+    const handle = entry.handle
+    if (handle === undefined) return
+    const out = handle.collected.stdout?.readFrom(entry.outOffset)
+    if (out !== undefined) { this.appendOneshot(entry, out.text); entry.outOffset = out.nextOffset; entry.truncated ||= out.lossy }
+    const err = handle.collected.stderr?.readFrom(entry.errOffset)
+    if (err !== undefined) { this.appendOneshot(entry, err.text); entry.errOffset = err.nextOffset; entry.truncated ||= err.lossy }
+  }
+
+  /**
+   * Current state of one fallback shell, in the same shape a real PTY reports.
+   * @param terminalId - the `oneshot:` id the client holds.
+   * @returns the transcript with its run state and line bounds.
+   */
+  private oneshotValue(terminalId: string): SkillChatTerminalValue {
+    const entry = this.oneshot(terminalId)
+    this.drainOneshot(entry)
+    const totalLines = entry.transcript === '' ? 0 : entry.transcript.split('\n').length
+    return {
+      terminalId,
+      text: entry.transcript,
+      status: 'running',
+      truncated: entry.truncated,
+      busy: entry.running,
+      totalLines,
+      lineBegin: 0,
+      lineEnd: totalLines,
+    }
+  }
+
   private linkDir(): string {
     return join(process.env.DSH_HOME ?? join(homedir(), '.dsh'), 'skills')
   }
@@ -399,26 +512,71 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   }
 
   /**
-   * Replay one terminal's scrollback.
+   * Read one page of a terminal's scrollback.
    *
-   * A terminal that is switched away from and back to used to come back blank:
-   * the client only ever saw output it had asked for. The backend keeps the
-   * buffer, so reading it is what makes several terminals survivable.
-   * @param request - the Session and terminal.
-   * @returns the buffered output.
+   * This is the panel's only source of output, polled while a command runs and
+   * called again when a terminal is switched back to. Reading a page rather
+   * than a fixed tail is what lets a long build log be walked upward instead of
+   * silently losing its head.
+   * @param request - the Session, the terminal, and the page to read.
+   * @returns the buffered page with its paging bounds and run state.
    */
   @Remote
   async readSkillChatTerminal(
-    request: { readonly sessionId: string; readonly terminalId: string },
+    request: SkillChatTerminalReadRequest,
     signal?: AbortSignal,
   ): Promise<SkillChatTerminalValue> {
     signal?.throwIfAborted()
     const agent = this.ctx.agents.get(SessionId(request.sessionId))
     if (agent === undefined) throw new Error('skill-chat: Session is not active')
+    if (request.terminalId.startsWith('oneshot:')) return this.oneshotValue(request.terminalId)
     const terminals = agent.ctx.get('terminals')
-    if (terminals === undefined) return { terminalId: request.terminalId, text: '', status: 'running', truncated: false }
-    const output = terminals.read(agent, TerminalSessionId(request.terminalId), { count: 2_000 })
-    return { terminalId: request.terminalId, text: output.text, status: 'running', truncated: output.truncated }
+    if (terminals === undefined) return idleTerminal(request.terminalId)
+    const id = TerminalSessionId(request.terminalId)
+    const snapshot = terminals.list(agent).find(item => item.sessionId === id)
+    // A terminal the backend has already dropped is not an error the panel can
+    // act on: it polls, so throwing here would replace the last output the
+    // person was reading with a red bar.
+    if (snapshot === undefined) return { ...idleTerminal(request.terminalId), status: 'exited' }
+    const output = terminals.read(agent, id, {
+      ...request.offset === undefined ? {} : { offset: request.offset },
+      count: request.count ?? TERMINAL_PAGE_LINES,
+    })
+    return {
+      terminalId: request.terminalId,
+      text: output.text,
+      status: snapshot.status.kind,
+      truncated: output.truncated,
+      busy: this.runningSends.has(request.terminalId),
+      totalLines: output.totalLines,
+      lineBegin: output.lineBegin,
+      lineEnd: output.lineEnd,
+    }
+  }
+
+  /**
+   * Interrupt whatever is running in one terminal.
+   *
+   * Without this a command that runs away cannot be stopped from the panel at
+   * all — the only exit was closing the shell and losing its state.
+   * @param request - the Session, the terminal, and the signal to deliver.
+   * @returns the terminal's state right after delivery.
+   */
+  @Remote
+  async signalSkillChatTerminal(request: SkillChatTerminalSignalRequest, signal?: AbortSignal): Promise<SkillChatTerminalValue> {
+    signal?.throwIfAborted()
+    const agent = this.ctx.agents.get(SessionId(request.sessionId))
+    if (agent === undefined) throw new Error('skill-chat: Session is not active')
+    if (request.terminalId.startsWith('oneshot:')) {
+      // No PTY means no foreground process group to signal, so the fallback
+      // stops the command by terminating its own process tree instead.
+      this.oneshots.get(request.terminalId)?.handle?.terminate()
+      return this.oneshotValue(request.terminalId)
+    }
+    const terminals = agent.ctx.get('terminals')
+    if (terminals === undefined) throw new Error('skill-chat: this Session has no terminal service')
+    await terminals.signal(agent, TerminalSessionId(request.terminalId), request.signal)
+    return this.readSkillChatTerminal({ sessionId: request.sessionId, terminalId: request.terminalId })
   }
 
   /**
@@ -577,17 +735,33 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     const terminals = agent.ctx.get('terminals')
     if (terminals === undefined) {
       if (this.ctx.get('subprocess') === undefined) throw new Error('skill-chat: this Session has no terminal service')
-      return { terminalId: `oneshot:${request.workspaceId}`, text: '', status: 'running', truncated: false }
+      // A fresh id per open, so `+ new terminal` really is a second shell
+      // rather than a second view of the first one's transcript.
+      const terminalId = `oneshot:${randomUUID()}`
+      this.oneshots.set(terminalId, {
+        workspaceId: request.workspaceId,
+        transcript: `${ONESHOT_NOTICE}\n`,
+        handle: undefined,
+        outOffset: 0,
+        errOffset: 0,
+        running: false,
+        truncated: false,
+      })
+      return this.oneshotValue(terminalId)
     }
     const backend = terminals.listBackends()[0]
     if (backend === undefined) throw new Error('skill-chat: this Session has no terminal backend')
     const opened = await terminals.spawn(agent, { type: backend, cwd: workspace.path }, signal)
-    const output = terminals.read(agent, opened.sessionId, { count: 2_000 })
+    const output = terminals.read(agent, opened.sessionId, { count: TERMINAL_PAGE_LINES })
     return {
       terminalId: opened.sessionId,
       text: [opened.motd, output.text].filter(Boolean).join('\n'),
       status: opened.status.kind,
       truncated: output.truncated,
+      busy: false,
+      totalLines: output.totalLines,
+      lineBegin: output.lineBegin,
+      lineEnd: output.lineEnd,
     }
   }
 
@@ -598,37 +772,51 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     const agent = this.ctx.agents.get(SessionId(request.sessionId))
     if (agent === undefined) throw new Error('skill-chat: Session is not active')
     const terminals = agent.ctx.get('terminals')
-    if (terminals === undefined && request.terminalId.startsWith('oneshot:')) {
-      const workspaceId = request.terminalId.slice('oneshot:'.length)
-      const { workspace } = await this.sessionWorkspace(request.sessionId, workspaceId)
+    if (request.terminalId.startsWith('oneshot:')) {
+      const entry = this.oneshot(request.terminalId)
+      if (entry.running) throw new Error('skill-chat: this shell is still running a command')
+      const { workspace } = await this.sessionWorkspace(request.sessionId, entry.workspaceId)
       const subprocess = this.ctx.get('subprocess')
       if (subprocess === undefined) throw new Error('skill-chat: this Session has no shell service')
       const shell = process.platform === 'win32' ? ['pwsh', '-NoLogo', '-NoProfile', '-Command', request.command] : ['bash', '-lc', request.command]
       const handle = subprocess.spawn({
         argv: shell,
         cwd: workspace.path,
-        stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 * 1024 }, stderr: { maxBytes: 1024 * 1024 } },
+        stdio: { stdin: 'ignore', stdout: { maxBytes: ONESHOT_STREAM_BYTES }, stderr: { maxBytes: ONESHOT_STREAM_BYTES } },
         graceMs: 1_000,
         ...signal === undefined ? {} : { signal },
       })
-      const outcome = await handle.done
-      const stdout = handle.collected.stdout?.readFrom(0)
-      const stderr = handle.collected.stderr?.readFrom(0)
-      const text = [stdout?.text, stderr?.text, `\n[exit ${String(outcome.exitCode ?? outcome.signal ?? 'unknown')}]`].filter(Boolean).join('')
-      return { terminalId: request.terminalId, text, status: 'running', truncated: stdout?.lossy === true || stderr?.lossy === true }
+      // The prompt line is part of the transcript so the panel reads like a
+      // shell session rather than a series of unlabelled output blocks.
+      this.appendOneshot(entry, `$ ${request.command}\n`)
+      Object.assign(entry, { handle, running: true, outOffset: 0, errOffset: 0 })
+      // Deliberately not awaited: the panel polls, and awaiting here is exactly
+      // what made a long command show nothing until it finished.
+      handle.done.then((outcome) => {
+        this.drainOneshot(entry)
+        this.appendOneshot(entry, `[exit ${String(outcome.exitCode ?? outcome.signal ?? 'unknown')}]\n`)
+      }, (error: unknown) => {
+        this.appendOneshot(entry, `[failed: ${error instanceof Error ? error.message : String(error)}]\n`)
+      }).finally(() => { Object.assign(entry, { handle: undefined, running: false }) })
+      return this.oneshotValue(request.terminalId)
     }
     if (terminals === undefined) throw new Error('skill-chat: this Session has no terminal service')
     const terminalId = TerminalSessionId(request.terminalId)
+    // Deliberately not awaited. `operation.done` resolves when the shell is
+    // ready for the next input, so awaiting it here is what made the panel show
+    // a prompt and then nothing at all until the command ended: one read, at
+    // the end. Returning now lets the client poll `readSkillChatTerminal` and
+    // watch the output grow. The registry clears its own active-send record and
+    // swallows the rejection, so the handle needs no keeper here.
     const operation = terminals.startSend(agent, terminalId, {
       text: request.command,
       submit: true,
       ...signal === undefined ? {} : { signal },
     })
-    await operation.done
-    const output = terminals.read(agent, terminalId, { count: 2_000 })
-    const snapshot = terminals.list(agent).find(item => item.sessionId === terminalId)
-    if (snapshot === undefined) throw new Error('skill-chat: terminal closed unexpectedly')
-    return { terminalId, text: output.text, status: snapshot.status.kind, truncated: output.truncated }
+    this.runningSends.add(request.terminalId)
+    const settle = (): void => { this.runningSends.delete(request.terminalId) }
+    operation.done.then(settle, settle)
+    return this.readSkillChatTerminal({ sessionId: request.sessionId, terminalId: request.terminalId })
   }
 
   /** Close one persistent shell owned by the selected Harness Session. */
@@ -636,7 +824,13 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   async closeSkillChatTerminal(request: SkillChatTerminalCloseRequest): Promise<void> {
     const agent = this.ctx.agents.get(SessionId(request.sessionId))
     if (agent === undefined) return
-    if (request.terminalId.startsWith('oneshot:')) return
+    this.runningSends.delete(request.terminalId)
+    if (request.terminalId.startsWith('oneshot:')) {
+      const entry = this.oneshots.get(request.terminalId)
+      entry?.handle?.terminate()
+      this.oneshots.delete(request.terminalId)
+      return
+    }
     const terminals = agent.ctx.get('terminals')
     if (terminals === undefined) return
     await terminals.kill(agent, TerminalSessionId(request.terminalId), 'Skill Chat terminal drawer closed')
@@ -930,6 +1124,40 @@ function defaultStateFile(): string {
 }
 
 /** The pre-`$DSH_HOME` location, read once if the scoped file does not exist. */
+/**
+ * One fallback shell: its transcript, the command running in it, and where its
+ * collected streams have been read up to.
+ */
+interface OneshotTerminal {
+  /** Workspace the commands run in. */
+  readonly workspaceId: string
+  /** Everything shown so far, prompts included. */
+  transcript: string
+  /** The running command, or undefined between commands. */
+  handle: import('@deepseek-ai/dsh-subprocess').SubprocessHandle | undefined
+  /** Whole-stream offset already drained from stdout. */
+  outOffset: number
+  /** Whole-stream offset already drained from stderr. */
+  errOffset: number
+  /** True from the moment a command starts until it settles. */
+  running: boolean
+  /** True once the transcript dropped its head to stay bounded. */
+  truncated: boolean
+}
+
+/**
+ * A terminal value with nothing in it.
+ *
+ * Several branches — no terminal service, a session the backend already
+ * dropped, the one-shot subprocess fallback — need the same shape, and spelling
+ * the eight fields out at each of them is where a missing field hides.
+ * @param terminalId - the terminal this value describes.
+ * @returns an empty, idle, running value.
+ */
+function idleTerminal(terminalId: string): SkillChatTerminalValue {
+  return { terminalId, text: '', status: 'running', truncated: false, busy: false, totalLines: 0, lineBegin: 0, lineEnd: 0 }
+}
+
 const LEGACY_STATE_FILE = join(homedir(), '.workbuddy', 'skill-chat', 'state.v2.json')
 
 function emptySkillChatState(): SkillChatStateDocument {

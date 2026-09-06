@@ -434,16 +434,22 @@ Do work.
     await expect(catalog.readProjectFile({ workspaceId: 'workspace', path: join(outside, 'secret.txt') })).rejects.toThrow('escapes Workspace')
   })
 
-  it('runs terminal commands through the Host subprocess fallback', async () => {
+  it('streams the fallback shell instead of returning everything at the end', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'dsh-terminal-fallback-'))
     const ctx = await catalogContext()
     const agent = { id: 'session', ctx: { get: () => undefined } }
-    const stdout = { readFrom: vi.fn(() => ({ text: `${workspace}\nterminal-ok\n`, nextOffset: 1, lossy: false })) }
+    const printed = `${workspace}\nterminal-ok\n`
+    // Offset-aware, the way the real reader is: a poll that re-reads from the
+    // last offset must not append the same bytes twice.
+    const stdout = { readFrom: vi.fn((from: number) => ({ text: printed.slice(from), nextOffset: printed.length, lossy: false })) }
     const stderr = { readFrom: vi.fn(() => ({ text: '', nextOffset: 0, lossy: false })) }
+    let finish: (outcome: { exitCode: number }) => void = () => {}
+    const done = new Promise<{ exitCode: number }>(resolve => { finish = resolve })
+    const terminate = vi.fn()
     const spawn = vi.fn(() => ({
       pid: 1, stdin: undefined, stdout: undefined, stderr: undefined,
-      collected: { stdout, stderr }, done: Promise.resolve({ exitCode: 0 }),
-      terminate: vi.fn(), waitForExit: vi.fn(() => Promise.resolve(true)),
+      collected: { stdout, stderr }, done,
+      terminate, waitForExit: vi.fn(() => Promise.resolve(true)),
     }))
     ctx.provide('agents', { get: () => agent } as never)
     ctx.provide('workspaceRegistry', {
@@ -453,14 +459,62 @@ Do work.
     const catalog = new WorkBuddySkillCatalog(ctx)
 
     const opened = await catalog.openSkillChatTerminal({ sessionId: 'session', workspaceId: 'workspace' })
-    const result = await catalog.sendSkillChatTerminal({
+    // Each open is its own shell: the panel's `+` must not hand back a second
+    // view of the first one's transcript.
+    const second = await catalog.openSkillChatTerminal({ sessionId: 'session', workspaceId: 'workspace' })
+    expect(opened.terminalId).toMatch(/^oneshot:/u)
+    expect(second.terminalId).not.toBe(opened.terminalId)
+
+    const sent = await catalog.sendSkillChatTerminal({
       sessionId: 'session', terminalId: opened.terminalId, command: 'pwd && printf "terminal-ok\\n"',
     })
+    // Sending returns while the command still runs. Awaiting the finish here is
+    // exactly what used to hide a long command's output until it ended.
+    expect(sent.busy).toBe(true)
+    expect(sent.text).toContain('pwd &&')
 
-    expect(opened.terminalId).toBe('oneshot:workspace')
-    expect(result.text).toContain(workspace)
-    expect(result.text).toContain('terminal-ok')
-    expect(result.text).toContain('[exit 0]')
+    const midway = await catalog.readSkillChatTerminal({ sessionId: 'session', terminalId: opened.terminalId })
+    expect(midway.busy).toBe(true)
+    expect(midway.text).toContain('terminal-ok')
+
+    finish({ exitCode: 0 })
+    await done
+    await Promise.resolve()
+    const settled = await catalog.readSkillChatTerminal({ sessionId: 'session', terminalId: opened.terminalId })
+    expect(settled.busy).toBe(false)
+    expect(settled.text).toContain(workspace)
+    expect(settled.text).toContain('[exit 0]')
+    // Polling appends each byte once, so the output is not duplicated. The
+    // echoed command line also contains `terminal-ok`, so the count is taken on
+    // the workspace path, which only the command's own output prints.
+    expect(settled.text.split(workspace)).toHaveLength(2)
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining({ cwd: workspace }))
+  })
+
+  it('stops a running fallback command by terminating its process tree', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-terminal-signal-'))
+    const ctx = await catalogContext()
+    const agent = { id: 'session', ctx: { get: () => undefined } }
+    const reader = { readFrom: vi.fn(() => ({ text: '', nextOffset: 0, lossy: false })) }
+    const terminate = vi.fn()
+    const spawn = vi.fn(() => ({
+      pid: 1, stdin: undefined, stdout: undefined, stderr: undefined,
+      collected: { stdout: reader, stderr: reader }, done: new Promise<never>(() => {}),
+      terminate, waitForExit: vi.fn(() => Promise.resolve(true)),
+    }))
+    ctx.provide('agents', { get: () => agent } as never)
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: ['session'], status: async () => 'ok' as const }),
+    } as never)
+    ctx.provide('subprocess', { spawn } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+
+    const opened = await catalog.openSkillChatTerminal({ sessionId: 'session', workspaceId: 'workspace' })
+    await catalog.sendSkillChatTerminal({ sessionId: 'session', terminalId: opened.terminalId, command: 'sleep 60' })
+    // Without a PTY there is no foreground process group to signal, so the
+    // fallback stops the command by terminating its own tree.
+    await catalog.signalSkillChatTerminal({ sessionId: 'session', terminalId: opened.terminalId, signal: 'SIGINT' })
+
+    expect(terminate).toHaveBeenCalledTimes(1)
   })
 })

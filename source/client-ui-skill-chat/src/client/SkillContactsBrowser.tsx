@@ -11,6 +11,7 @@ import {
   IconNewChatOutline16,
   MarkdownText,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
@@ -27,6 +28,7 @@ import { avatarDataUri } from './ui/avatar.tsx'
 // Token layer first: every module stylesheet below resolves its colours, type
 // steps and radii from it, and the dark scheme is a token swap alone.
 import './theme.css'
+import { parseAnsiLines, type AnsiLine } from './ansi.ts'
 import { en, zh, type SkillChatKey } from './locales.ts'
 import css from './SkillContactsBrowser.module.css'
 
@@ -63,6 +65,14 @@ interface TerminalSnapshot {
   readonly text: string
   readonly status: 'running' | 'exited'
   readonly truncated: boolean
+  /** True while the command this panel sent has not settled. */
+  readonly busy: boolean
+  /** Lines the backend currently retains. */
+  readonly totalLines: number
+  /** Inclusive newest-relative offset of the first returned line. */
+  readonly lineBegin: number
+  /** Exclusive newest-relative offset after the returned page. */
+  readonly lineEnd: number
 }
 
 interface SidecarMessage {
@@ -136,7 +146,8 @@ interface SkillContactsInjected {
   linkSkill: (path: string, name: string, signal: AbortSignal) => Promise<{ readonly name: string; readonly target: string }>
   forkSession: (sessionId: SessionId, atSeq: number, increaseTitle: boolean) => Promise<SessionId>
   recentProjectFiles: (workspaceId: WorkspaceId, since: number, signal: AbortSignal) => Promise<readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[]>
-  readTerminal: (sessionId: SessionId, terminalId: string, signal: AbortSignal) => Promise<TerminalSnapshot>
+  readTerminal: (sessionId: SessionId, terminalId: string, page: { offset?: number; count?: number }, signal: AbortSignal) => Promise<TerminalSnapshot>
+  signalTerminal: (sessionId: SessionId, terminalId: string, kind: 'SIGINT' | 'SIGTERM', signal: AbortSignal) => Promise<TerminalSnapshot>
   searchProjectFiles: (workspaceId: WorkspaceId, query: string, contents: boolean, signal: AbortSignal) => Promise<readonly { readonly path: string; readonly name: string; readonly line?: string }[]>
   revealProjectPath: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<void>
   attachToComposer: (sessionId: SessionId, text: string) => boolean
@@ -624,6 +635,11 @@ interface WorkbenchDrawerProps {
   readonly onPreviewFile: (path: string) => void
   readonly onTerminalCommand: (value: string) => void
   readonly onTerminalSubmit: () => void
+  readonly onTerminalInterrupt: () => void
+  readonly onTerminalLoadEarlier: () => void
+  readonly terminalHistory: readonly string[]
+  readonly terminalEarlier: string
+  readonly terminalHasEarlier: boolean
   readonly onBrowserDraft: (value: string) => void
   readonly onBrowserNavigate: (value: string) => void
   readonly onBrowserBack: () => void
@@ -713,6 +729,124 @@ export function parseDiff(text: string): readonly DiffLine[] {
  * @param props - the raw diff text.
  * @returns the coloured patch, or an empty state when there is nothing to show.
  */
+/**
+ * Render terminal scrollback with its colour intact.
+ *
+ * Output went into a `<pre>` verbatim before this, so anything that paints —
+ * git, npm, pytest, `ls --color` — printed `\u001b[32m` as literal characters.
+ * `parseAnsiLines` resolves the escape runs into spans whose colours are theme
+ * tokens, so the same buffer reads correctly under either scheme.
+ * @param text - raw output, escape sequences included.
+ * @returns one span-styled row per output line.
+ */
+function TerminalOutput({ text }: { readonly text: string }): React.JSX.Element {
+  const lines = useMemo<readonly AnsiLine[]>(() => parseAnsiLines(text), [text])
+  return <>{lines.map((line, index) => <span className={css.terminalLine} key={index}>
+    {line.length === 0
+      ? '\u00a0'
+      : line.map((span, spanIndex) => span.style === undefined
+        ? span.text
+        : <span key={spanIndex} style={span.style}>{span.text}</span>)}
+  </span>)}</>
+}
+
+interface TerminalPaneProps {
+  readonly terminal: TerminalSnapshot | null
+  readonly busy: boolean
+  readonly error: string | null
+  readonly command: string
+  readonly earlier: string
+  readonly hasEarlier: boolean
+  readonly history: readonly string[]
+  readonly onCommand: (value: string) => void
+  readonly onSubmit: () => void
+  readonly onInterrupt: () => void
+  readonly onLoadEarlier: () => void
+}
+
+/**
+ * The live terminal surface: scrollback, run state, and the input line.
+ *
+ * Three things separate this from the `<pre>` it replaced. Output is polled, so
+ * it grows while a command runs instead of appearing once at the end. The tail
+ * is followed only while the reader is already at the bottom — otherwise
+ * scrolling up to read a stack trace would be yanked back on the next poll.
+ * And a running command can be stopped, which previously had no route at all.
+ * @param props - the current snapshot and the panel's callbacks.
+ * @returns the terminal pane.
+ */
+function TerminalPane(props: TerminalPaneProps): React.JSX.Element {
+  const scroller = useRef<HTMLPreElement | null>(null)
+  const follow = useRef(true)
+  const [cursor, setCursor] = useState<number | null>(null)
+  const text = props.terminal === null ? '' : `${props.earlier}${props.terminal.text}`
+
+  useEffect(() => {
+    const element = scroller.current
+    if (element === null || !follow.current) return
+    element.scrollTop = element.scrollHeight
+  }, [text])
+
+  /** Remember whether the reader is parked at the tail, so polling can respect it. */
+  const onScroll = (): void => {
+    const element = scroller.current
+    if (element === null) return
+    follow.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24
+  }
+
+  /** Walk the local command history, the way a shell's own up-arrow does. */
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (event.key === 'c' && event.ctrlKey) { event.preventDefault(); props.onInterrupt(); return }
+    if (props.history.length === 0) return
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      const next = cursor === null ? props.history.length - 1 : Math.max(0, cursor - 1)
+      setCursor(next)
+      props.onCommand(props.history[next] ?? '')
+      return
+    }
+    if (event.key !== 'ArrowDown' || cursor === null) return
+    event.preventDefault()
+    const next = cursor + 1
+    if (next >= props.history.length) { setCursor(null); props.onCommand(''); return }
+    setCursor(next)
+    props.onCommand(props.history[next] ?? '')
+  }
+
+  const running = props.terminal?.busy === true
+  return <>
+    {props.hasEarlier
+      ? <button className={css.terminalEarlier} type="button" onClick={props.onLoadEarlier}>{tr('terminalTruncated')}</button>
+      : null}
+    <pre className={css.terminalOutput} ref={scroller} onScroll={onScroll} aria-live="polite" aria-atomic="false">
+      {props.error !== null
+        ? props.error
+        : props.terminal === null
+          ? (props.busy ? tr('startingTerminal') : tr('terminalIdle'))
+          : <TerminalOutput text={text}/>}
+    </pre>
+    <form className={css.terminalComposer} onSubmit={event => { event.preventDefault(); setCursor(null); props.onSubmit() }}>
+      <span>$</span>
+      <input
+        value={props.command}
+        onChange={event => { props.onCommand(event.target.value) }}
+        onKeyDown={onKeyDown}
+        placeholder={tr('terminalPlaceholder')}
+        aria-label={tr('terminalCommandLabel')}
+        autoComplete="off"
+        spellCheck={false}
+        autoFocus
+      />
+      {/* A stop control only while there is something to stop: an always-on
+        * button next to Run is one mis-click away from killing nothing. */}
+      {running
+        ? <button className={css.terminalStop} type="button" onClick={props.onInterrupt} title="Ctrl-C">{tr('terminalStop')}</button>
+        : null}
+      <button type="submit" disabled={running || props.terminal === null}>{running ? tr('terminalRunning') : tr('runLabel')}</button>
+    </form>
+  </>
+}
+
 function DiffView({ text }: { readonly text: string }): React.JSX.Element {
   const lines = useMemo(() => parseDiff(text), [text])
   const changes = lines.filter(line => line.kind === 'add' || line.kind === 'remove').length
@@ -963,8 +1097,19 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
           >{item.label}<b onClick={(event) => { event.stopPropagation(); props.onCloseTerminal(item.id) }}>×</b></button>)}
           <button className={css.terminalAdd} type="button" aria-label={tr('newTerminal')} onClick={props.onAddTerminal}>＋</button>
         </div>
-        <pre className={css.terminalOutput} ref={element => { if (element !== null) element.scrollTop = element.scrollHeight }}>{props.error ?? props.terminal?.text ?? (props.terminalBusy ? tr('startingTerminal') : tr('terminalIdle'))}</pre>
-        {props.tool === 'terminal' ? <form className={css.terminalComposer} onSubmit={event => { event.preventDefault(); props.onTerminalSubmit() }}><span>$</span><input value={props.terminalCommand} onChange={event => { props.onTerminalCommand(event.target.value) }} placeholder="输入命令，例如 pnpm test…" aria-label="终端命令" autoComplete="off" spellCheck={false} autoFocus/><button type="submit" disabled={props.terminalBusy || props.terminal === null}>{tr('runLabel')}</button></form> : <div className={css.workbenchFootnote}>{tr('diffExplainer')}</div>}
+        <TerminalPane
+          terminal={props.terminal}
+          busy={props.terminalBusy}
+          error={props.error}
+          command={props.terminalCommand}
+          earlier={props.terminalEarlier}
+          hasEarlier={props.terminalHasEarlier}
+          history={props.terminalHistory}
+          onCommand={props.onTerminalCommand}
+          onSubmit={props.onTerminalSubmit}
+          onInterrupt={props.onTerminalInterrupt}
+          onLoadEarlier={props.onTerminalLoadEarlier}
+        />
       </div> : null}
       {props.tool === 'browser' ? <div className={css.browserWorkbench}>
         <form className={css.browserBar} onSubmit={event => { event.preventDefault(); props.onBrowserNavigate(props.browserDraft) }}>
@@ -1004,7 +1149,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
-    linkSkill, forkSession, messageSeq, recentProjectFiles, readTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
+    linkSkill, forkSession, messageSeq, recentProjectFiles, readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
   const sessions = useSessions(value => value)
@@ -1076,6 +1221,14 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [dirListings, setDirListings] = useState<Readonly<Record<string, readonly ProjectEntry[]>>>({})
   const [fileMenu, setFileMenu] = useState<{ path: string; name: string; kind: 'file' | 'directory'; x: number; y: number } | null>(null)
   const [terminalCommand, setTerminalCommand] = useState('')
+  // Local command history, the way a shell's own up-arrow works. Kept here
+  // rather than in the pane so it survives closing and reopening the drawer.
+  const [terminalHistory, setTerminalHistory] = useState<readonly string[]>([])
+  // Pages walked backwards from the newest one, oldest first. The backend keeps
+  // a bounded buffer and says when it dropped output; this is what lets a long
+  // build log be read upward instead of just being marked truncated.
+  const [terminalEarlier, setTerminalEarlier] = useState('')
+  const [terminalEarliestEnd, setTerminalEarliestEnd] = useState(0)
   const [terminalBusy, setTerminalBusy] = useState(false)
   const [browserUrl, setBrowserUrl] = useState('http://127.0.0.1:56517/')
   const [browserDraft, setBrowserDraft] = useState('http://127.0.0.1:56517/')
@@ -1801,6 +1954,47 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setRoomSettingsOpen(true)
   }
 
+  /**
+   * Pull terminal output while the panel is open.
+   *
+   * The terminal service publishes no subscription, so the only way to see a
+   * command's output while it runs is to ask again. Sending used to block until
+   * the command ended and read once — which is why `npm install` showed a
+   * prompt and then nothing at all. Polling at 300 ms while something runs and
+   * backing off to 2 s when nothing does keeps an idle panel from becoming a
+   * permanent request loop.
+   */
+  useEffect(() => {
+    if (projectTool !== 'terminal' || currentSessionId === undefined || activeTerminalId === null) return
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let quiet = 0
+    const abort = new AbortController()
+    const tick = (): void => {
+      void readTerminal(currentSessionId, activeTerminalId, {}, abort.signal).then((snapshot) => {
+        if (stopped) return
+        quiet = snapshot.busy ? 0 : Math.min(quiet + 1, 3)
+        setTerminal(current => current !== null
+          && current.terminalId === snapshot.terminalId
+          && current.text === snapshot.text
+          && current.busy === snapshot.busy
+          && current.status === snapshot.status
+          ? current
+          : snapshot)
+        setTerminals(current => current.map(item => item.id === snapshot.terminalId ? { ...item, text: snapshot.text } : item))
+      }, () => { if (!stopped) quiet = Math.min(quiet + 1, 3) }).finally(() => {
+        if (stopped) return
+        timer = setTimeout(tick, quiet === 0 ? 300 : Math.min(300 * 2 ** quiet, 2_000))
+      })
+    }
+    tick()
+    return () => {
+      stopped = true
+      abort.abort()
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }, [projectTool, currentSessionId, activeTerminalId, readTerminal])
+
   /** Open one more shell in this room's workspace. */
   const addTerminal = (): void => {
     if (activeWorkspace === undefined || currentSessionId === undefined) return
@@ -1819,10 +2013,14 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const selectTerminal = (terminalId: string): void => {
     if (currentSessionId === undefined) return
     setActiveTerminalId(terminalId)
+    setTerminalEarlier('')
+    setTerminalEarliestEnd(0)
     const known = terminals.find(item => item.id === terminalId)
-    setTerminal(known === undefined ? null : { terminalId, text: known.text, status: 'running', truncated: false })
+    setTerminal(known === undefined
+      ? null
+      : { terminalId, text: known.text, status: 'running', truncated: false, busy: false, totalLines: 0, lineBegin: 0, lineEnd: 0 })
     const abort = new AbortController()
-    void readTerminal(currentSessionId, terminalId, abort.signal).then((snapshot) => {
+    void readTerminal(currentSessionId, terminalId, {}, abort.signal).then((snapshot) => {
       setTerminal(snapshot)
       setTerminals(current => current.map(item => item.id === terminalId ? { ...item, text: snapshot.text } : item))
     }, () => {})
@@ -1912,7 +2110,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
         const command = 'if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then '
           + 'git --no-pager diff --stat -- . && git --no-pager diff -- .; '
           + 'else echo "__DSCHAT_NO_REPO__"; fi'
-        return await sendTerminal(currentSessionId, opened.terminalId, command, abort.signal)
+        // Sending returns as soon as the keystrokes land — that is what lets
+        // the terminal panel stream — so a caller that needs the finished
+        // output waits for the settle itself.
+        await sendTerminal(currentSessionId, opened.terminalId, command, abort.signal)
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          const snapshot = await readTerminal(currentSessionId, opened.terminalId, {}, abort.signal)
+          if (!snapshot.busy) return snapshot
+          await new Promise(settle => setTimeout(settle, 150))
+        }
+        return await readTerminal(currentSessionId, opened.terminalId, {}, abort.signal)
       }).then(setTerminal, (error: unknown) => {
         if (!abort.signal.aborted) setProjectListingError(error instanceof Error ? error.message : String(error))
       }).finally(() => { if (!abort.signal.aborted) setTerminalBusy(false) })
@@ -1965,11 +2172,38 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     if (terminal === null || currentSessionId === undefined || terminalCommand.trim() === '') return
     const command = terminalCommand
     setTerminalCommand('')
-    setTerminalBusy(true)
+    setTerminalHistory(current => current[current.length - 1] === command ? current : [...current, command].slice(-100))
+    // Older pages describe the buffer as it was before this command; keeping
+    // them would splice output from two different moments into one view.
+    setTerminalEarlier('')
+    setTerminalEarliestEnd(0)
     const abort = new AbortController()
+    // The send returns as soon as the keystrokes are delivered; the polling
+    // effect below is what shows the command running.
     void sendTerminal(currentSessionId, terminal.terminalId, command, abort.signal).then(setTerminal, (error: unknown) => {
       if (!abort.signal.aborted) setProjectListingError(error instanceof Error ? error.message : String(error))
-    }).finally(() => { if (!abort.signal.aborted) setTerminalBusy(false) })
+    })
+  }
+
+  /** Stop whatever is running, the way Ctrl-C does in a real shell. */
+  const interruptTerminal = (): void => {
+    if (terminal === null || currentSessionId === undefined) return
+    const abort = new AbortController()
+    void signalTerminal(currentSessionId, terminal.terminalId, 'SIGINT', abort.signal).then(setTerminal, (error: unknown) => {
+      setProjectListingError(error instanceof Error ? error.message : String(error))
+    })
+  }
+
+  /** Walk one page further back into the retained buffer. */
+  const loadEarlierTerminal = (): void => {
+    if (terminal === null || currentSessionId === undefined) return
+    const from = terminalEarliestEnd === 0 ? terminal.lineEnd : terminalEarliestEnd
+    const abort = new AbortController()
+    void readTerminal(currentSessionId, terminal.terminalId, { offset: from }, abort.signal).then((page) => {
+      if (page.text === '') return
+      setTerminalEarlier(current => `${page.text}\n${current}`)
+      setTerminalEarliestEnd(page.lineEnd)
+    }, (error: unknown) => { setProjectListingError(error instanceof Error ? error.message : String(error)) })
   }
 
   const navigateBrowser = (url: string): void => {
@@ -2325,6 +2559,11 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       onPreviewFile={previewProjectFile}
       onTerminalCommand={setTerminalCommand}
       onTerminalSubmit={submitTerminal}
+      onTerminalInterrupt={interruptTerminal}
+      onTerminalLoadEarlier={loadEarlierTerminal}
+      terminalHistory={terminalHistory}
+      terminalEarlier={terminalEarlier}
+      terminalHasEarlier={terminal?.truncated === true || terminalEarliestEnd > 0}
       onBrowserDraft={setBrowserDraft}
       onBrowserNavigate={navigateBrowser}
       onBrowserBack={() => { const next = Math.max(0, browserHistoryIndex - 1); setBrowserHistoryIndex(next); setBrowserUrl(browserHistory[next] ?? browserUrl); setBrowserDraft(browserHistory[next] ?? browserUrl) }}

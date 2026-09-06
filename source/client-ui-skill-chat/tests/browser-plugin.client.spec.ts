@@ -11,6 +11,7 @@ import {
 } from '../src/client/model.ts'
 import { inject, mergeContacts, mountSkillChatUi } from '../src/client/index.ts'
 import { createSkinRuntime, SKIN_PREFERENCE_KEY, validateSkinPackage } from '../src/client/skin/index.ts'
+import { parseAnsiLines } from '../src/client/ansi.ts'
 
 const REMOTE: TypertRemoteContribution = {
   package: '@deepseek-ai/dsh-experimental-workbuddy-skill-catalog',
@@ -372,5 +373,44 @@ describe('parseDiff', () => {
     const lines = parseDiff('warning: Not a git repository.\nusage: git diff --no-index …')
     expect(lines.every(line => line.kind === 'meta')).toBe(true)
     expect(lines.some(line => line.kind === 'file' || line.kind === 'hunk')).toBe(false)
+  })
+})
+
+describe('parseAnsiLines', () => {
+  /** Build an escape sequence without putting a raw control byte in this file. */
+  const esc = (body: string): string => `\u001b${body}`
+  /** Flatten one parsed line back to the characters a reader would see. */
+  const plain = (line: readonly { readonly text: string }[]): string => line.map(span => span.text).join('')
+
+  it('colours SGR runs and leaves no escape characters in the text', () => {
+    const [line] = parseAnsiLines(`${esc('[32m')}pass${esc('[0m')} plain`)
+    expect(plain(line ?? [])).toBe('pass plain')
+    expect(line?.[0]?.style?.color).toBe('#23d18b')
+    expect(line?.[1]?.style).toBeUndefined()
+  })
+
+  it('drops the control sequences a terminal acts on rather than prints', () => {
+    // Cursor moves, screen clears and window titles carry no text. Printed
+    // verbatim they are the junk that made every coloured command unreadable.
+    const noisy = `${esc('[2J')}${esc('[1;1H')}${esc(']0;build')}\u0007done`
+    expect(parseAnsiLines(noisy).map(plain)).toEqual(['done'])
+    // A page boundary can cut a sequence in half. Scanning to the end of the
+    // text for the missing terminator would hide every line behind it, so an
+    // unterminated introducer must not swallow what follows.
+    expect(parseAnsiLines(`${esc(']0;never-terminated')}\ndone`).map(plain)).toContain('done')
+  })
+
+  it('lets a carriage return rewrite its line the way a progress bar expects', () => {
+    // Without this, every tick of `npm install` stacks up as its own line.
+    expect(parseAnsiLines('10%\r70%\r100%').map(plain)).toEqual(['100%'])
+    expect(parseAnsiLines('first\nsecond').map(plain)).toEqual(['first', 'second'])
+  })
+
+  it('resolves 256-colour and true-colour selectors', () => {
+    expect(parseAnsiLines(`${esc('[38;5;9m')}x`)[0]?.[0]?.style?.color).toBe('#ff6a6a')
+    expect(parseAnsiLines(`${esc('[38;2;10;20;30m')}x`)[0]?.[0]?.style?.color).toBe('rgb(10 20 30)')
+    // A selector's own arguments must not be read back as further SGR codes:
+    // the `1` here is blue's value, not a request for bold.
+    expect(parseAnsiLines(`${esc('[38;2;0;0;1m')}x`)[0]?.[0]?.style?.fontWeight).toBeUndefined()
   })
 })

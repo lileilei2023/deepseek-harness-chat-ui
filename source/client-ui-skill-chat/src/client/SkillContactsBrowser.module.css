@@ -1001,7 +1001,18 @@
 
 .terminalWorkbench { min-height: 0; flex: 1; display: flex; flex-direction: column; background: var(--ds-chat-code-bg); color: var(--ds-chat-code-fg); }
 .terminalOutput { min-height: 0; color: var(--ds-chat-code-fg); }
-.terminalComposer { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--ds-chat-code-border); background: var(--ds-chat-code-bg-raised); }
+/* `auto` on the trailing track rather than a fixed count: the stop control is
+ * present only while something is running, so the row must hold two or three
+ * trailing items without the input jumping width between the two states. */
+.terminalComposer { display: grid; grid-template-columns: auto minmax(0, 1fr) repeat(2, auto); align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--ds-chat-code-border); background: var(--ds-chat-code-bg-raised); }
+/* One row per output line, so an empty line keeps its height and a styled run
+ * cannot leak its colour into the next line. */
+.terminalLine { display: block; min-height: 1.65em; }
+.terminalEarlier { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--ds-chat-code-border); padding: 7px 12px; color: var(--ds-chat-code-fg); background: var(--ds-chat-code-bg-raised); font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: left; opacity: .72; cursor: pointer; }
+.terminalEarlier:hover { color: var(--ds-chat-accent-bright); opacity: 1; }
+/* Outranks the shared `.terminalComposer button` colour by matching the same
+ * ancestor plus the class, rather than by `!important`. */
+.terminalComposer .terminalStop { color: var(--ds-chat-danger); }
 .terminalComposer span { color: var(--ds-chat-accent-bright); font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .terminalComposer input { min-width: 0; border: 0; outline: 0; color: var(--ds-chat-code-fg); background: transparent; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .terminalComposer button,

@@ -313,7 +313,13 @@ export interface SkillChatAutomationDocument {
 
 /** Versioned Skill Chat state persisted by the Host for all browser clients. */
 export interface SkillChatStateDocument {
-  readonly version: 2
+  /**
+   * 3 keys members and personas by Skill name; 2 keyed them by contact id.
+   *
+   * The client migrates a version-2 document on load and writes 3 back, so the
+   * Host stores whichever version the connected client last saved.
+   */
+  readonly version: 2 | 3
   readonly rooms: readonly SkillChatRoomDocument[]
   readonly roomSessions: readonly SkillChatRoomSessionDocument[]
   readonly personas: Readonly<Record<string, SkillChatPersonaDocument>>

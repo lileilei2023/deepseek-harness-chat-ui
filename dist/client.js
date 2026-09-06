@@ -4276,7 +4276,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		});
 		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_closeSkillChatTerminal_result$schema = _void();
 		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_getSkillChatState_result$schema = object({
-			"version": literal(2).readonly(),
+			"version": union([literal(2), literal(3)]).readonly(),
 			"rooms": array(object({
 				"roomId": string().readonly(),
 				"type": union([
@@ -4424,7 +4424,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			"lineEnd": number().readonly()
 		});
 		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_putSkillChatState_parameter_0$schema = object({
-			"version": literal(2).readonly(),
+			"version": union([literal(2), literal(3)]).readonly(),
 			"rooms": array(object({
 				"roomId": string().readonly(),
 				"type": union([
@@ -4515,7 +4515,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			"migratedAt": number().readonly().optional()
 		});
 		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_putSkillChatState_result$schema = object({
-			"version": literal(2).readonly(),
+			"version": union([literal(2), literal(3)]).readonly(),
 			"rooms": array(object({
 				"roomId": string().readonly(),
 				"type": union([
@@ -4671,7 +4671,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_runSkillChatAutomation_result$schema = object({
 			"sessionId": string().readonly(),
 			"state": object({
-				"version": literal(2).readonly(),
+				"version": union([literal(2), literal(3)]).readonly(),
 				"rooms": array(object({
 					"roomId": string().readonly(),
 					"type": union([
@@ -5066,7 +5066,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1034,
+						"line": 1036,
 						"column": 9
 					}
 				},
@@ -5234,7 +5234,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1053,
+						"line": 1055,
 						"column": 9
 					}
 				},
@@ -6692,7 +6692,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		//#endregion
 		//#region lib/types/client/model.js
 		const EMPTY_SKILL_CHAT_STATE = {
-			version: 2,
+			version: 3,
 			rooms: [],
 			roomSessions: [],
 			personas: {},
@@ -6816,11 +6816,11 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			return values.length === 0 ? [contact.description] : values;
 		}
 		function defaultPersona(contact, now = Date.now()) {
-			const hash = stableHash(contact.id);
+			const hash = stableHash(contact.name);
 			return {
-				skillId: contact.id,
+				skillId: contact.name,
 				displayName: FRIENDLY_NAMES[hash % FRIENDLY_NAMES.length] ?? "小满",
-				avatarId: contact.id,
+				avatarId: contact.name,
 				originalName: contact.name,
 				roleLabel: contact.source === "harness" ? "项目内 AI 同事" : contact.source === "workbuddy" ? `${contact.sourceShort ?? "WorkBuddy"} 专家` : "社区 Skill 专家",
 				bio: contact.description,
@@ -6837,21 +6837,21 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			let changed = false;
 			const next = { ...personas };
 			const usedNames = new Set(Object.values(personas).filter((persona) => persona.customizedName).map((persona) => persona.displayName));
-			for (const contact of contacts.toSorted((left, right) => left.id.localeCompare(right.id))) {
-				const current = next[contact.id];
+			for (const contact of contacts.toSorted((left, right) => left.name.localeCompare(right.name))) {
+				const current = next[contact.name];
 				const generated = defaultPersona(contact, now);
 				let generatedName = generated.displayName;
 				for (let ordinal = 2; usedNames.has(generatedName); ordinal += 1) generatedName = `${generated.displayName}${ordinal}`;
 				usedNames.add(current?.customizedName === true ? current.displayName : generatedName);
 				if (current === void 0) {
-					next[contact.id] = {
+					next[contact.name] = {
 						...generated,
 						displayName: generatedName
 					};
 					changed = true;
 					continue;
 				}
-				const staleAvatar = current.customizedAvatar !== true && current.avatarId !== contact.id;
+				const staleAvatar = current.customizedAvatar !== true && current.avatarId !== contact.name;
 				const refreshed = {
 					...current,
 					...staleAvatar ? { avatarId: generated.avatarId } : {},
@@ -6865,7 +6865,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					...contact.repository === void 0 ? {} : { repository: contact.repository }
 				};
 				if (JSON.stringify(refreshed) !== JSON.stringify(current)) {
-					next[contact.id] = refreshed;
+					next[contact.name] = refreshed;
 					changed = true;
 				}
 			}
@@ -6898,6 +6898,64 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 				if (left.order !== void 0 && right.order !== void 0) return left.order - right.order;
 				return right.updatedAt - left.updatedAt;
 			});
+		}
+		/**
+		* The Skill name inside a stored member key.
+		*
+		* Version 2 stored `<root>:<plugin>:<name>`; version 3 stores `<name>`. Both
+		* shapes reduce to the same answer here, so re-running the migration over
+		* already-migrated data changes nothing.
+		* @param key - a stored member key of either version.
+		* @returns the Skill name.
+		*/
+		function skillNameOf(key) {
+			const cut = key.lastIndexOf(":");
+			return cut === -1 ? key : key.slice(cut + 1);
+		}
+		/**
+		* Re-key one state document's members and personas by Skill name.
+		*
+		* Personas move with their members: leaving them keyed by contact id would
+		* orphan every nickname and avatar the user chose, which is the same bug in a
+		* more annoying place. Two ids that collapse onto one name keep the entry the
+		* user actually touched, then the newer one — a collision means the roster
+		* offered the same Skill from two roots, and only one of them is a contact now.
+		* @param state - a document of either version.
+		* @returns the document keyed by Skill name.
+		*/
+		function migrateMemberKeys(state) {
+			if (state.version === 3) return state;
+			const personas = {};
+			for (const [key, persona] of Object.entries(state.personas)) {
+				const name = skillNameOf(key);
+				const held = personas[name];
+				if (held === void 0 || (persona.customizedName || persona.customizedAvatar) && !(held.customizedName || held.customizedAvatar) || persona.updatedAt > held.updatedAt && (persona.customizedName || persona.customizedAvatar) === (held.customizedName || held.customizedAvatar)) personas[name] = {
+					...persona,
+					skillId: name
+				};
+			}
+			return {
+				...state,
+				version: 3,
+				personas,
+				rooms: state.rooms.map((room) => ({
+					...room,
+					memberIds: [...new Set(room.memberIds.map(skillNameOf))],
+					coordinatorId: skillNameOf(room.coordinatorId)
+				})),
+				roomSessions: state.roomSessions.map((session) => ({
+					...session,
+					memberSnapshot: session.memberSnapshot.map((member) => ({
+						...member,
+						skillId: skillNameOf(member.skillId)
+					}))
+				})),
+				automations: state.automations.map((automation) => ({
+					...automation,
+					memberIds: [...new Set(automation.memberIds.map(skillNameOf))],
+					coordinatorId: skillNameOf(automation.coordinatorId)
+				}))
+			};
 		}
 		function migrateLegacyState(groups, bindings, sessionWorkspace, sessionUpdatedAt, now = Date.now()) {
 			const rooms = /* @__PURE__ */ new Map();
@@ -7622,6 +7680,10 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			terminalPlaceholder: "输入命令，例如 pnpm test…",
 			artifactProduced: "本房间产出",
 			downloadFile: "下载",
+			browserEmpty: "输入本地开发服务器地址，例如 127.0.0.1:3000。这个房间下次会记得它。",
+			browserPlaceholder: "127.0.0.1:3000",
+			browserAddress: "浏览器地址",
+			browserFrameTitle: "项目浏览器预览",
 			openInTab: "新标签打开",
 			revealFile: "在文件夹中显示",
 			artifactChanged: "房间开着时有改动",
@@ -7903,6 +7965,10 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			terminalPlaceholder: "Type a command, for example pnpm test…",
 			artifactProduced: "Produced here",
 			downloadFile: "Download",
+			browserEmpty: "Enter a local dev server address, for example 127.0.0.1:3000. This room will remember it.",
+			browserPlaceholder: "127.0.0.1:3000",
+			browserAddress: "Browser address",
+			browserFrameTitle: "Project browser preview",
 			openInTab: "Open in a new tab",
 			revealFile: "Show in folder",
 			artifactChanged: "Changed while the room was open",
@@ -8279,6 +8345,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		const MODE_KEY = "dsh.skill-chat.mode.v1";
 		const CHAT_BINDINGS_KEY = "dsh.skill-chat.bindings.v1";
 		const STATE_KEY = "dsh.skill-chat.state.v2";
+		/** Per-workspace prefix for the last dev-server address the browser panel showed. */
+		const BROWSER_URL_KEY = "dsh.skill-chat.browser-url.v1";
 		const LEGACY_CHAT_IDENTITIES_KEY = "dsh.skill-chat.identities.v1";
 		const WORKSPACE_KEY = "dsh.skill-chat.workspace.v1";
 		function readStored(key, fallback) {
@@ -8383,7 +8451,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			};
 		}
 		function displayOf(contact, mode, personas = {}) {
-			const identity = personas[contact.id] ?? defaultPersona(contact, 0);
+			const identity = personas[contact.name] ?? defaultPersona(contact, 0);
 			return {
 				name: mode === "persona" ? identity.displayName : contact.name,
 				avatar: identity.avatarId
@@ -8391,7 +8459,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 		}
 		function matches(skill, query, personas) {
 			if (query.length === 0) return true;
-			const human = personas[skill.id]?.displayName ?? persona(skill).name;
+			const human = personas[skill.name]?.displayName ?? persona(skill).name;
 			return query.split(/\s+/u).every((token) => `${skill.name}\n${human}\n${skill.description}\n${skill.whenToUse ?? ""}\n${skill.sourceLabel}`.toLocaleLowerCase().includes(token));
 		}
 		function storedGroups() {
@@ -8438,7 +8506,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			return mentioned.length === 1 ? mentioned[0] : members.find((member) => member.id === leaderId) ?? members[0];
 		}
 		function roomGroup(room, contacts) {
-			const members = room.memberIds.flatMap((id) => contacts.find((contact) => contact.id === id) ?? []);
+			const members = room.memberIds.flatMap((id) => contacts.find((contact) => contact.name === id) ?? []);
 			return {
 				id: room.roomId.replace("room:group:", ""),
 				name: room.title,
@@ -9409,7 +9477,10 @@ ${roster}
 										onChange: (event) => {
 											props.onBrowserDraft(event.target.value);
 										},
-										"aria-label": "浏览器地址"
+										placeholder: tr("browserPlaceholder"),
+										"aria-label": tr("browserAddress"),
+										autoComplete: "off",
+										spellCheck: false
 									}),
 									(0, react_jsx_runtime.jsx)("button", {
 										type: "submit",
@@ -9417,13 +9488,16 @@ ${roster}
 									})
 								]
 							}),
-							(0, react_jsx_runtime.jsx)("iframe", {
+							props.browserUrl === "" ? (0, react_jsx_runtime.jsx)("div", {
+								className: SkillContactsBrowser_module_css_default.drawerEmpty,
+								children: tr("browserEmpty")
+							}) : (0, react_jsx_runtime.jsx)("iframe", {
 								className: SkillContactsBrowser_module_css_default.browserFrame,
 								src: props.browserUrl,
-								title: "项目浏览器预览",
+								title: tr("browserFrameTitle"),
 								sandbox: "allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
 							}, props.browserKey),
-							(0, react_jsx_runtime.jsxs)("div", {
+							props.browserUrl === "" ? null : (0, react_jsx_runtime.jsxs)("div", {
 								className: SkillContactsBrowser_module_css_default.workbenchFootnote,
 								children: [tr("embedBlocked"), (0, react_jsx_runtime.jsx)("a", {
 									href: props.browserUrl,
@@ -9518,7 +9592,7 @@ ${roster}
 			const [savedRooms, setSavedRooms] = (0, react.useState)(() => readStored(SAVED_ROOMS_KEY, []));
 			const [groups, setGroups] = (0, react.useState)(storedGroups);
 			const [chatBindings, setChatBindings] = (0, react.useState)(storedBindings);
-			const [state, setState] = (0, react.useState)(() => readStored(STATE_KEY, EMPTY_SKILL_CHAT_STATE));
+			const [state, setState] = (0, react.useState)(() => migrateMemberKeys(readStored(STATE_KEY, EMPTY_SKILL_CHAT_STATE)));
 			const stateRef = (0, react.useRef)(state);
 			const [workspaceId, setWorkspaceId] = (0, react.useState)(() => {
 				return readStored(WORKSPACE_KEY, null) ?? void 0;
@@ -9575,9 +9649,9 @@ ${roster}
 			const [terminalEarlier, setTerminalEarlier] = (0, react.useState)("");
 			const [terminalEarliestEnd, setTerminalEarliestEnd] = (0, react.useState)(0);
 			const [terminalBusy, setTerminalBusy] = (0, react.useState)(false);
-			const [browserUrl, setBrowserUrl] = (0, react.useState)("http://127.0.0.1:56517/");
-			const [browserDraft, setBrowserDraft] = (0, react.useState)("http://127.0.0.1:56517/");
-			const [browserHistory, setBrowserHistory] = (0, react.useState)(["http://127.0.0.1:56517/"]);
+			const [browserUrl, setBrowserUrl] = (0, react.useState)("");
+			const [browserDraft, setBrowserDraft] = (0, react.useState)("");
+			const [browserHistory, setBrowserHistory] = (0, react.useState)([]);
 			const [browserHistoryIndex, setBrowserHistoryIndex] = (0, react.useState)(0);
 			const [browserKey, setBrowserKey] = (0, react.useState)(0);
 			const [sidecarOpen, setSidecarOpen] = (0, react.useState)(false);
@@ -9650,16 +9724,15 @@ ${roster}
 				state.personas
 			]);
 			/**
-			* Resolve a stored member id to a contact.
+			* Resolve a stored member key to a contact.
 			*
-			* A contact id is `<root>:<plugin>:<name>`, so widening the catalog's roster
-			* re-keys contacts and orphans ids already stored in rooms. The trailing
-			* segment is the Skill's name, which is unique after dedup, so it recovers
-			* the member without a migration.
-			* @param id - the stored contact id.
+			* The key is the Skill's name, which the catalog dedups on, so it survives a
+			* change to the scanned roster. Documents written before that migration hold
+			* `<root>:<plugin>:<name>` instead, which the fallback still reads.
+			* @param key - the stored member key.
 			* @returns the contact, or undefined when the Skill is gone entirely.
 			*/
-			const memberContact = (id) => allContacts.find((contact) => contact.id === id) ?? allContacts.find((contact) => contact.name === id.slice(id.lastIndexOf(":") + 1));
+			const memberContact = (key) => allContacts.find((contact) => contact.name === key) ?? allContacts.find((contact) => contact.name === skillNameOf(key));
 			const activeMembers = activeRoom?.memberIds.flatMap((id) => memberContact(id) ?? []) ?? [];
 			const activeCoordinator = activeRoom === void 0 ? void 0 : memberContact(activeRoom.coordinatorId) ?? activeMembers[0];
 			const currentSessionBlank = currentSessionId === void 0 ? false : sessions.byId[currentSessionId]?.blank === true;
@@ -9676,7 +9749,8 @@ ${roster}
 				const abort = new AbortController();
 				loadState(abort.signal).then((remoteState) => {
 					if (abort.signal.aborted) return;
-					replaceState(preferLocalState(remoteState, stateRef.current) ? stateRef.current : remoteState);
+					const migrated = migrateMemberKeys(remoteState);
+					replaceState(preferLocalState(migrated, stateRef.current) ? stateRef.current : migrated);
 					setStateReady(true);
 				}, (error) => {
 					if (abort.signal.aborted) return;
@@ -9897,7 +9971,7 @@ ${roster}
 			*/
 			const branchRoomSession = async (room, sessionId, atSeq, kind) => {
 				const childId = await forkSession(sessionId, atSeq, kind === "fork");
-				const members = room.memberIds.flatMap((id) => allContacts.find((contact) => contact.id === id) ?? []);
+				const members = room.memberIds.flatMap((id) => memberContact(id) ?? []);
 				const now = Date.now();
 				const roomSessionId = `room-session:${childId}`;
 				const source = stateRef.current.roomSessions.find((item) => item.harnessSessionId === sessionId);
@@ -9909,7 +9983,7 @@ ${roster}
 					memberSnapshot: source?.memberSnapshot ?? members.map((member) => {
 						const display = displayOf(member, "persona", state.personas);
 						return {
-							skillId: member.id,
+							skillId: member.name,
 							displayName: display.name,
 							avatarId: display.avatar,
 							originalName: member.name
@@ -9937,9 +10011,9 @@ ${roster}
 			const createRoomSession = async (room, draft = true) => {
 				const sessionId = await startSession(room.workspaceId);
 				if (room.type === "general") await renameSession(sessionId, room.title);
-				const members = room.memberIds.flatMap((id) => allContacts.find((contact) => contact.id === id) ?? []);
+				const members = room.memberIds.flatMap((id) => memberContact(id) ?? []);
 				const group = roomGroup(room, allContacts);
-				const coordinator = members.find((member) => member.id === room.coordinatorId) ?? members[0];
+				const coordinator = members.find((member) => member.name === room.coordinatorId) ?? members[0];
 				const now = Date.now();
 				const roomSessionId = `room-session:${sessionId}`;
 				const roomSession = {
@@ -9948,7 +10022,7 @@ ${roster}
 					harnessSessionId: sessionId,
 					title: room.title,
 					memberSnapshot: members.map((member) => ({
-						skillId: member.id,
+						skillId: member.name,
 						displayName: displayOf(member, "persona", state.personas).name,
 						avatarId: displayOf(member, "persona", state.personas).avatar,
 						originalName: member.name
@@ -10029,8 +10103,8 @@ ${roster}
 					setNotice(t("workspaceRequired"));
 					return;
 				}
-				const existing = state.rooms.find((room) => room.type === "direct" && room.workspaceId === workspaceId && room.memberIds[0] === contact.id && room.archivedAt === void 0);
-				ensureLinked([contact.id]);
+				const existing = state.rooms.find((room) => room.type === "direct" && room.workspaceId === workspaceId && room.memberIds[0] === contact.name && room.archivedAt === void 0);
+				ensureLinked([contact.name]);
 				const display = displayOf(contact, "persona", state.personas);
 				const room = existing ?? {
 					roomId: `room:direct:${workspaceId}:${contact.id}`,
@@ -10038,8 +10112,8 @@ ${roster}
 					workspaceId,
 					workspaceIds: [workspaceId],
 					title: display.name,
-					memberIds: [contact.id],
-					coordinatorId: contact.id,
+					memberIds: [contact.name],
+					coordinatorId: contact.name,
 					sessionIds: [],
 					createdAt: Date.now(),
 					updatedAt: Date.now()
@@ -10155,7 +10229,7 @@ ${roster}
 			*/
 			const artifactOrigin = (artifact) => {
 				if (artifact.seq === void 0) return null;
-				const members = activeRoom === void 0 ? [] : activeRoom.memberIds.flatMap((id) => allContacts.find((contact) => contact.id === id) ?? []);
+				const members = activeRoom === void 0 ? [] : activeRoom.memberIds.flatMap((id) => memberContact(id) ?? []);
 				const author = members.length === 0 ? void 0 : responderForMessage(members, activeRoom?.coordinatorId, "", mode, artifact.speaker ?? "");
 				const who = author === void 0 ? null : displayOf(author, mode).name;
 				const revisions = (artifact.revisions ?? 1) > 1 ? ` · ${String(artifact.revisions)} ${tr("artifactRevisions")}` : "";
@@ -10168,7 +10242,7 @@ ${roster}
 				}
 				const members = allContacts.filter((contact) => groupMembers.includes(contact.id));
 				if (members.length < 2) return;
-				ensureLinked(members.map((member) => member.id));
+				ensureLinked(members.map((member) => member.name));
 				const now = Date.now();
 				const roomId = `room:group:${randomUUID()}`;
 				const coordinator = members[0];
@@ -10182,8 +10256,8 @@ ${roster}
 					workspaceIds: linkedWorkspaces,
 					avatarId: groupAvatar,
 					title,
-					memberIds: members.map((member) => member.id),
-					coordinatorId: coordinator.id,
+					memberIds: members.map((member) => member.name),
+					coordinatorId: coordinator.name,
 					systemPrompt: groupPrompt.trim() || generatedGroupPrompt(title, members),
 					sessionIds: [],
 					createdAt: now,
@@ -10206,13 +10280,13 @@ ${roster}
 			};
 			const savePersona = () => {
 				if (selected === null) return;
-				const base = state.personas[selected.id] ?? defaultPersona(selected);
+				const base = state.personas[selected.name] ?? defaultPersona(selected);
 				const displayName = personaName.trim() || base.displayName;
 				updateState((current) => ({
 					...current,
 					personas: {
 						...current.personas,
-						[selected.id]: {
+						[selected.name]: {
 							...base,
 							displayName,
 							avatarId: personaAvatar,
@@ -10221,7 +10295,7 @@ ${roster}
 							updatedAt: Date.now()
 						}
 					},
-					rooms: current.rooms.map((room) => room.type === "direct" && room.memberIds[0] === selected.id ? {
+					rooms: current.rooms.map((room) => room.type === "direct" && room.memberIds[0] === selected.name ? {
 						...room,
 						title: displayName,
 						updatedAt: Date.now()
@@ -10236,9 +10310,9 @@ ${roster}
 					...current,
 					personas: {
 						...current.personas,
-						[selected.id]: reset
+						[selected.name]: reset
 					},
-					rooms: current.rooms.map((room) => room.type === "direct" && room.memberIds[0] === selected.id ? {
+					rooms: current.rooms.map((room) => room.type === "direct" && room.memberIds[0] === selected.name ? {
 						...room,
 						title: reset.displayName,
 						updatedAt: Date.now()
@@ -10328,15 +10402,15 @@ ${roster}
 					} : room)
 				}));
 			};
-			const toggleActiveRoomMember = (skillId) => {
+			const toggleActiveRoomMember = (skillName) => {
 				if (activeRoom === void 0 || activeRoom.type !== "group") return;
-				const included = activeRoom.memberIds.includes(skillId);
-				const memberIds = included ? activeRoom.memberIds.filter((id) => id !== skillId) : [...activeRoom.memberIds, skillId];
+				const included = activeRoom.memberIds.includes(skillName);
+				const memberIds = included ? activeRoom.memberIds.filter((name) => name !== skillName) : [...activeRoom.memberIds, skillName];
 				if (memberIds.length < 2) {
 					setNotice(t("groupNeedsMember"));
 					return;
 				}
-				if (!included) ensureLinked([skillId]);
+				if (!included) ensureLinked([skillName]);
 				updateRoom(activeRoom.roomId, {
 					memberIds,
 					coordinatorId: memberIds.includes(activeRoom.coordinatorId) ? activeRoom.coordinatorId : memberIds[0] ?? activeRoom.coordinatorId
@@ -10411,7 +10485,7 @@ ${roster}
 					setExternalJoined((current) => [...current.filter((item) => item.id !== installed.id), installed]);
 					setContactsRevision((value) => value + 1);
 					if (target === "draft-group") setGroupMembers((current) => current.includes(installed.id) ? current : [...current, installed.id]);
-					else if (target === "active-group" && activeRoom?.type === "group") updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.id) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.id] });
+					else if (target === "active-group" && activeRoom?.type === "group") updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.name) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.name] });
 					else selectContact(installed);
 					setNotice(`${t("skillInstalled").replace("{name}", installed.name)}${target === void 0 ? "，已加入智能体列表" : "，已加入群组"}`);
 				} catch (error) {
@@ -10447,7 +10521,7 @@ ${roster}
 				setFavorites((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
 			};
 			const selectContact = (contact) => {
-				const identity = state.personas[contact.id] ?? defaultPersona(contact);
+				const identity = state.personas[contact.name] ?? defaultPersona(contact);
 				setSelected(contact);
 				setPersonaName(identity.displayName);
 				setPersonaAvatar(identity.avatarId);
@@ -10492,7 +10566,7 @@ ${roster}
 						}, member.id))
 					});
 				}
-				const contact = allContacts.find((item) => item.id === room.memberIds[0]);
+				const contact = memberContact(room.memberIds[0] ?? "");
 				const identity = contact === void 0 ? {
 					name: room.title,
 					avatar: "fox-coral"
@@ -10525,7 +10599,7 @@ ${roster}
 			};
 			const openRoomSettings = (room) => {
 				setRoomTitleDraft(room.title);
-				setRoomPromptDraft(room.systemPrompt ?? generatedGroupPrompt(room.title, room.memberIds.flatMap((id) => allContacts.find((contact) => contact.id === id) ?? [])));
+				setRoomPromptDraft(room.systemPrompt ?? generatedGroupPrompt(room.title, room.memberIds.flatMap((id) => memberContact(id) ?? [])));
 				setRoomAvatarDraft(room.avatarId ?? ANIMAL_AVATARS[hashOf(room.roomId) % ANIMAL_AVATARS.length] ?? "bear-honey");
 				setRoomWorkspaceIds(room.workspaceIds ?? [room.workspaceId]);
 				setMemberQuery("");
@@ -10819,7 +10893,22 @@ ${roster}
 				setBrowserDraft(normalized);
 				setBrowserHistory((current) => [...current.slice(0, browserHistoryIndex + 1), normalized]);
 				setBrowserHistoryIndex((index) => index + 1);
+				if (workspaceId !== void 0) store(`${BROWSER_URL_KEY}:${workspaceId}`, normalized);
 			};
+			/** Restore whatever this workspace's dev server was last pointed at. */
+			(0, react.useEffect)(() => {
+				if (projectTool !== "browser" || workspaceId === void 0 || browserUrl !== "") return;
+				const remembered = readStored(`${BROWSER_URL_KEY}:${workspaceId}`, "");
+				if (remembered === "") return;
+				setBrowserUrl(remembered);
+				setBrowserDraft(remembered);
+				setBrowserHistory([remembered]);
+				setBrowserHistoryIndex(0);
+			}, [
+				browserUrl,
+				projectTool,
+				workspaceId
+			]);
 			const closeTemporaryChat = () => {
 				const current = sidecarId;
 				setSidecarOpen(false);
@@ -10954,11 +11043,11 @@ ${roster}
 			}, [sidecarOpen]);
 			const marketplaceRow = (result, target) => {
 				const installed = externalJoined.find((item) => item.id === `skills-sh:${result.id}`);
-				const included = target === "draft-group" ? installed !== void 0 && groupMembers.includes(installed.id) : target === "active-group" ? installed !== void 0 && activeRoom?.memberIds.includes(installed.id) === true : false;
+				const included = target === "draft-group" ? installed !== void 0 && groupMembers.includes(installed.id) : target === "active-group" ? installed !== void 0 && activeRoom?.memberIds.includes(installed.name) === true : false;
 				const installAndJoin = () => {
 					if (installed === void 0) joinExternal(result, target);
 					else if (target === "draft-group") setGroupMembers((current) => current.includes(installed.id) ? current : [...current, installed.id]);
-					else if (target === "active-group" && activeRoom?.type === "group") updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.id) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.id] });
+					else if (target === "active-group" && activeRoom?.type === "group") updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.name) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.name] });
 				};
 				const homepage = result.homepage ?? `https://skills.sh/${result.id}`;
 				const card = (0, react_jsx_runtime.jsxs)("div", {
@@ -11024,10 +11113,10 @@ ${roster}
 				});
 				const running = summaries.some((summary) => summary.running);
 				const unread = activeRoom?.roomId === room.roomId ? 0 : summaries.filter((summary) => summary.completed === true).length;
-				const coordinator = allContacts.find((contact) => contact.id === room.coordinatorId);
+				const coordinator = memberContact(room.coordinatorId);
 				const linked = (room.workspaceIds ?? [room.workspaceId]).flatMap((id) => workspaces.items.find((item) => item.workspaceId === id)?.title ?? []);
 				const latest = state.roomSessions.filter((session) => session.roomId === room.roomId && session.archivedAt === void 0).sort((left, right) => right.updatedAt - left.updatedAt)[0];
-				const directContact = room.type === "direct" ? allContacts.find((item) => item.id === room.memberIds[0]) : void 0;
+				const directContact = room.type === "direct" ? memberContact(room.memberIds[0] ?? "") : void 0;
 				const meta = room.type === "group" ? `${room.memberIds.length} ${t("peopleCount")}` : "";
 				const sessionTitle = latest?.title === room.title ? void 0 : latest?.title;
 				const preview = running ? t("typing") : sessionTitle ?? (room.type === "group" ? coordinator === void 0 ? t("noCoordinator") : `${displayOf(coordinator, "persona", state.personas).name} ${t("coordinates")}` : room.sessionIds.length > 1 ? `${room.sessionIds.length} ${t("sessionCount")}` : directContact?.description ?? t("noMessages"));
@@ -11655,17 +11744,17 @@ ${roster}
 							}),
 							(0, react_jsx_runtime.jsx)("div", {
 								className: SkillContactsBrowser_module_css_default.role,
-								children: state.personas[selected.id]?.roleLabel
+								children: state.personas[selected.name]?.roleLabel
 							}),
 							(0, react_jsx_runtime.jsx)("p", {
 								className: SkillContactsBrowser_module_css_default.bio,
 								children: selected.description
 							}),
-							(state.personas[selected.id]?.capabilities ?? []).length === 0 ? null : (0, react_jsx_runtime.jsxs)("div", {
+							(state.personas[selected.name]?.capabilities ?? []).length === 0 ? null : (0, react_jsx_runtime.jsxs)("div", {
 								className: SkillContactsBrowser_module_css_default.profileSection,
 								children: [(0, react_jsx_runtime.jsx)("h3", { children: t("goodAt") }), (0, react_jsx_runtime.jsx)("div", {
 									className: SkillContactsBrowser_module_css_default.capabilityChips,
-									children: (state.personas[selected.id]?.capabilities ?? []).map((item) => (0, react_jsx_runtime.jsx)("span", { children: item }, item))
+									children: (state.personas[selected.name]?.capabilities ?? []).map((item) => (0, react_jsx_runtime.jsx)("span", { children: item }, item))
 								})]
 							}),
 							selected.whenToUse === void 0 ? null : (0, react_jsx_runtime.jsxs)("div", {
@@ -11676,7 +11765,7 @@ ${roster}
 								})]
 							}),
 							(() => {
-								const inRooms = visibleRooms.filter((room) => room.type === "group" && room.memberIds.includes(selected.id));
+								const inRooms = visibleRooms.filter((room) => room.type === "group" && room.memberIds.includes(selected.name));
 								return inRooms.length === 0 ? null : (0, react_jsx_runtime.jsxs)("div", {
 									className: SkillContactsBrowser_module_css_default.profileSection,
 									children: [(0, react_jsx_runtime.jsx)("h3", { children: t("inTheseGroups") }), (0, react_jsx_runtime.jsx)("div", {
@@ -12442,8 +12531,8 @@ ${roster}
 								className: SkillContactsBrowser_module_css_default.roomMemberGrid,
 								children: [
 									visibleMemberContacts.map((contact) => {
-										const included = activeRoom.memberIds.includes(contact.id);
-										const coordinator = activeRoom.coordinatorId === contact.id;
+										const included = activeRoom.memberIds.includes(contact.name);
+										const coordinator = activeRoom.coordinatorId === contact.name;
 										const display = displayOf(contact, "persona", state.personas);
 										return (0, react_jsx_runtime.jsxs)("div", {
 											className: SkillContactsBrowser_module_css_default.roomMemberItem,
@@ -12453,7 +12542,7 @@ ${roster}
 												className: SkillContactsBrowser_module_css_default.memberPersona,
 												disabled: !included,
 												onClick: () => {
-													updateRoom(activeRoom.roomId, { coordinatorId: contact.id });
+													updateRoom(activeRoom.roomId, { coordinatorId: contact.name });
 												},
 												children: [(0, react_jsx_runtime.jsx)(AnimalAvatar, {
 													avatarId: display.avatar,
@@ -12464,7 +12553,7 @@ ${roster}
 												type: "button",
 												className: SkillContactsBrowser_module_css_default.memberToggle,
 												onClick: () => {
-													toggleActiveRoomMember(contact.id);
+													toggleActiveRoomMember(contact.name);
 												},
 												children: included ? "−" : "＋"
 											})]

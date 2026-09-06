@@ -7,7 +7,8 @@ import {
   bindLegacyGroups, CHAT_BINDINGS_KEY, groupsForWorkspace, responderForMessage,
   SkillContactsBrowser, type ContactGroup, type SkillContact, parseDiff, preferLocalState } from '../src/client/SkillContactsBrowser.tsx'
 import {
-  activeHarnessSession, type ChatRoom, defaultPersona, ensurePersonas, migrateLegacyState, roomForSession,
+  activeHarnessSession, type ChatRoom, defaultPersona, ensurePersonas, migrateLegacyState,
+  migrateMemberKeys, roomForSession, skillNameOf,
 } from '../src/client/model.ts'
 import { inject, mergeContacts, mountSkillChatUi } from '../src/client/index.ts'
 import { createSkinRuntime, SKIN_PREFERENCE_KEY, validateSkinPackage } from '../src/client/skin/index.ts'
@@ -57,7 +58,7 @@ describe('SkillChat browser plugin', () => {
   })
 
   it('lets the Host document win unless the Host has never stored anything', () => {
-    const empty = { version: 2 as const, rooms: [], roomSessions: [], personas: {}, automations: [] }
+    const empty = { version: 3 as const, rooms: [], roomSessions: [], personas: {}, automations: [] }
     const room = {
       roomId: 'room:one', type: 'group' as const, workspaceId: 'w' as ChatRoom['workspaceId'], title: '产品设计小组',
       memberIds: ['skill'], coordinatorId: 'skill', sessionIds: [], createdAt: 1, updatedAt: 1,
@@ -86,7 +87,9 @@ describe('SkillChat browser plugin', () => {
     expect(first.displayName).toBe(second.displayName)
     expect(first.avatarId).toBe(second.avatarId)
     expect(first.displayName).not.toContain('设计')
-    expect(ensurePersonas([contact], {})).toHaveProperty(contact.id)
+    // Keyed by the Skill's name, not its contact id: the id carries the root it
+    // was scanned under, so widening the roster used to orphan every persona.
+    expect(ensurePersonas([contact], {})).toHaveProperty(contact.name)
   })
 
   it('adds a stable suffix when generated persona names collide', () => {
@@ -412,5 +415,62 @@ describe('parseAnsiLines', () => {
     // A selector's own arguments must not be read back as further SGR codes:
     // the `1` here is blue's value, not a request for bold.
     expect(parseAnsiLines(`${esc('[38;2;0;0;1m')}x`)[0]?.[0]?.style?.fontWeight).toBeUndefined()
+  })
+})
+
+describe('migrateMemberKeys', () => {
+  /** Build a version-2 document whose members are contact ids. */
+  const legacy = (): never => ({
+    version: 2,
+    rooms: [{
+      roomId: 'room:group:one', type: 'group', workspaceId: 'w', title: '产品设计小组',
+      memberIds: ['claude:plugins:analyst', 'codex:skills:writer'], coordinatorId: 'claude:plugins:analyst',
+      sessionIds: [], createdAt: 1, updatedAt: 1,
+    }],
+    roomSessions: [{
+      roomSessionId: 'rs', roomId: 'room:group:one', harnessSessionId: 's', title: 't',
+      memberSnapshot: [{ skillId: 'claude:plugins:analyst', displayName: '麦麦', avatarId: 'a', originalName: 'analyst' }],
+      createdAt: 1, updatedAt: 1,
+    }],
+    personas: {
+      'claude:plugins:analyst': { skillId: 'claude:plugins:analyst', displayName: '麦麦', customizedName: true, customizedAvatar: false, updatedAt: 5 },
+      // The same Skill seen under a second root, never touched by the user.
+      'codex:skills:analyst': { skillId: 'codex:skills:analyst', displayName: '松松', customizedName: false, customizedAvatar: false, updatedAt: 9 },
+      'codex:skills:writer': { skillId: 'codex:skills:writer', displayName: '圆圆', customizedName: false, customizedAvatar: false, updatedAt: 2 },
+    },
+    automations: [{
+      automationId: 'a1', name: 'daily', workspaceId: 'w', roomId: 'room:group:one', intent: 'custom', prompt: 'p',
+      memberIds: ['claude:plugins:analyst'], coordinatorId: 'claude:plugins:analyst',
+      schedule: { kind: 'once', runAt: '2026-01-01T00:00' }, lifecycle: 'run-once', status: 'active', createdAt: 1, updatedAt: 1,
+    }],
+  }) as never
+
+  it('re-keys members, personas and automations by Skill name', () => {
+    const migrated = migrateMemberKeys(legacy())
+
+    expect(migrated.version).toBe(3)
+    expect(migrated.rooms[0]?.memberIds).toEqual(['analyst', 'writer'])
+    expect(migrated.rooms[0]?.coordinatorId).toBe('analyst')
+    expect(migrated.roomSessions[0]?.memberSnapshot[0]?.skillId).toBe('analyst')
+    expect(migrated.automations[0]?.memberIds).toEqual(['analyst'])
+    expect(Object.keys(migrated.personas).toSorted()).toEqual(['analyst', 'writer'])
+  })
+
+  it('keeps the persona the user actually chose when two ids collapse onto one name', () => {
+    // The same Skill found under two roots produced two personas. Dropping the
+    // customised one would silently discard a nickname the user set, which is
+    // the bug this migration exists to end rather than repeat.
+    const migrated = migrateMemberKeys(legacy())
+
+    expect(migrated.personas.analyst?.displayName).toBe('麦麦')
+    expect(migrated.personas.analyst?.skillId).toBe('analyst')
+  })
+
+  it('changes nothing when it runs again', () => {
+    // Two browsers on one machine can load in either order, so the migration
+    // has to be safe to apply to its own output.
+    const once = migrateMemberKeys(legacy())
+    expect(migrateMemberKeys(once)).toBe(once)
+    expect(skillNameOf('analyst')).toBe('analyst')
   })
 })

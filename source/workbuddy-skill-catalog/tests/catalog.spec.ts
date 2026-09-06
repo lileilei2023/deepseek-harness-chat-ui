@@ -59,7 +59,7 @@ describe('WorkBuddy Skill catalog', () => {
     const catalog = new WorkBuddySkillCatalog(await catalogContext(), { stateFile })
 
     await expect(catalog.getSkillChatState()).resolves.toEqual({
-      version: 2, rooms: [], roomSessions: [], personas: {}, automations: [],
+      version: 3, rooms: [], roomSessions: [], personas: {}, automations: [],
     })
     const state = {
       version: 2 as const,

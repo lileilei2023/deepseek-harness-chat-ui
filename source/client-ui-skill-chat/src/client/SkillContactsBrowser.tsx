@@ -19,7 +19,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import {
   ANIMAL_AVATARS, EMPTY_SKILL_CHAT_STATE, activeHarnessSession, defaultPersona, ensurePersonas,
-  migrateLegacyState, orderRooms, roomForSession, type AutomationDefinition, type ChatRoom, type RoomSession,
+  migrateLegacyState, migrateMemberKeys, orderRooms, roomForSession, skillNameOf,
+  type AutomationDefinition, type ChatRoom, type RoomSession,
   type SkillChatState, type SkillPersona,
 } from './model.ts'
 import type {} from './shell/slots.ts'
@@ -313,6 +314,8 @@ export const EXTERNAL_KEY = 'dsh.skill-chat.external.v1'
 export const MODE_KEY = 'dsh.skill-chat.mode.v1'
 export const CHAT_BINDINGS_KEY = 'dsh.skill-chat.bindings.v1'
 export const STATE_KEY = 'dsh.skill-chat.state.v2'
+/** Per-workspace prefix for the last dev-server address the browser panel showed. */
+const BROWSER_URL_KEY = 'dsh.skill-chat.browser-url.v1'
 const LEGACY_CHAT_IDENTITIES_KEY = 'dsh.skill-chat.identities.v1'
 const WORKSPACE_KEY = 'dsh.skill-chat.workspace.v1'
 
@@ -418,13 +421,13 @@ export function displayOf(
   mode: ContactMode,
   personas: Readonly<Record<string, SkillPersona>> = {},
 ): { name: string; avatar: string } {
-  const identity = personas[contact.id] ?? defaultPersona(contact, 0)
+  const identity = personas[contact.name] ?? defaultPersona(contact, 0)
   return { name: mode === 'persona' ? identity.displayName : contact.name, avatar: identity.avatarId }
 }
 
 function matches(skill: SkillContact, query: string, personas: Readonly<Record<string, SkillPersona>>): boolean {
   if (query.length === 0) return true
-  const human = personas[skill.id]?.displayName ?? persona(skill).name
+  const human = personas[skill.name]?.displayName ?? persona(skill).name
   return query.split(/\s+/u).every(token => `${skill.name}\n${human}\n${skill.description}\n${skill.whenToUse ?? ''}\n${skill.sourceLabel}`.toLocaleLowerCase().includes(token))
 }
 
@@ -486,7 +489,7 @@ export function groupsForWorkspace(groups: readonly ContactGroup[], workspaceId:
 }
 
 function roomGroup(room: ChatRoom, contacts: readonly SkillContact[]): ContactGroup {
-  const members = room.memberIds.flatMap(id => contacts.find(contact => contact.id === id) ?? [])
+  const members = room.memberIds.flatMap(id => contacts.find(contact => contact.name === id) ?? [])
   return { id: room.roomId.replace('room:group:', ''), name: room.title, members, leaderId: room.coordinatorId, ...(room.systemPrompt === undefined ? {} : { systemPrompt: room.systemPrompt }), workspaceId: room.workspaceId, createdAt: room.createdAt }
 }
 
@@ -1204,11 +1207,22 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
           <button type="button" disabled={!props.canGoBack} onClick={props.onBrowserBack}>←</button>
           <button type="button" disabled={!props.canGoForward} onClick={props.onBrowserForward}>→</button>
           <button type="button" onClick={props.onBrowserRefresh}>↻</button>
-          <input value={props.browserDraft} onChange={event => { props.onBrowserDraft(event.target.value) }} aria-label="浏览器地址"/>
+          <input
+            value={props.browserDraft}
+            onChange={event => { props.onBrowserDraft(event.target.value) }}
+            placeholder={tr('browserPlaceholder')}
+            aria-label={tr('browserAddress')}
+            autoComplete="off"
+            spellCheck={false}
+          />
           <button type="submit">{tr('openLabel')}</button>
         </form>
-        <iframe key={props.browserKey} className={css.browserFrame} src={props.browserUrl} title="项目浏览器预览" sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"/>
-        <div className={css.workbenchFootnote}>{tr('embedBlocked')}<a href={props.browserUrl} target="_blank" rel="noreferrer">{props.browserUrl}</a></div>
+        {props.browserUrl === ''
+          ? <div className={css.drawerEmpty}>{tr('browserEmpty')}</div>
+          : <iframe key={props.browserKey} className={css.browserFrame} src={props.browserUrl} title={tr('browserFrameTitle')} sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"/>}
+        {props.browserUrl === ''
+          ? null
+          : <div className={css.workbenchFootnote}>{tr('embedBlocked')}<a href={props.browserUrl} target="_blank" rel="noreferrer">{props.browserUrl}</a></div>}
       </div> : null}
     </WorkbenchPanel>
   </Drawer>
@@ -1253,7 +1267,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [savedRooms, setSavedRooms] = useState<readonly string[]>(() => readStored(SAVED_ROOMS_KEY, []))
   const [groups, setGroups] = useState<readonly ContactGroup[]>(storedGroups)
   const [chatBindings, setChatBindings] = useState<Readonly<Record<string, ChatBinding>>>(storedBindings)
-  const [state, setState] = useState<SkillChatState>(() => readStored(STATE_KEY, EMPTY_SKILL_CHAT_STATE))
+  const [state, setState] = useState<SkillChatState>(() => migrateMemberKeys(readStored(STATE_KEY, EMPTY_SKILL_CHAT_STATE)))
   const stateRef = useRef(state)
   const [workspaceId, setWorkspaceId] = useState<WorkspaceId | undefined>(() => {
     return readStored<WorkspaceId | null>(WORKSPACE_KEY, null) ?? undefined
@@ -1322,9 +1336,13 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [terminalEarlier, setTerminalEarlier] = useState('')
   const [terminalEarliestEnd, setTerminalEarliestEnd] = useState(0)
   const [terminalBusy, setTerminalBusy] = useState(false)
-  const [browserUrl, setBrowserUrl] = useState('http://127.0.0.1:56517/')
-  const [browserDraft, setBrowserDraft] = useState('http://127.0.0.1:56517/')
-  const [browserHistory, setBrowserHistory] = useState<readonly string[]>(['http://127.0.0.1:56517/'])
+  // Empty until someone types an address. The port that used to be hardcoded
+  // here had no provenance, so opening the panel always showed a page that
+  // could not load. Whatever this room last looked at is remembered per
+  // workspace, which is the only address the plugin can honestly guess.
+  const [browserUrl, setBrowserUrl] = useState('')
+  const [browserDraft, setBrowserDraft] = useState('')
+  const [browserHistory, setBrowserHistory] = useState<readonly string[]>([])
   const [browserHistoryIndex, setBrowserHistoryIndex] = useState(0)
   const [browserKey, setBrowserKey] = useState(0)
   const [sidecarOpen, setSidecarOpen] = useState(false)
@@ -1386,18 +1404,19 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   }, [deferredQuery, state.roomSessions, visibleRooms])
   const visibleMemberContacts = useMemo(() => allContacts.filter(contact => matches(contact, deferredMemberQuery, state.personas)), [allContacts, deferredMemberQuery, state.personas])
   /**
-   * Resolve a stored member id to a contact.
+   * Resolve a stored member key to a contact.
    *
-   * A contact id is `<root>:<plugin>:<name>`, so widening the catalog's roster
-   * re-keys contacts and orphans ids already stored in rooms. The trailing
-   * segment is the Skill's name, which is unique after dedup, so it recovers
-   * the member without a migration.
-   * @param id - the stored contact id.
+   * The key is the Skill's name, which the catalog dedups on, so it survives a
+   * change to the scanned roster. Documents written before that migration hold
+   * `<root>:<plugin>:<name>` instead, which the fallback still reads.
+   * @param key - the stored member key.
    * @returns the contact, or undefined when the Skill is gone entirely.
    */
-  const memberContact = (id: string): SkillContact | undefined =>
-    allContacts.find(contact => contact.id === id)
-      ?? allContacts.find(contact => contact.name === id.slice(id.lastIndexOf(':') + 1))
+  const memberContact = (key: string): SkillContact | undefined =>
+    allContacts.find(contact => contact.name === key)
+      // A document written by an older build, or by another machine that has
+      // not loaded this version yet, still holds `<root>:<plugin>:<name>`.
+      ?? allContacts.find(contact => contact.name === skillNameOf(key))
 
   const activeMembers = activeRoom?.memberIds.flatMap(id => memberContact(id) ?? []) ?? []
   const activeCoordinator = activeRoom === undefined
@@ -1420,7 +1439,11 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const abort = new AbortController()
     void loadState(abort.signal).then(remoteState => {
       if (abort.signal.aborted) return
-      replaceState(preferLocalState(remoteState, stateRef.current) ? stateRef.current : remoteState)
+      // Both sides are re-keyed before they are compared: a Host document still
+      // on version 2 and a browser copy already on 3 would otherwise look like
+      // two different documents rather than one.
+      const migrated = migrateMemberKeys(remoteState)
+      replaceState(preferLocalState(migrated, stateRef.current) ? stateRef.current : migrated)
       setStateReady(true)
     }, (error: unknown) => {
       // Deliberately leaves `stateReady` false, which keeps the save effect from
@@ -1578,7 +1601,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     kind: 'revert' | 'fork',
   ): Promise<void> => {
     const childId = await forkSession(sessionId, atSeq, kind === 'fork')
-    const members = room.memberIds.flatMap(id => allContacts.find(contact => contact.id === id) ?? [])
+    const members = room.memberIds.flatMap(id => memberContact(id) ?? [])
     const now = Date.now()
     const roomSessionId = `room-session:${childId}`
     const source = stateRef.current.roomSessions.find(item => item.harnessSessionId === sessionId)
@@ -1591,7 +1614,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       // roster the original ran with, not whatever the catalog says today.
       memberSnapshot: source?.memberSnapshot ?? members.map((member) => {
         const display = displayOf(member, 'persona', state.personas)
-        return { skillId: member.id, displayName: display.name, avatarId: display.avatar, originalName: member.name }
+        return { skillId: member.name, displayName: display.name, avatarId: display.avatar, originalName: member.name }
       }),
       createdAt: now,
       updatedAt: now,
@@ -1614,14 +1637,14 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const createRoomSession = async (room: ChatRoom, draft = true): Promise<SessionId> => {
     const sessionId = await startSession(room.workspaceId)
     if (room.type === 'general') await renameSession(sessionId, room.title)
-    const members = room.memberIds.flatMap(id => allContacts.find(contact => contact.id === id) ?? [])
+    const members = room.memberIds.flatMap(id => memberContact(id) ?? [])
     const group = roomGroup(room, allContacts)
-    const coordinator = members.find(member => member.id === room.coordinatorId) ?? members[0]
+    const coordinator = members.find(member => member.name === room.coordinatorId) ?? members[0]
     const now = Date.now()
     const roomSessionId = `room-session:${sessionId}`
     const roomSession: RoomSession = {
       roomSessionId, roomId: room.roomId, harnessSessionId: sessionId, title: room.title,
-      memberSnapshot: members.map(member => ({ skillId: member.id, displayName: displayOf(member, 'persona', state.personas).name, avatarId: displayOf(member, 'persona', state.personas).avatar, originalName: member.name })),
+      memberSnapshot: members.map(member => ({ skillId: member.name, displayName: displayOf(member, 'persona', state.personas).name, avatarId: displayOf(member, 'persona', state.personas).avatar, originalName: member.name })),
       createdAt: now, updatedAt: now,
     }
     const next = updateState((current) => {
@@ -1701,10 +1724,10 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   const beginContactChat = async (contact: SkillContact): Promise<void> => {
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
-    const existing = state.rooms.find(room => room.type === 'direct' && room.workspaceId === workspaceId && room.memberIds[0] === contact.id && room.archivedAt === undefined)
-    ensureLinked([contact.id])
+    const existing = state.rooms.find(room => room.type === 'direct' && room.workspaceId === workspaceId && room.memberIds[0] === contact.name && room.archivedAt === undefined)
+    ensureLinked([contact.name])
     const display = displayOf(contact, 'persona', state.personas)
-    const room: ChatRoom = existing ?? { roomId: `room:direct:${workspaceId}:${contact.id}`, type: 'direct', workspaceId, workspaceIds: [workspaceId], title: display.name, memberIds: [contact.id], coordinatorId: contact.id, sessionIds: [], createdAt: Date.now(), updatedAt: Date.now() }
+    const room: ChatRoom = existing ?? { roomId: `room:direct:${workspaceId}:${contact.id}`, type: 'direct', workspaceId, workspaceIds: [workspaceId], title: display.name, memberIds: [contact.name], coordinatorId: contact.name, sessionIds: [], createdAt: Date.now(), updatedAt: Date.now() }
     if (existing === undefined) updateState(current => ({ ...current, rooms: [...current.rooms, room] }))
     await openRoom(room)
     setSelected(null); setNotice(null)
@@ -1798,7 +1821,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     if (artifact.seq === undefined) return null
     const members = activeRoom === undefined
       ? []
-      : activeRoom.memberIds.flatMap(id => allContacts.find(contact => contact.id === id) ?? [])
+      : activeRoom.memberIds.flatMap(id => memberContact(id) ?? [])
     const author = members.length === 0
       ? undefined
       : responderForMessage(members, activeRoom?.coordinatorId, '', mode, artifact.speaker ?? '')
@@ -1811,14 +1834,14 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
     const members = allContacts.filter(contact => groupMembers.includes(contact.id))
     if (members.length < 2) return
-    ensureLinked(members.map(member => member.id))
+    ensureLinked(members.map(member => member.name))
     const now = Date.now()
     const roomId = `room:group:${randomUUID()}`
     const coordinator = members[0]
     if (coordinator === undefined) return
     const title = groupName.trim() || members.map(member => displayOf(member, 'persona', state.personas).name).join('、')
     const linkedWorkspaces = groupWorkspaceIds.length === 0 ? [workspaceId] : groupWorkspaceIds
-    const room: ChatRoom = { roomId, type: 'group', workspaceId: linkedWorkspaces[0] ?? workspaceId, workspaceIds: linkedWorkspaces, avatarId: groupAvatar, title, memberIds: members.map(member => member.id), coordinatorId: coordinator.id, systemPrompt: groupPrompt.trim() || generatedGroupPrompt(title, members), sessionIds: [], createdAt: now, updatedAt: now }
+    const room: ChatRoom = { roomId, type: 'group', workspaceId: linkedWorkspaces[0] ?? workspaceId, workspaceIds: linkedWorkspaces, avatarId: groupAvatar, title, memberIds: members.map(member => member.name), coordinatorId: coordinator.name, systemPrompt: groupPrompt.trim() || generatedGroupPrompt(title, members), sessionIds: [], createdAt: now, updatedAt: now }
     updateState(current => ({ ...current, rooms: [...current.rooms, room] }))
     setGroups(current => [...current, roomGroup(room, allContacts)])
     setGroupOpen(false); setGroupMembers([]); setGroupName(''); setGroupPrompt(''); setGroupAvatar('bear-honey'); setGroupWorkspaceIds([]); setMemberQuery(''); setView('chats')
@@ -1827,12 +1850,12 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   const savePersona = (): void => {
     if (selected === null) return
-    const base = state.personas[selected.id] ?? defaultPersona(selected)
+    const base = state.personas[selected.name] ?? defaultPersona(selected)
     const displayName = personaName.trim() || base.displayName
     updateState(current => ({
       ...current,
-      personas: { ...current.personas, [selected.id]: { ...base, displayName, avatarId: personaAvatar, customizedName: displayName !== defaultPersona(selected, 0).displayName, customizedAvatar: personaAvatar !== defaultPersona(selected, 0).avatarId, updatedAt: Date.now() } },
-      rooms: current.rooms.map(room => room.type === 'direct' && room.memberIds[0] === selected.id ? { ...room, title: displayName, updatedAt: Date.now() } : room),
+      personas: { ...current.personas, [selected.name]: { ...base, displayName, avatarId: personaAvatar, customizedName: displayName !== defaultPersona(selected, 0).displayName, customizedAvatar: personaAvatar !== defaultPersona(selected, 0).avatarId, updatedAt: Date.now() } },
+      rooms: current.rooms.map(room => room.type === 'direct' && room.memberIds[0] === selected.name ? { ...room, title: displayName, updatedAt: Date.now() } : room),
     }))
     setEditingPersona(false)
   }
@@ -1842,8 +1865,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const reset = defaultPersona(selected)
     updateState(current => ({
       ...current,
-      personas: { ...current.personas, [selected.id]: reset },
-      rooms: current.rooms.map(room => room.type === 'direct' && room.memberIds[0] === selected.id ? { ...room, title: reset.displayName, updatedAt: Date.now() } : room),
+      personas: { ...current.personas, [selected.name]: reset },
+      rooms: current.rooms.map(room => room.type === 'direct' && room.memberIds[0] === selected.name ? { ...room, title: reset.displayName, updatedAt: Date.now() } : room),
     }))
     setEditingPersona(false)
   }
@@ -1918,12 +1941,12 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     updateState(current => ({ ...current, rooms: current.rooms.map(room => room.roomId === roomId ? { ...room, ...patch, updatedAt: Date.now() } : room) }))
   }
 
-  const toggleActiveRoomMember = (skillId: string): void => {
+  const toggleActiveRoomMember = (skillName: string): void => {
     if (activeRoom === undefined || activeRoom.type !== 'group') return
-    const included = activeRoom.memberIds.includes(skillId)
-    const memberIds = included ? activeRoom.memberIds.filter(id => id !== skillId) : [...activeRoom.memberIds, skillId]
+    const included = activeRoom.memberIds.includes(skillName)
+    const memberIds = included ? activeRoom.memberIds.filter(name => name !== skillName) : [...activeRoom.memberIds, skillName]
     if (memberIds.length < 2) { setNotice(t('groupNeedsMember')); return }
-    if (!included) ensureLinked([skillId])
+    if (!included) ensureLinked([skillName])
     updateRoom(activeRoom.roomId, {
       memberIds,
       coordinatorId: memberIds.includes(activeRoom.coordinatorId) ? activeRoom.coordinatorId : memberIds[0] ?? activeRoom.coordinatorId,
@@ -1975,7 +1998,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       setExternalJoined(current => [...current.filter(item => item.id !== installed.id), installed])
       setContactsRevision(value => value + 1)
       if (target === 'draft-group') setGroupMembers(current => current.includes(installed.id) ? current : [...current, installed.id])
-      else if (target === 'active-group' && activeRoom?.type === 'group') updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.id) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.id] })
+      else if (target === 'active-group' && activeRoom?.type === 'group') updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.name) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.name] })
       else selectContact(installed)
       setNotice(`${t('skillInstalled').replace('{name}', installed.name)}${target === undefined ? '，已加入智能体列表' : '，已加入群组'}`)
     } catch (error) {
@@ -2006,7 +2029,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const toggleFavorite = (id: string): void => {
     setFavorites(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   }
-  const selectContact = (contact: SkillContact): void => { const identity = state.personas[contact.id] ?? defaultPersona(contact); setSelected(contact); setPersonaName(identity.displayName); setPersonaAvatar(identity.avatarId); setEditingPersona(false) }
+  const selectContact = (contact: SkillContact): void => { const identity = state.personas[contact.name] ?? defaultPersona(contact); setSelected(contact); setPersonaName(identity.displayName); setPersonaAvatar(identity.avatarId); setEditingPersona(false) }
 
   // Active automations for this project; the entry carries the count the tab
   // strip used to show by being visible at all.
@@ -2046,7 +2069,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
         {members.map(member => <Avatar key={member.id} avatarId={member.avatar} label={member.name} size={compact ? 13 : 17}/>)}
       </span>
     }
-    const contact = allContacts.find(item => item.id === room.memberIds[0])
+    const contact = memberContact(room.memberIds[0] ?? '')
     const identity = contact === undefined ? { name: room.title, avatar: 'fox-coral' } : displayOf(contact, 'persona', state.personas)
     return <AnimalAvatar avatarId={identity.avatar} label={identity.name} small={compact}/>
   }
@@ -2068,7 +2091,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   const openRoomSettings = (room: ChatRoom): void => {
     setRoomTitleDraft(room.title)
-    setRoomPromptDraft(room.systemPrompt ?? generatedGroupPrompt(room.title, room.memberIds.flatMap(id => allContacts.find(contact => contact.id === id) ?? [])))
+    setRoomPromptDraft(room.systemPrompt ?? generatedGroupPrompt(room.title, room.memberIds.flatMap(id => memberContact(id) ?? [])))
     setRoomAvatarDraft(room.avatarId ?? ANIMAL_AVATARS[hashOf(room.roomId) % ANIMAL_AVATARS.length] ?? 'bear-honey')
     setRoomWorkspaceIds(room.workspaceIds ?? [room.workspaceId])
     setMemberQuery('')
@@ -2342,7 +2365,19 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setBrowserDraft(normalized)
     setBrowserHistory(current => [...current.slice(0, browserHistoryIndex + 1), normalized])
     setBrowserHistoryIndex(index => index + 1)
+    if (workspaceId !== undefined) store(`${BROWSER_URL_KEY}:${workspaceId}`, normalized)
   }
+
+  /** Restore whatever this workspace's dev server was last pointed at. */
+  useEffect(() => {
+    if (projectTool !== 'browser' || workspaceId === undefined || browserUrl !== '') return
+    const remembered = readStored<string>(`${BROWSER_URL_KEY}:${workspaceId}`, '')
+    if (remembered === '') return
+    setBrowserUrl(remembered)
+    setBrowserDraft(remembered)
+    setBrowserHistory([remembered])
+    setBrowserHistoryIndex(0)
+  }, [browserUrl, projectTool, workspaceId])
 
   const closeTemporaryChat = (): void => {
     const current = sidecarId
@@ -2450,7 +2485,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const included = target === 'draft-group'
       ? installed !== undefined && groupMembers.includes(installed.id)
       : target === 'active-group'
-        ? installed !== undefined && activeRoom?.memberIds.includes(installed.id) === true
+        ? installed !== undefined && activeRoom?.memberIds.includes(installed.name) === true
         : false
     const installAndJoin = (): void => {
       if (installed === undefined) {
@@ -2458,7 +2493,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       } else if (target === 'draft-group') {
         setGroupMembers(current => current.includes(installed.id) ? current : [...current, installed.id])
       } else if (target === 'active-group' && activeRoom?.type === 'group') {
-        updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.id) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.id] })
+        updateRoom(activeRoom.roomId, { memberIds: activeRoom.memberIds.includes(installed.name) ? activeRoom.memberIds : [...activeRoom.memberIds, installed.name] })
       }
     }
     const homepage = result.homepage ?? `https://skills.sh/${result.id}`
@@ -2473,7 +2508,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     })
     const running = summaries.some(summary => summary.running)
     const unread = activeRoom?.roomId === room.roomId ? 0 : summaries.filter(summary => summary.completed === true).length
-    const coordinator = allContacts.find(contact => contact.id === room.coordinatorId)
+    const coordinator = memberContact(room.coordinatorId)
     const linked = (room.workspaceIds ?? [room.workspaceId]).flatMap(id => workspaces.items.find(item => item.workspaceId === id)?.title ?? [])
     // One row shape serves every room type. A group is not a separate section:
     // it is a room whose avatar stacks and whose meta line counts members, the
@@ -2483,7 +2518,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       .sort((left, right) => right.updatedAt - left.updatedAt)[0]
     // The avatar already says what kind of room this is, so the meta slot only
     // carries what the avatar cannot: how many people are in a group.
-    const directContact = room.type === 'direct' ? allContacts.find(item => item.id === room.memberIds[0]) : undefined
+    const directContact = room.type === 'direct' ? memberContact(room.memberIds[0] ?? '') : undefined
     const meta = room.type === 'group' ? `${room.memberIds.length} ${t('peopleCount')}` : ''
     // A fresh session is named after its room, so echoing it under the title
     // would print the same string twice; fall back to something the title does
@@ -2623,11 +2658,11 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     {activeRoom !== undefined && currentSessionId !== undefined && currentSessionBlank ? <aside className={css.blankRoomDock}><SkillChatHeaderTools sessionId={currentSessionId}/></aside> : null}
     {activeRoom === undefined ? null : renderSlot('ds-chat.room.drawer', { roomId: activeRoom.roomId, ...(currentSessionId === undefined ? {} : { sessionId: currentSessionId }) })}
 
-    {selected !== null ? <Dialog className={`${css.panel} ${css.skillProfileDialog}`} label={t('skillProfile')} onClose={() => { setSelected(null) }}><div className={css.panelTop}><AnimalAvatar avatarId={personaAvatar} label={personaName}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setSelected(null) }}>×</IconButton></div>{editingPersona ? <><label className={css.field}><span>{t('nicknameLabel')}</span><input value={personaName} maxLength={24} onChange={event => { setPersonaName(event.target.value) }}/></label><div className={css.avatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={personaAvatar === avatarId} key={avatarId} onClick={() => { setPersonaAvatar(avatarId) }}><AnimalAvatar avatarId={avatarId} label={avatarId}/></button>)}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={savePersona}>{t('saveIdentity')}</Button><Button className={css.secondaryAction} onClick={resetPersona}>{t('resetDefault')}</Button></div></> : <><h2 className={css.panelTitle}>{displayOf(selected, mode, state.personas).name}</h2><div className={css.role}>{state.personas[selected.id]?.roleLabel}</div><p className={css.bio}>{selected.description}</p>
-      {(state.personas[selected.id]?.capabilities ?? []).length === 0 ? null : <div className={css.profileSection}><h3>{t('goodAt')}</h3><div className={css.capabilityChips}>{(state.personas[selected.id]?.capabilities ?? []).map(item => <span key={item}>{item}</span>)}</div></div>}
+    {selected !== null ? <Dialog className={`${css.panel} ${css.skillProfileDialog}`} label={t('skillProfile')} onClose={() => { setSelected(null) }}><div className={css.panelTop}><AnimalAvatar avatarId={personaAvatar} label={personaName}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setSelected(null) }}>×</IconButton></div>{editingPersona ? <><label className={css.field}><span>{t('nicknameLabel')}</span><input value={personaName} maxLength={24} onChange={event => { setPersonaName(event.target.value) }}/></label><div className={css.avatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={personaAvatar === avatarId} key={avatarId} onClick={() => { setPersonaAvatar(avatarId) }}><AnimalAvatar avatarId={avatarId} label={avatarId}/></button>)}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={savePersona}>{t('saveIdentity')}</Button><Button className={css.secondaryAction} onClick={resetPersona}>{t('resetDefault')}</Button></div></> : <><h2 className={css.panelTitle}>{displayOf(selected, mode, state.personas).name}</h2><div className={css.role}>{state.personas[selected.name]?.roleLabel}</div><p className={css.bio}>{selected.description}</p>
+      {(state.personas[selected.name]?.capabilities ?? []).length === 0 ? null : <div className={css.profileSection}><h3>{t('goodAt')}</h3><div className={css.capabilityChips}>{(state.personas[selected.name]?.capabilities ?? []).map(item => <span key={item}>{item}</span>)}</div></div>}
       {selected.whenToUse === undefined ? null : <div className={css.profileSection}><h3>{t('whenToFind')}</h3><p className={css.profileNote}>{selected.whenToUse}</p></div>}
       {(() => {
-        const inRooms = visibleRooms.filter(room => room.type === 'group' && room.memberIds.includes(selected.id))
+        const inRooms = visibleRooms.filter(room => room.type === 'group' && room.memberIds.includes(selected.name))
         return inRooms.length === 0 ? null : <div className={css.profileSection}><h3>{t('inTheseGroups')}</h3><div className={css.profileRooms}>{inRooms.map(room => <button type="button" key={room.roomId} onClick={() => { setSelected(null); void openRoom(room) }}>{roomAvatar(room, true)}<span>{room.title}</span><small>{room.memberIds.length} 人</small></button>)}</div></div>
       })()}
       <div className={css.originCard}><span>{t('originalSkill')}</span><strong>{selected.name}</strong><small>{selected.sourceLabel}</small></div>
@@ -2740,7 +2775,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
     {archiveConfirm !== null ? <Dialog className={css.confirmDialog} label="归档群组" onClose={() => { setArchiveConfirm(null) }}><h2>{t('archiveGroupTitle')}</h2><p>{t('archiveGroupBody')}</p><div className={css.confirmActions}><Button onClick={() => { setArchiveConfirm(null) }}>取消</Button><Button variant="danger" onClick={() => { updateRoom(archiveConfirm, { archivedAt: Date.now() }); setArchiveConfirm(null); setRoomSettingsOpen(false) }}>归档</Button></div></Dialog> : null}
 
-    {roomSettingsOpen && activeRoom?.type === 'group' ? <Drawer className={`${css.panel} ${css.groupSettingsPanel}`} label={t('groupSettings')} onClose={() => { setRoomSettingsOpen(false) }}><div className={css.panelTop}><GroupAvatar avatarId={roomAvatarDraft} label={activeRoom.title}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setRoomSettingsOpen(false) }}>×</IconButton></div><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={roomAvatarDraft === avatarId} key={avatarId} onClick={() => { setRoomAvatarDraft(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div><label className={css.field}><span>{t('groupNameLabel')}</span><input value={roomTitleDraft} onChange={event => { setRoomTitleDraft(event.target.value) }}/></label><label className={css.field}><span>{t('groupRolePrompt')}</span><textarea value={roomPromptDraft} onChange={event => { setRoomPromptDraft(event.target.value) }} placeholder={t('groupRolePlaceholder')}/></label><button className={css.generatePrompt} type="button" onClick={() => { setRoomPromptDraft(generatedGroupPrompt(roomTitleDraft.trim() || activeRoom.title, activeMembers)) }}>{t('regenerateFromMembers')}</button><div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>{t('bindProjects')}</strong><small>{t('bindingHint')}</small></span><button type="button" onClick={() => { void addLinkedWorkspace('settings') }}>{t('addDirectory')}</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={roomWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('settings', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{roomWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div><div className={css.panelHint}>{t('memberPanelHint')}</div><div className={css.memberToolbar}><div><strong>{t('allMembers')}</strong><small>{activeRoom.memberIds.length} 个已加入</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder={t('searchMembersPlaceholder')} aria-label={t('searchMembers')} autoComplete="off" spellCheck={false} type="search"/></div><div className={css.roomMemberGrid}>{visibleMemberContacts.map(contact => { const included = activeRoom.memberIds.includes(contact.id); const coordinator = activeRoom.coordinatorId === contact.id; const display = displayOf(contact, 'persona', state.personas); return <div className={css.roomMemberItem} data-included={included || undefined} key={contact.id}><button type="button" className={css.memberPersona} disabled={!included} onClick={() => { updateRoom(activeRoom.roomId, { coordinatorId: contact.id }) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span><strong>{display.name}</strong><small>{coordinator ? t('coordinator') : contact.name}</small></span></button><button type="button" className={css.memberToggle} onClick={() => { toggleActiveRoomMember(contact.id) }}>{included ? '−' : '＋'}</button></div> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'active-group'))}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { const linked = roomWorkspaceIds.length === 0 ? [activeRoom.workspaceId] : roomWorkspaceIds; if (roomTitleDraft.trim() !== '') updateRoom(activeRoom.roomId, { title: roomTitleDraft.trim(), systemPrompt: roomPromptDraft.trim(), avatarId: roomAvatarDraft, workspaceId: linked[0] ?? activeRoom.workspaceId, workspaceIds: linked }); setRoomSettingsOpen(false) }}>{t('saveGroup')}</Button><Button className={css.danger} variant="danger" onClick={() => { setArchiveConfirm(activeRoom.roomId) }}>{t('archiveGroup')}</Button></div></Drawer> : null}
+    {roomSettingsOpen && activeRoom?.type === 'group' ? <Drawer className={`${css.panel} ${css.groupSettingsPanel}`} label={t('groupSettings')} onClose={() => { setRoomSettingsOpen(false) }}><div className={css.panelTop}><GroupAvatar avatarId={roomAvatarDraft} label={activeRoom.title}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setRoomSettingsOpen(false) }}>×</IconButton></div><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={roomAvatarDraft === avatarId} key={avatarId} onClick={() => { setRoomAvatarDraft(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div><label className={css.field}><span>{t('groupNameLabel')}</span><input value={roomTitleDraft} onChange={event => { setRoomTitleDraft(event.target.value) }}/></label><label className={css.field}><span>{t('groupRolePrompt')}</span><textarea value={roomPromptDraft} onChange={event => { setRoomPromptDraft(event.target.value) }} placeholder={t('groupRolePlaceholder')}/></label><button className={css.generatePrompt} type="button" onClick={() => { setRoomPromptDraft(generatedGroupPrompt(roomTitleDraft.trim() || activeRoom.title, activeMembers)) }}>{t('regenerateFromMembers')}</button><div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>{t('bindProjects')}</strong><small>{t('bindingHint')}</small></span><button type="button" onClick={() => { void addLinkedWorkspace('settings') }}>{t('addDirectory')}</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={roomWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('settings', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{roomWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div><div className={css.panelHint}>{t('memberPanelHint')}</div><div className={css.memberToolbar}><div><strong>{t('allMembers')}</strong><small>{activeRoom.memberIds.length} 个已加入</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder={t('searchMembersPlaceholder')} aria-label={t('searchMembers')} autoComplete="off" spellCheck={false} type="search"/></div><div className={css.roomMemberGrid}>{visibleMemberContacts.map(contact => { const included = activeRoom.memberIds.includes(contact.name); const coordinator = activeRoom.coordinatorId === contact.name; const display = displayOf(contact, 'persona', state.personas); return <div className={css.roomMemberItem} data-included={included || undefined} key={contact.id}><button type="button" className={css.memberPersona} disabled={!included} onClick={() => { updateRoom(activeRoom.roomId, { coordinatorId: contact.name }) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span><strong>{display.name}</strong><small>{coordinator ? t('coordinator') : contact.name}</small></span></button><button type="button" className={css.memberToggle} onClick={() => { toggleActiveRoomMember(contact.name) }}>{included ? '−' : '＋'}</button></div> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'active-group'))}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { const linked = roomWorkspaceIds.length === 0 ? [activeRoom.workspaceId] : roomWorkspaceIds; if (roomTitleDraft.trim() !== '') updateRoom(activeRoom.roomId, { title: roomTitleDraft.trim(), systemPrompt: roomPromptDraft.trim(), avatarId: roomAvatarDraft, workspaceId: linked[0] ?? activeRoom.workspaceId, workspaceIds: linked }); setRoomSettingsOpen(false) }}>{t('saveGroup')}</Button><Button className={css.danger} variant="danger" onClick={() => { setArchiveConfirm(activeRoom.roomId) }}>{t('archiveGroup')}</Button></div></Drawer> : null}
   </div>
 }
 

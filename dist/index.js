@@ -1253,12 +1253,12 @@ let WorkBuddySkillCatalog = (() => {
 		* @param id - the stored contact id.
 		* @returns a name the model can pass to the `skill` tool.
 		*/
-		memberSkillName(roomId, id) {
-			const persona = this.cachedState.personas[id]?.originalName;
+		memberSkillName(roomId, key) {
+			const persona = this.cachedState.personas[key]?.originalName;
 			if (persona !== void 0 && persona !== "") return persona;
-			const snapshot = this.cachedState.roomSessions.filter((item) => item.roomId === roomId).sort((left, right) => right.updatedAt - left.updatedAt).flatMap((item) => item.memberSnapshot.filter((member) => member.skillId === id))[0];
+			const snapshot = this.cachedState.roomSessions.filter((item) => item.roomId === roomId).sort((left, right) => right.updatedAt - left.updatedAt).flatMap((item) => item.memberSnapshot.filter((member) => member.skillId === key))[0];
 			if (snapshot?.originalName !== void 0 && snapshot.originalName !== "") return snapshot.originalName;
-			return id.slice(id.lastIndexOf(":") + 1);
+			return key.slice(key.lastIndexOf(":") + 1);
 		}
 		/**
 		* Read the pre-`$DSH_HOME` state document, for a Harness whose scoped file
@@ -1561,7 +1561,7 @@ function idleTerminal(terminalId) {
 const LEGACY_STATE_FILE = join(homedir(), ".workbuddy", "skill-chat", "state.v2.json");
 function emptySkillChatState() {
 	return {
-		version: 2,
+		version: 3,
 		rooms: [],
 		roomSessions: [],
 		personas: {},
@@ -1571,7 +1571,7 @@ function emptySkillChatState() {
 function validateSkillChatState(value) {
 	if (typeof value !== "object" || value === null) throw new Error("skill-chat: state must be an object");
 	const record = value;
-	if (record.version !== 2 || !Array.isArray(record.rooms) || !Array.isArray(record.roomSessions) || !Array.isArray(record.automations) || typeof record.personas !== "object" || record.personas === null) throw new Error("skill-chat: unsupported or malformed state");
+	if (record.version !== 2 && record.version !== 3 || !Array.isArray(record.rooms) || !Array.isArray(record.roomSessions) || !Array.isArray(record.automations) || typeof record.personas !== "object" || record.personas === null) throw new Error("skill-chat: unsupported or malformed state");
 	return value;
 }
 function stringId(value) {

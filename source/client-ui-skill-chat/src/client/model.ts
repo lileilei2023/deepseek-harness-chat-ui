@@ -86,7 +86,18 @@ export interface AutomationDefinition {
 }
 
 export interface SkillChatState {
-  readonly version: 2
+  /**
+   * 3 keys members and personas by Skill name; 2 keyed them by contact id.
+   *
+   * A contact id is `<root>:<plugin>:<name>` and therefore depends on which
+   * roots were scanned: widening the roster re-keyed every contact and left
+   * each room's members pointing at nothing. Three separate by-name fallbacks
+   * existed to paper over that. The Skill name is what is actually stable —
+   * the catalog already dedups by it, so at most one contact ever holds a
+   * given name — and storing it is what removes the failure rather than
+   * catching it.
+   */
+  readonly version: 3
   readonly rooms: readonly ChatRoom[]
   readonly roomSessions: readonly RoomSession[]
   readonly personas: Readonly<Record<string, SkillPersona>>
@@ -95,7 +106,7 @@ export interface SkillChatState {
 }
 
 export const EMPTY_SKILL_CHAT_STATE: SkillChatState = {
-  version: 2,
+  version: 3,
   rooms: [],
   roomSessions: [],
   personas: {},
@@ -146,15 +157,19 @@ function capabilityList(contact: SkillContact): readonly string[] {
 }
 
 export function defaultPersona(contact: SkillContact, now = Date.now()): SkillPersona {
-  const hash = stableHash(contact.id)
+  // The Skill's name, not its contact id. An id carries the root it was found
+  // under, so it changes whenever the scanned roster changes — and a portrait
+  // seeded from it changed with it. The name is what stays the same, and the
+  // catalog already dedups by it.
+  const hash = stableHash(contact.name)
   return {
-    skillId: contact.id,
+    skillId: contact.name,
     displayName: FRIENDLY_NAMES[hash % FRIENDLY_NAMES.length] ?? '小满',
-    // The Skill's own id is the seed, so an auto-assigned portrait is as
-    // distinct as the Skill is. Drawing from the picker's fixed library instead
-    // would collide by the birthday bound — 334 Skills over 192 presets left
-    // only 159 distinct faces.
-    avatarId: contact.id,
+    // Seeded from the Skill itself, so an auto-assigned portrait is as distinct
+    // as the Skill is. Drawing from the picker's fixed library instead would
+    // collide by the birthday bound — 334 Skills over 192 presets left only
+    // 159 distinct faces.
+    avatarId: contact.name,
     originalName: contact.name,
     // `source` is the kind discriminator, and every scanned root reports
     // `workbuddy`; using it for the label called a Claude Skill a WorkBuddy
@@ -181,8 +196,8 @@ export function ensurePersonas(
   let changed = false
   const next = { ...personas }
   const usedNames = new Set(Object.values(personas).filter(persona => persona.customizedName).map(persona => persona.displayName))
-  for (const contact of contacts.toSorted((left, right) => left.id.localeCompare(right.id))) {
-    const current = next[contact.id]
+  for (const contact of contacts.toSorted((left, right) => left.name.localeCompare(right.name))) {
+    const current = next[contact.name]
     const generated = defaultPersona(contact, now)
     // Duplicates are normal once the pool is smaller than the contact list. A
     // readable ordinal ("松松2") keeps the persona a name; the former base36
@@ -193,7 +208,7 @@ export function ensurePersonas(
     }
     usedNames.add(current?.customizedName === true ? current.displayName : generatedName)
     if (current === undefined) {
-      next[contact.id] = { ...generated, displayName: generatedName }
+      next[contact.name] = { ...generated, displayName: generatedName }
       changed = true
       continue
     }
@@ -204,7 +219,7 @@ export function ensurePersonas(
     // `customizedAvatar` already records whether the user chose this portrait,
     // so that flag alone decides. Testing library membership instead would
     // treat an auto-assigned library entry as a user's pick and freeze it.
-    const staleAvatar = current.customizedAvatar !== true && current.avatarId !== contact.id
+    const staleAvatar = current.customizedAvatar !== true && current.avatarId !== contact.name
     const refreshed = {
       ...current,
       ...staleAvatar ? { avatarId: generated.avatarId } : {},
@@ -221,7 +236,7 @@ export function ensurePersonas(
       ...(contact.repository === undefined ? {} : { repository: contact.repository }),
     }
     if (JSON.stringify(refreshed) !== JSON.stringify(current)) {
-      next[contact.id] = refreshed
+      next[contact.name] = refreshed
       changed = true
     }
   }
@@ -267,6 +282,63 @@ export function orderRooms(rooms: readonly ChatRoom[]): readonly ChatRoom[] {
     if (left.order !== undefined && right.order !== undefined) return left.order - right.order
     return right.updatedAt - left.updatedAt
   })
+}
+
+/**
+ * The Skill name inside a stored member key.
+ *
+ * Version 2 stored `<root>:<plugin>:<name>`; version 3 stores `<name>`. Both
+ * shapes reduce to the same answer here, so re-running the migration over
+ * already-migrated data changes nothing.
+ * @param key - a stored member key of either version.
+ * @returns the Skill name.
+ */
+export function skillNameOf(key: string): string {
+  const cut = key.lastIndexOf(':')
+  return cut === -1 ? key : key.slice(cut + 1)
+}
+
+/**
+ * Re-key one state document's members and personas by Skill name.
+ *
+ * Personas move with their members: leaving them keyed by contact id would
+ * orphan every nickname and avatar the user chose, which is the same bug in a
+ * more annoying place. Two ids that collapse onto one name keep the entry the
+ * user actually touched, then the newer one — a collision means the roster
+ * offered the same Skill from two roots, and only one of them is a contact now.
+ * @param state - a document of either version.
+ * @returns the document keyed by Skill name.
+ */
+export function migrateMemberKeys(state: SkillChatState): SkillChatState {
+  if (state.version === 3) return state
+  const personas: Record<string, SkillPersona> = {}
+  for (const [key, persona] of Object.entries(state.personas)) {
+    const name = skillNameOf(key)
+    const held = personas[name]
+    const chosen = held === undefined
+      || (persona.customizedName || persona.customizedAvatar) && !(held.customizedName || held.customizedAvatar)
+      || persona.updatedAt > held.updatedAt && (persona.customizedName || persona.customizedAvatar) === (held.customizedName || held.customizedAvatar)
+    if (chosen) personas[name] = { ...persona, skillId: name }
+  }
+  return {
+    ...state,
+    version: 3,
+    personas,
+    rooms: state.rooms.map(room => ({
+      ...room,
+      memberIds: [...new Set(room.memberIds.map(skillNameOf))],
+      coordinatorId: skillNameOf(room.coordinatorId),
+    })),
+    roomSessions: state.roomSessions.map(session => ({
+      ...session,
+      memberSnapshot: session.memberSnapshot.map(member => ({ ...member, skillId: skillNameOf(member.skillId) })),
+    })),
+    automations: state.automations.map(automation => ({
+      ...automation,
+      memberIds: [...new Set(automation.memberIds.map(skillNameOf))],
+      coordinatorId: skillNameOf(automation.coordinatorId),
+    })),
+  }
 }
 
 export function migrateLegacyState(

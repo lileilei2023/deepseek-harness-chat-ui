@@ -1001,15 +1001,17 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
    * @param id - the stored contact id.
    * @returns a name the model can pass to the `skill` tool.
    */
-  private memberSkillName(roomId: string, id: string): string {
-    const persona = this.cachedState.personas[id]?.originalName
+  private memberSkillName(roomId: string, key: string): string {
+    const persona = this.cachedState.personas[key]?.originalName
     if (persona !== undefined && persona !== '') return persona
     const snapshot = this.cachedState.roomSessions
       .filter(item => item.roomId === roomId)
       .sort((left, right) => right.updatedAt - left.updatedAt)
-      .flatMap(item => item.memberSnapshot.filter(member => member.skillId === id))[0]
+      .flatMap(item => item.memberSnapshot.filter(member => member.skillId === key))[0]
     if (snapshot?.originalName !== undefined && snapshot.originalName !== '') return snapshot.originalName
-    return id.slice(id.lastIndexOf(':') + 1)
+    // A document written before members were keyed by Skill name still holds
+    // `<root>:<plugin>:<name>`, whose trailing segment is that name.
+    return key.slice(key.lastIndexOf(':') + 1)
   }
 
   /**
@@ -1296,13 +1298,16 @@ function idleTerminal(terminalId: string): SkillChatTerminalValue {
 const LEGACY_STATE_FILE = join(homedir(), '.workbuddy', 'skill-chat', 'state.v2.json')
 
 function emptySkillChatState(): SkillChatStateDocument {
-  return { version: 2, rooms: [], roomSessions: [], personas: {}, automations: [] }
+  return { version: 3, rooms: [], roomSessions: [], personas: {}, automations: [] }
 }
 
 function validateSkillChatState(value: unknown): SkillChatStateDocument {
   if (typeof value !== 'object' || value === null) throw new Error('skill-chat: state must be an object')
   const record = value as Record<string, unknown>
-  if (record.version !== 2 || !Array.isArray(record.rooms) || !Array.isArray(record.roomSessions)
+  // Both versions are accepted: the client migrates 2 to 3 on load and writes 3
+  // back, so a Host that has not been restarted still holds 2 and a rejection
+  // here would stop every save until it was.
+  if ((record.version !== 2 && record.version !== 3) || !Array.isArray(record.rooms) || !Array.isArray(record.roomSessions)
     || !Array.isArray(record.automations) || typeof record.personas !== 'object' || record.personas === null) {
     throw new Error('skill-chat: unsupported or malformed state')
   }

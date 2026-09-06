@@ -162,6 +162,10 @@ A scanned Skill starts as a contact card. The Harness's Skill service has never 
 
 Linking rather than copying is deliberate. The tool's own directory stays the single source of truth, edits there take effect immediately, and there is no sync job to run or forget. Only the Skills you actually put in a room are linked, so a machine with several hundred installed Skills does not push all of them into every session's catalog. Removing a link is one `unlinkSkill` call, and links this plugin did not create are never touched.
 
+## Known gaps
+
+The surface is broad; several details are not yet polished — the terminal in particular is a snapshot-per-command view rather than a live stream. `TODO.md` lists them in severity order, with what is wrong and what "done" looks like. `CLAUDE.md` carries the build, verification and footgun notes for anyone working in this repository.
+
 ## Credits
 
 Skill portraits are generated locally with [DiceBear](https://www.dicebear.com) (MIT) using the **Micah** style — *Avatar Illustration System* by [Micah Lanier](https://dribbble.com/micahlanier), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Nothing is fetched at runtime: the generator is bundled and every portrait is derived from the Skill's own id.

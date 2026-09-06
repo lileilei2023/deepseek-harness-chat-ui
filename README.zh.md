@@ -161,6 +161,10 @@ npm run check
 
 用软链而不是复制是有意的。工具自己的目录仍是唯一事实来源，在那里改完立刻生效，也就没有「同步任务」需要跑或者忘记跑。只有你真的放进房间的 Skill 才会被链接，所以一台装了几百个 Skill 的机器不会把它们全推进每个会话的目录。取消只需一次 `unlinkSkill`；不是本插件建立的链接一律不动。
 
+## 已知欠账
+
+表面功能铺得比较开，细节欠得不少——尤其终端目前是「一条命令一次快照」而不是持续的流。`TODO.md` 按严重度列出了这些，每条写清现状、为什么不好用、做到什么算完。`CLAUDE.md` 给在这个仓库里工作的人：构建、验证与会咬人的地方。
+
 ## 致谢
 
 Skill 头像由 [DiceBear](https://www.dicebear.com)（MIT）在本地生成，画风为 **Micah** —— [Micah Lanier](https://dribbble.com/micahlanier) 的 *Avatar Illustration System*，授权 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)。运行时不发起任何网络请求：生成器已打进产物，每个头像由 Skill 自身的 id 推导。

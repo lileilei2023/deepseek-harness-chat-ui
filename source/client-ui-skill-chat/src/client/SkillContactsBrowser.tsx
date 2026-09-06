@@ -20,7 +20,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import {
   ANIMAL_AVATARS, EMPTY_SKILL_CHAT_STATE, activeHarnessSession, defaultPersona, ensurePersonas,
   migrateLegacyState, migrateMemberKeys, oneLineBio, orderRooms, roomForSession, skillNameOf,
-  type AutomationDefinition, type ChatRoom, type RoomSession,
+  type AutomationDefinition, type AutomationRun, type ChatRoom, type RoomSession,
   type SkillChatState, type SkillPersona,
 } from './model.ts'
 import type {} from './shell/slots.ts'
@@ -316,6 +316,22 @@ export const CHAT_BINDINGS_KEY = 'dsh.skill-chat.bindings.v1'
 export const STATE_KEY = 'dsh.skill-chat.state.v2'
 /** Per-workspace prefix for the last dev-server address the browser panel showed. */
 const BROWSER_URL_KEY = 'dsh.skill-chat.browser-url.v1'
+/** Per-room prefix for what the workbench had open. */
+const WORKBENCH_KEY = 'dsh.skill-chat.workbench.v1'
+
+/**
+ * What the workbench should look like when a room is reopened.
+ *
+ * Rooms are persistent, so closing the panel and coming back to a blank one
+ * contradicts the rest of the product. Only what can be rebuilt from a path is
+ * kept: a file's contents are re-read, and terminals belong to the Host.
+ */
+interface WorkbenchMemory {
+  readonly tool: ProjectToolKind | null
+  readonly expandedDirs: readonly string[]
+  readonly openFiles: readonly string[]
+  readonly activeFile: string | null
+}
 const LEGACY_CHAT_IDENTITIES_KEY = 'dsh.skill-chat.identities.v1'
 const WORKSPACE_KEY = 'dsh.skill-chat.workspace.v1'
 
@@ -1427,6 +1443,9 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [artifactsTraced, setArtifactsTraced] = useState(false)
   const [artifactsBusy, setArtifactsBusy] = useState(false)
   const [artifactRestOpen, setArtifactRestOpen] = useState(false)
+  // Notification.permission is not reactive, so the prompt's outcome needs a
+  // nudge for the banner to disappear.
+  const [notificationsRevision, setNotificationsRevision] = useState(0)
   const [terminal, setTerminal] = useState<TerminalSnapshot | null>(null)
   // Several shells, the way any terminal panel has them. Each keeps its own id
   // and last-seen output so switching back replays rather than starts over.
@@ -2196,8 +2215,13 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   // Active automations for this project; the entry carries the count the tab
   // strip used to show by being visible at all.
-  const dueAutomations = state.automations
-    .filter(item => item.workspaceId === workspaceId && item.status === 'active').length
+  const workspaceRuns = (state.automationRuns ?? [])
+    .filter(run => state.automations.some(item => item.automationId === run.automationId && item.workspaceId === workspaceId)
+      || state.rooms.some(room => room.roomId === run.roomId && (room.workspaceIds ?? [room.workspaceId]).includes(workspaceId as WorkspaceId)))
+  // Unread finished runs, not the count of active schedules. "3" meaning "three
+  // schedules exist" never changes and so says nothing; "3" meaning "three
+  // results you have not read" is why you would click.
+  const unreadRuns = workspaceRuns.filter(run => run.unread && run.status !== 'running').length
 
   // Groups this project can reach, newest first — the same set the room list
   // shows, minus the one-to-one conversations.
@@ -2330,12 +2354,93 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setNotice(attachToComposer(currentSessionId, `${names}\n${t('everyonePrompt')}\n\n`) ? '' : t('attachFailed'))
   }
 
+  /**
+   * Close out automation runs whose session has settled.
+   *
+   * The Host starts the run but cannot see it end — the turn outlives the
+   * dispatch call. The session list already carries `running`, so the client
+   * that watches it is the one place that can say a scheduled task is done.
+   */
+  useEffect(() => {
+    if (!stateReady) return
+    const open = state.automationRuns?.filter(run => run.status === 'running') ?? []
+    if (open.length === 0) return
+    const settled = open.filter((run) => {
+      const summary = sessions.byId[run.sessionId as SessionId]
+      return summary !== undefined && !summary.running
+    })
+    if (settled.length === 0) return
+    const finishedAt = Date.now()
+    const ids = new Set(settled.map(run => run.runId))
+    updateState(current => ({
+      ...current,
+      automationRuns: (current.automationRuns ?? []).map(run =>
+        ids.has(run.runId) ? { ...run, status: 'done' as const, finishedAt } : run),
+    }))
+    // A task that ran while the tab was in the background is exactly the case
+    // this feature exists for, so it says so out loud — but only with
+    // permission already granted; asking on a timer nobody triggered is rude.
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
+    for (const run of settled) {
+      const notice = new Notification(run.automationName, { body: t('automationFinished'), tag: run.runId })
+      notice.onclick = () => { window.focus(); openSession(run.sessionId as SessionId) }
+    }
+  }, [openSession, sessions.byId, state.automationRuns, stateReady, t])
+
+  /** Mark a run read and open the session it produced. */
+  const openAutomationRun = (run: AutomationRun): void => {
+    updateState(current => ({
+      ...current,
+      automationRuns: (current.automationRuns ?? []).map(item => item.runId === run.runId ? { ...item, unread: false } : item),
+    }))
+    if (run.sessionId !== '' && sessions.byId[run.sessionId as SessionId] !== undefined) openSession(run.sessionId as SessionId)
+  }
+
+  /**
+   * Ask for desktop notifications, once, from a click.
+   *
+   * Browsers refuse the prompt outside a user gesture, and a permission dialog
+   * nobody asked for is the kind of thing that gets a product blocked forever.
+   */
+  const enableRunNotifications = (): void => {
+    if (typeof Notification === 'undefined' || Notification.permission !== 'default') return
+    void Notification.requestPermission().then(() => { setNotificationsRevision(current => current + 1) })
+  }
+
   /** Show one workspace path in the desktop file manager. */
   const revealPath = (path: string): void => {
     if (activeWorkspace === undefined) return
     void revealProjectPath(activeWorkspace.workspaceId, path, new AbortController().signal)
       .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
   }
+
+  /**
+   * Put the workbench back the way this room left it.
+   *
+   * Runs on the room, not on the panel opening: the panel's own open state is
+   * part of what is being restored.
+   */
+  useEffect(() => {
+    if (activeRoom === undefined) return
+    const remembered = readStored<WorkbenchMemory | null>(`${WORKBENCH_KEY}:${activeRoom.roomId}`, null)
+    if (remembered === null) return
+    setExpandedDirs(remembered.expandedDirs)
+    if (remembered.tool !== null) openProjectTool(remembered.tool)
+    for (const path of remembered.openFiles) previewProjectFile(path, path !== remembered.activeFile)
+    // Only this room's memory, and only once per room: re-running it on every
+    // state change would fight the person's own clicks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRoom?.roomId])
+
+  useEffect(() => {
+    if (activeRoom === undefined) return
+    store(`${WORKBENCH_KEY}:${activeRoom.roomId}`, {
+      tool: projectTool,
+      expandedDirs,
+      openFiles: openFiles.map(file => file.path),
+      activeFile: projectFile?.path ?? null,
+    } satisfies WorkbenchMemory)
+  }, [activeRoom, expandedDirs, openFiles, projectFile?.path, projectTool])
 
   /** Open one more shell in this room's workspace. */
   const addTerminal = (): void => {
@@ -2486,12 +2591,17 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setProjectFile(remaining[remaining.length - 1] ?? null)
   }
 
-  const previewProjectFile = (path: string): void => {
+  /**
+   * Open one file in the preview pane.
+   * @param path - absolute path inside the workspace.
+   * @param background - add the tab without selecting it, for restoring a tab set.
+   */
+  const previewProjectFile = (path: string, background = false): void => {
     if (activeWorkspace === undefined) return
     setProjectListingError(null)
     const abort = new AbortController()
     void readProjectFile(activeWorkspace.workspaceId, path, abort.signal).then((file) => {
-      setProjectFile(file)
+      if (!background) setProjectFile(file)
       // Opening adds to the tab set; re-opening one already there just selects
       // it, so clicking around the tree cannot grow duplicate tabs.
       setOpenFiles(current => current.some(item => item.path === file.path) ? current : [...current, file])
@@ -2783,7 +2893,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       type="button"
       data-active={view === 'automations' || undefined}
       onClick={() => { setView(current => current === 'automations' ? 'chats' : 'automations') }}
-    ><span className={css.automationEntryMark} aria-hidden="true">◷</span>{t('automations')}{dueAutomations > 0 ? <span className={css.automationEntryCount}>{dueAutomations}</span> : null}</button>
+    ><span className={css.automationEntryMark} aria-hidden="true">◷</span>{t('automations')}{unreadRuns > 0 ? <span className={css.automationEntryCount}>{unreadRuns}</span> : null}</button>
     <div className={css.workspaceSection}><div className={css.workspacePicker} ref={workspaceRef as React.RefObject<HTMLDivElement>}><button className={css.workspaceTrigger} type="button" aria-expanded={workspaceOpen} onClick={() => { setWorkspaceOpen(current => !current) }}><span className={css.workspaceIcon}>⌂</span><span>{currentWorkspace?.title ?? t('noWorkspace')}</span><span className={css.chevron}>⌄</span></button>{workspaceOpen ? <div className={css.workspaceMenu}>{workspaces.items.map(workspace => <button type="button" data-active={workspace.workspaceId === workspaceId} key={workspace.workspaceId} onClick={() => { setWorkspaceId(workspace.workspaceId); setWorkspaceOpen(false) }}><span>⌂</span><strong>{workspace.title}</strong>{workspace.workspaceId === workspaceId ? <b>✓</b> : null}</button>)}<span className={css.workspaceMenuSep}/><button type="button" onClick={() => { setWorkspaceOpen(false); void createWorkspace() }}><span>＋</span><strong>{t('addWorkspace')}</strong></button></div> : null}</div></div>
     <div className={css.topbar}><div className={css.tabs} role="tablist">{(['chats', 'groups', 'contacts'] as const).map(item => <button className={css.tab} data-active={view === item} type="button" role="tab" aria-selected={view === item} onClick={() => { setView(item) }} key={item}>{t(item)}</button>)}</div><span className={css.createWrap}><button className={css.addGroup} type="button" aria-label={t('groupChat')} title={t('organizeSkills')} onClick={openGroupCreator}>＋</button></span></div>
     <div className={css.searchWrap}><input className={css.search} value={query} onChange={event => { setQuery(event.target.value) }} placeholder={view === 'contacts' ? t('searchAll') : t('searchRoomsPlaceholder')} aria-label={view === 'contacts' ? t('searchAll') : t('searchRooms')} autoComplete="off" spellCheck={false} type="search"/></div>
@@ -2830,7 +2940,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
           {mode === 'raw' ? t('rawMode') : t('personaMode')}
         </button>
       </div><div className={css.list}>{phase === 'loading' ? <div className={css.status}>{t('loading')}</div> : phase === 'error' ? <div className={css.status}>{t('loadFailed')}</div> : visibleContacts.length === 0 ? <div className={css.status}>{t('searchEmpty')}</div> : <>{starredContacts.length === 0 ? null : <><div className={css.rosterHeading}>{t('frequentContacts')}</div>{starredContacts.map(contactRow)}<div className={css.rosterHeading}>{t('allContacts')}</div></>}{restContacts.map(contactRow)}</>}{deferredQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result))}</div></>
-      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>{t('automationHint')}</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>{t('newItem')}</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? t('onceLabel') : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? t('waitingRun') : automation.status === 'paused' ? t('pausedLabel') : automation.status === 'completed' ? t('completedLabel') : t('failedLabel')}</span><button type="button" onClick={() => { void runAutomation(automation) }}>{t('runNow')}</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? t('restoreLabel') : t('pauseLabel')}</button></footer></article>)}<div className={css.templateHeading}>{t('fromTemplate')}</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></div></>
+      : view === 'automations' ? <><div className={css.sectionHeading}><div><strong>自动化</strong><small>{t('automationHint')}</small></div><button type="button" disabled={activeRoom === undefined} onClick={() => { setAutomationOpen(true) }}>{t('newItem')}</button></div><div className={css.list}>{state.automations.filter(item => item.workspaceId === workspaceId).length === 0 ? <div className={css.emptyCard}>{activeRoom === undefined ? '先打开一个普通对话、Skill 对话或群组，再为它创建自动化。' : `还没有自动化。选一个模板，或点「＋ 新建」从空白开始，都会绑定到「${activeRoom.title}」。`}</div> : state.automations.filter(item => item.workspaceId === workspaceId).map(automation => <article className={css.automationCard} key={automation.automationId}><div><strong>{automation.name}</strong><small>{state.rooms.find(room => room.roomId === automation.roomId)?.title ?? '已归档 Room'} · {automation.schedule.kind === 'once' ? t('onceLabel') : `每 ${automation.schedule.rule.slice(6)}`}</small></div><p>{automation.prompt}</p><footer><span data-status={automation.status}>{automation.status === 'active' ? t('waitingRun') : automation.status === 'paused' ? t('pausedLabel') : automation.status === 'completed' ? t('completedLabel') : t('failedLabel')}</span><button type="button" onClick={() => { void runAutomation(automation) }}>{t('runNow')}</button><button type="button" onClick={() => { updateState(current => ({ ...current, automations: current.automations.map(item => item.automationId === automation.automationId ? { ...item, status: item.status === 'paused' ? 'active' : 'paused', updatedAt: Date.now() } : item) })) }}>{automation.status === 'paused' ? t('restoreLabel') : t('pauseLabel')}</button></footer></article>)}{workspaceRuns.length === 0 ? null : <><div className={css.templateHeading}>{t('runHistory')}</div>{typeof Notification !== 'undefined' && Notification.permission === 'default' && notificationsRevision >= 0 ? <button className={css.notifyOptIn} type="button" onClick={enableRunNotifications}>{t('enableNotifications')}</button> : null}<div className={css.runList}>{workspaceRuns.slice(0, 12).map(run => <button className={css.runRow} data-unread={run.unread && run.status !== 'running' || undefined} type="button" key={run.runId} onClick={() => { openAutomationRun(run) }}><span className={css.runStatus} data-status={run.status}>{run.status === 'running' ? t('runRunning') : run.status === 'failed' ? t('runFailed') : t('runDone')}</span><span className={css.runCopy}><strong>{run.automationName}</strong><small>{run.error ?? roomTime(run.finishedAt ?? run.startedAt)}</small></span>{run.status === 'failed' ? <b onClick={(event) => { event.stopPropagation(); const again = state.automations.find(item => item.automationId === run.automationId); if (again !== undefined) void runAutomation(again) }}>{t('retryRun')}</b> : null}</button>)}</div></>}<div className={css.templateHeading}>{t('fromTemplate')}</div><div className={css.templateList}>{AUTOMATION_TEMPLATES.map(template => <button className={css.templateCard} type="button" key={template.id} disabled={activeRoom === undefined} onClick={() => { setAutomationName(template.name); setAutomationPrompt(template.prompt); setAutomationSchedule(template.schedule); setAutomationInterval(template.interval); setAutomationUnit(template.unit); setAutomationWhen(templateRunAt(template.schedule)); setAutomationOpen(true) }}><strong>{template.name}</strong><small>{template.hint}</small></button>)}</div></div></>
       : <><div className={css.roomList}>{roomResults.length === 0
         ? (query.trim() === ''
           ? <EmptyState className={css.emptyCard} title="还没有对话">{t('emptyRoomsHint')}</EmptyState>

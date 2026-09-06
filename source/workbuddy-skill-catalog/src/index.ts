@@ -34,6 +34,7 @@ import type {
   SkillChatSidecarSendRequest,
   SkillChatSidecarStartRequest,
   SkillChatSidecarValue,
+  SkillChatAutomationRunDocument,
   SkillChatRoomDocument,
   SkillChatStateDocument,
   SkillLinkRequest,
@@ -100,6 +101,8 @@ const ARTIFACT_MAX_FILES = 200
 const ARTIFACT_MAX_EXAMINED = 4000
 /** Room sessions whose logs one artifact listing will read. */
 const ARTIFACT_MAX_SESSIONS = 40
+/** Automation runs kept. Older ones are the sort of history nobody scrolls to. */
+const AUTOMATION_RUN_HISTORY = 60
 /** Characters of an assistant message kept for member attribution. */
 const ARTIFACT_SPEAKER_CHARS = 80
 /**
@@ -1079,6 +1082,60 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     if (this.activeAutomationRuns.has(automationId)) throw new Error('skill-chat: automation is already running')
     this.activeAutomationRuns.add(automationId)
     try {
+      return await this.dispatchAutomation(automationId, signal)
+    } catch (error) {
+      // A run that never started is the one most worth recording: the schedule
+      // fired, nothing happened, and without this nobody would ever know.
+      await this.recordFailedRun(automationId, error)
+      throw error
+    } finally {
+      this.activeAutomationRuns.delete(automationId)
+    }
+  }
+
+  /**
+   * Note that one automation could not start.
+   *
+   * Best-effort by design: this runs while another error is already being
+   * thrown, and losing the original failure to a bookkeeping one would be worse
+   * than losing the record.
+   * @param automationId - the automation that failed to start.
+   * @param error - why it failed.
+   */
+  private async recordFailedRun(automationId: string, error: unknown): Promise<void> {
+    try {
+      const state = await this.getSkillChatState()
+      const automation = state.automations.find(item => item.automationId === automationId)
+      const now = Date.now()
+      const run: SkillChatAutomationRunDocument = {
+        runId: `run-${randomUUID()}`,
+        automationId,
+        automationName: automation?.name ?? automationId,
+        roomId: automation?.roomId ?? '',
+        sessionId: '',
+        startedAt: now,
+        finishedAt: now,
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+        unread: true,
+      }
+      await this.putSkillChatState({
+        ...state,
+        automationRuns: [run, ...state.automationRuns ?? []].slice(0, AUTOMATION_RUN_HISTORY),
+      })
+    } catch {
+      // Nothing useful to do here; the original failure still reaches the caller.
+    }
+  }
+
+  /**
+   * Start one automation's session and record the run.
+   * @param automationId - the automation to run.
+   * @param signal - cancellation.
+   * @returns the new session and the state that records it.
+   */
+  private async dispatchAutomation(automationId: string, signal?: AbortSignal): Promise<SkillChatAutomationRunValue> {
+    {
       signal?.throwIfAborted()
       const state = await this.getSkillChatState(signal)
       const automation = state.automations.find(item => item.automationId === automationId)
@@ -1108,8 +1165,19 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
           originalName: persona?.originalName ?? skillId,
         }
       })
+      const run: SkillChatAutomationRunDocument = {
+        runId: `run-${randomUUID()}`,
+        automationId,
+        automationName: automation.name,
+        roomId: room.roomId,
+        sessionId,
+        startedAt: now,
+        status: 'running',
+        unread: true,
+      }
       const next: SkillChatStateDocument = {
         ...state,
+        automationRuns: [run, ...state.automationRuns ?? []].slice(0, AUTOMATION_RUN_HISTORY),
         roomSessions: [...state.roomSessions, {
           roomSessionId, roomId: room.roomId, harnessSessionId: sessionId,
           title: `${automation.name} · ${room.title}`, memberSnapshot, createdAt: now, updatedAt: now,
@@ -1131,8 +1199,6 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
         source: { kind: 'plugin', plugin: 'skill-chat-automation' },
       }))
       return { sessionId, state: next }
-    } finally {
-      this.activeAutomationRuns.delete(automationId)
     }
   }
 

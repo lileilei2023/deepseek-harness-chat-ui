@@ -134,6 +134,8 @@ const ARTIFACT_MAX_FILES = 200;
 const ARTIFACT_MAX_EXAMINED = 4e3;
 /** Room sessions whose logs one artifact listing will read. */
 const ARTIFACT_MAX_SESSIONS = 40;
+/** Automation runs kept. Older ones are the sort of history nobody scrolls to. */
+const AUTOMATION_RUN_HISTORY = 60;
 /** Characters of an assistant message kept for member attribution. */
 const ARTIFACT_SPEAKER_CHARS = 80;
 /**
@@ -1319,6 +1321,54 @@ let WorkBuddySkillCatalog = (() => {
 			if (this.activeAutomationRuns.has(automationId)) throw new Error("skill-chat: automation is already running");
 			this.activeAutomationRuns.add(automationId);
 			try {
+				return await this.dispatchAutomation(automationId, signal);
+			} catch (error) {
+				await this.recordFailedRun(automationId, error);
+				throw error;
+			} finally {
+				this.activeAutomationRuns.delete(automationId);
+			}
+		}
+		/**
+		* Note that one automation could not start.
+		*
+		* Best-effort by design: this runs while another error is already being
+		* thrown, and losing the original failure to a bookkeeping one would be worse
+		* than losing the record.
+		* @param automationId - the automation that failed to start.
+		* @param error - why it failed.
+		*/
+		async recordFailedRun(automationId, error) {
+			try {
+				const state = await this.getSkillChatState();
+				const automation = state.automations.find((item) => item.automationId === automationId);
+				const now = Date.now();
+				const run = {
+					runId: `run-${randomUUID()}`,
+					automationId,
+					automationName: automation?.name ?? automationId,
+					roomId: automation?.roomId ?? "",
+					sessionId: "",
+					startedAt: now,
+					finishedAt: now,
+					status: "failed",
+					error: error instanceof Error ? error.message : String(error),
+					unread: true
+				};
+				await this.putSkillChatState({
+					...state,
+					automationRuns: [run, ...state.automationRuns ?? []].slice(0, AUTOMATION_RUN_HISTORY)
+				});
+			} catch {}
+		}
+		/**
+		* Start one automation's session and record the run.
+		* @param automationId - the automation to run.
+		* @param signal - cancellation.
+		* @returns the new session and the state that records it.
+		*/
+		async dispatchAutomation(automationId, signal) {
+			{
 				signal?.throwIfAborted();
 				const state = await this.getSkillChatState(signal);
 				const automation = state.automations.find((item) => item.automationId === automationId);
@@ -1351,8 +1401,19 @@ let WorkBuddySkillCatalog = (() => {
 						originalName: persona?.originalName ?? skillId
 					};
 				});
+				const run = {
+					runId: `run-${randomUUID()}`,
+					automationId,
+					automationName: automation.name,
+					roomId: room.roomId,
+					sessionId,
+					startedAt: now,
+					status: "running",
+					unread: true
+				};
 				const next = {
 					...state,
+					automationRuns: [run, ...state.automationRuns ?? []].slice(0, AUTOMATION_RUN_HISTORY),
 					roomSessions: [...state.roomSessions, {
 						roomSessionId,
 						roomId: room.roomId,
@@ -1399,8 +1460,6 @@ let WorkBuddySkillCatalog = (() => {
 					sessionId,
 					state: next
 				};
-			} finally {
-				this.activeAutomationRuns.delete(automationId);
 			}
 		}
 		async dispatchDueAutomations() {

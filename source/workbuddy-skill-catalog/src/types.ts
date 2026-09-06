@@ -313,6 +313,35 @@ export interface SkillChatAutomationDocument {
   readonly nextRunAt?: number
 }
 
+/**
+ * One recorded execution of an automation.
+ *
+ * Without these an automation that fired at 09:00 left nothing behind but a
+ * session somewhere in the list: no way to see that it ran, that it failed, or
+ * that its result has not been read. A schedule you cannot audit is a schedule
+ * you stop trusting.
+ */
+export interface SkillChatAutomationRunDocument {
+  readonly runId: string
+  readonly automationId: string
+  /** Copied at run time, so a renamed or deleted automation keeps its history readable. */
+  readonly automationName: string
+  readonly roomId: string
+  readonly sessionId: string
+  readonly startedAt: number
+  readonly finishedAt?: number
+  /**
+   * `running` until the session settles. The Host cannot observe that itself —
+   * the turn outlives the dispatch call — so the client closes the record out
+   * from the session list it already watches.
+   */
+  readonly status: 'running' | 'done' | 'failed'
+  /** Why the run never started, for a failure the Host caught before dispatch. */
+  readonly error?: string
+  /** Cleared when someone opens the run's session. */
+  readonly unread: boolean
+}
+
 /** Versioned Skill Chat state persisted by the Host for all browser clients. */
 export interface SkillChatStateDocument {
   /**
@@ -326,6 +355,8 @@ export interface SkillChatStateDocument {
   readonly roomSessions: readonly SkillChatRoomSessionDocument[]
   readonly personas: Readonly<Record<string, SkillChatPersonaDocument>>
   readonly automations: readonly SkillChatAutomationDocument[]
+  /** Newest first; the Host trims this to a bound on every write. */
+  readonly automationRuns?: readonly SkillChatAutomationRunDocument[]
   readonly migratedAt?: number
 }
 

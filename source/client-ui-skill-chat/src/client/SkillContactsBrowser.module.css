@@ -1034,6 +1034,21 @@
  * sentence saying what it is for, or it reads as a second prompt box. */
 .fieldHint { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); line-height: 1.5; }
 .membersPanel { min-height: 0; flex: 1; overflow: auto; padding: 8px; }
+/* A run list, not a card grid: these are inbox rows, scanned for the one that
+ * needs attention rather than read one by one. */
+.runList { display: grid; gap: 4px; }
+.runRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; cursor: pointer; }
+.runRow:hover { background: var(--ds-chat-hover); }
+.runRow[data-unread] { background: var(--ds-chat-accent-soft); }
+.runStatus { padding: 2px 7px; border-radius: 6px; color: var(--ds-chat-muted); background: var(--ds-chat-fill-quaternary); font-size: var(--ds-chat-text-caption); }
+.runStatus[data-status='failed'] { color: var(--ds-chat-danger); background: var(--ds-chat-danger-soft); }
+.runStatus[data-status='done'] { color: var(--ds-chat-accent-text); background: var(--ds-chat-accent-soft); }
+.runCopy { display: grid; min-width: 0; gap: 1px; }
+.runCopy strong { overflow: hidden; font-size: var(--ds-chat-text-body); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.runCopy small { overflow: hidden; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.runRow b { flex: 0 0 auto; padding: 3px 8px; border-radius: 7px; color: var(--ds-chat-accent-text); background: var(--ds-chat-accent-soft); font-size: var(--ds-chat-text-caption); font-weight: 500; }
+.notifyOptIn { width: 100%; margin-bottom: 6px; padding: 7px 10px; border: var(--ds-chat-hairline) dashed var(--ds-chat-border-strong); border-radius: 9px; color: var(--ds-chat-text-secondary); background: transparent; font-size: var(--ds-chat-text-caption); text-align: left; cursor: pointer; }
+.notifyOptIn:hover { background: var(--ds-chat-hover); }
 .broadcastRow { display: grid; width: 100%; gap: 2px; margin-bottom: 6px; padding: 9px 10px; border: var(--ds-chat-hairline) dashed var(--ds-chat-border-strong); border-radius: 10px; background: transparent; text-align: left; cursor: pointer; }
 .broadcastRow span { color: var(--ds-chat-accent-text); font-size: var(--ds-chat-text-body); font-weight: 500; }
 .broadcastRow small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); }

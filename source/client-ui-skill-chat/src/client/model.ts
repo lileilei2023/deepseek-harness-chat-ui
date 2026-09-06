@@ -94,6 +94,26 @@ export interface AutomationDefinition {
   readonly nextRunAt?: number
 }
 
+/**
+ * One recorded execution of an automation.
+ *
+ * An automation that fired while nobody was looking used to leave nothing
+ * behind but a session in the list. These are what the Automations entry counts
+ * and what its page lists.
+ */
+export interface AutomationRun {
+  readonly runId: string
+  readonly automationId: string
+  readonly automationName: string
+  readonly roomId: string
+  readonly sessionId: string
+  readonly startedAt: number
+  readonly finishedAt?: number
+  readonly status: 'running' | 'done' | 'failed'
+  readonly error?: string
+  readonly unread: boolean
+}
+
 export interface SkillChatState {
   /**
    * 3 keys members and personas by Skill name; 2 keyed them by contact id.
@@ -111,6 +131,8 @@ export interface SkillChatState {
   readonly roomSessions: readonly RoomSession[]
   readonly personas: Readonly<Record<string, SkillPersona>>
   readonly automations: readonly AutomationDefinition[]
+  /** Newest first, bounded. */
+  readonly automationRuns?: readonly AutomationRun[]
   readonly migratedAt?: number
 }
 

@@ -434,6 +434,36 @@ Do work.
     await expect(catalog.readProjectFile({ workspaceId: 'workspace', path: join(outside, 'secret.txt') })).rejects.toThrow('escapes Workspace')
   })
 
+  it('records an automation run that never started, instead of failing silently', async () => {
+    const ctx = await catalogContext()
+    const stateFile = join(await mkdtemp(join(tmpdir(), 'dsh-runs-')), 'state.json')
+    ctx.provide('agents', { get: () => undefined } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx, { stateFile })
+    await catalog.putSkillChatState({
+      version: 3,
+      rooms: [],
+      roomSessions: [],
+      personas: {},
+      automations: [{
+        automationId: 'a1', name: '每日工作简报', workspaceId: 'w', roomId: 'gone', intent: 'custom', prompt: 'p',
+        memberIds: [], coordinatorId: '', schedule: { kind: 'once', runAt: '2026-01-01T00:00' },
+        lifecycle: 'run-once', status: 'active', createdAt: 1, updatedAt: 1,
+      }],
+    })
+
+    // The room is gone, so the run cannot start. The schedule still fired, and
+    // a schedule that can fail invisibly is one nobody trusts again.
+    await expect(catalog.runSkillChatAutomation('a1')).rejects.toThrow()
+
+    const after = await catalog.getSkillChatState()
+    expect(after.automationRuns).toHaveLength(1)
+    expect(after.automationRuns?.[0]).toMatchObject({ automationId: 'a1', status: 'failed', unread: true })
+    expect(after.automationRuns?.[0]?.error).toContain('Room')
+    // The name is copied at run time, so the history stays readable after the
+    // automation itself is renamed or deleted.
+    expect(after.automationRuns?.[0]?.automationName).toBe('每日工作简报')
+  })
+
   it('lists what the Room wrote, not everything that changed on disk', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'dsh-artifacts-'))
     await writeFile(join(workspace, 'report.md'), 'produced')

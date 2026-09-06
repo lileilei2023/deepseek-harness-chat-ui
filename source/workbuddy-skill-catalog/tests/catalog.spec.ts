@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, realpath, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -70,8 +70,11 @@ describe('WorkBuddy Skill catalog', () => {
       roomSessions: [], personas: {}, automations: [],
     }
     await expect(catalog.putSkillChatState(state)).resolves.toEqual(state)
-    await expect(catalog.getSkillChatState()).resolves.toEqual(state)
-    await expect(readFile(stateFile, 'utf8')).resolves.toContain('"room:one"')
+    // Reading composes the per-collection files, so `automationRuns` comes back
+    // as an empty list rather than absent — one shape for consumers to handle.
+    await expect(catalog.getSkillChatState()).resolves.toEqual({ ...state, automationRuns: [] })
+    await expect(readFile(join(`${stateFile.replace(/\.json$/u, '')}.parts`, 'rooms.json'), 'utf8'))
+      .resolves.toContain('"room:one"')
   })
 
   it('scopes the state document to $DSH_HOME rather than sharing one file per machine', async () => {
@@ -91,7 +94,8 @@ describe('WorkBuddy Skill catalog', () => {
 
     // The rooms name Harness Session ids, which live under this home; a second
     // Harness must not see them, and must not overwrite them on its own save.
-    await expect(readFile(join(home, 'skill-chat', 'state.v2.json'), 'utf8')).resolves.toContain('"room:scoped"')
+    await expect(readFile(join(home, 'skill-chat', 'state.v2.parts', 'rooms.json'), 'utf8'))
+      .resolves.toContain('"room:scoped"')
     vi.unstubAllEnvs()
   })
 
@@ -432,6 +436,54 @@ Do work.
       name: 'README.md', content: 'inside', language: 'markdown', binary: false, truncated: false,
     })
     await expect(catalog.readProjectFile({ workspaceId: 'workspace', path: join(outside, 'secret.txt') })).rejects.toThrow('escapes Workspace')
+  })
+
+  it('rewrites only the collections that changed', async () => {
+    const stateFile = join(await mkdtemp(join(tmpdir(), 'dsh-split-')), 'state.json')
+    const parts = `${stateFile.replace(/\.json$/u, '')}.parts`
+    const catalog = new WorkBuddySkillCatalog(await catalogContext(), { stateFile })
+    const room = {
+      roomId: 'room:one', type: 'group' as const, workspaceId: 'w', title: '产品设计小组',
+      memberIds: ['analyst', 'writer'], coordinatorId: 'analyst', sessionIds: [], createdAt: 1, updatedAt: 1,
+    }
+    const personas = Object.fromEntries([...Array(200).keys()].map(index => [`skill-${String(index)}`, {
+      skillId: `skill-${String(index)}`, displayName: `名字${String(index)}`, avatarId: 'a', originalName: `skill-${String(index)}`,
+      roleLabel: 'r', bio: 'b', capabilities: [], source: 's', customizedName: false, customizedAvatar: false, updatedAt: 1,
+    }]))
+    await catalog.putSkillChatState({ version: 3, rooms: [room], roomSessions: [], personas, automations: [] })
+
+    const personaFile = join(parts, 'personas.json')
+    const before = (await stat(personaFile)).mtimeMs
+    // A room rename used to re-serialize and rewrite every persona with it.
+    await new Promise(settle => setTimeout(settle, 12))
+    await catalog.putSkillChatState({
+      version: 3, rooms: [{ ...room, title: '改个名' }], roomSessions: [], personas, automations: [],
+    })
+
+    expect((await stat(personaFile)).mtimeMs).toBe(before)
+    expect((await readFile(join(parts, 'rooms.json'), 'utf8'))).toContain('改个名')
+  })
+
+  it('reads the split directory back, and falls back to the single document before one exists', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dsh-split-read-'))
+    const stateFile = join(directory, 'state.json')
+    // Written by a build from before the split: the directory does not exist.
+    await writeFile(stateFile, JSON.stringify({
+      version: 3, rooms: [{
+        roomId: 'room:legacy', type: 'group', workspaceId: 'w', title: '旧文档',
+        memberIds: ['a', 'b'], coordinatorId: 'a', sessionIds: [], createdAt: 1, updatedAt: 1,
+      }], roomSessions: [], personas: {}, automations: [],
+    }))
+    const catalog = new WorkBuddySkillCatalog(await catalogContext(), { stateFile })
+
+    const inherited = await catalog.getSkillChatState()
+    expect(inherited.rooms[0]?.title).toBe('旧文档')
+
+    // The first save creates the directory; reading after that must come from it.
+    await catalog.putSkillChatState({ ...inherited, rooms: [{ ...inherited.rooms[0]!, title: '新文档' }] })
+    const reread = await new WorkBuddySkillCatalog(await catalogContext(), { stateFile }).getSkillChatState()
+    expect(reread.rooms[0]?.title).toBe('新文档')
+    expect(reread.version).toBe(3)
   })
 
   it('records an automation run that never started, instead of failing silently', async () => {

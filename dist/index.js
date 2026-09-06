@@ -485,6 +485,10 @@ let WorkBuddySkillCatalog = (() => {
 		roots = __runInitializers(this, _instanceExtraInitializers);
 		skillsShOrigin;
 		stateFile;
+		/** Directory holding one file per collection, beside {@link stateFile}. */
+		stateDir;
+		/** What each collection's file holds right now, so a save can skip the unchanged ones. */
+		writtenParts = {};
 		stateWrite = Promise.resolve();
 		cachedState = emptySkillChatState();
 		inheritLegacyState;
@@ -516,6 +520,7 @@ let WorkBuddySkillCatalog = (() => {
 			this.skillsShOrigin = config.skillsShOrigin ?? "https://skills.sh";
 			this.inheritLegacyState = config.stateFile === void 0;
 			this.stateFile = config.stateFile === void 0 ? defaultStateFile() : resolve(config.stateFile);
+			this.stateDir = `${this.stateFile.replace(/\.json$/u, "")}.parts`;
 			this.getSkillChatState().catch(() => {});
 			ctx.effect(() => ctx.systemPrompt.section({
 				name: "skill-chat:room-role",
@@ -1287,6 +1292,11 @@ let WorkBuddySkillCatalog = (() => {
 		async getSkillChatState(signal) {
 			signal?.throwIfAborted();
 			await this.stateWrite;
+			const split = await this.readSplitState();
+			if (split !== void 0) {
+				this.cachedState = split;
+				return this.cachedState;
+			}
 			try {
 				const parsed = JSON.parse(await readFile(this.stateFile, "utf8"));
 				this.cachedState = validateSkillChatState(parsed);
@@ -1298,6 +1308,42 @@ let WorkBuddySkillCatalog = (() => {
 				}
 				throw error;
 			}
+		}
+		/**
+		* Read the per-collection state directory.
+		*
+		* Absent means this Harness has not written since the split — the caller then
+		* falls back to the single document, and the first save creates the
+		* directory. A directory that exists but is missing one collection is read as
+		* that collection being empty, which is what a fresh install looks like.
+		* @returns the composed document, or undefined when the directory is absent.
+		*/
+		async readSplitState() {
+			const read = async (name) => {
+				try {
+					return JSON.parse(await readFile(join(this.stateDir, `${name}.json`), "utf8"));
+				} catch (error) {
+					if (error.code === "ENOENT") return void 0;
+					throw error;
+				}
+			};
+			const meta = await read("meta");
+			if (meta === void 0) return void 0;
+			const list = async (name) => {
+				const value = await read(name);
+				return Array.isArray(value) ? value : [];
+			};
+			const personas = await read("personas");
+			const validated = validateSkillChatState({
+				...typeof meta === "object" && meta !== null ? meta : {},
+				rooms: await list("rooms"),
+				roomSessions: await list("roomSessions"),
+				personas: typeof personas === "object" && personas !== null ? personas : {},
+				automations: await list("automations"),
+				automationRuns: await list("automationRuns")
+			});
+			for (const [name, part] of Object.entries(stateParts(validated))) this.writtenParts[name] = part;
+			return validated;
 		}
 		/**
 		* The loadable Skill name for one room member.
@@ -1353,17 +1399,24 @@ let WorkBuddySkillCatalog = (() => {
 		async putSkillChatState(state, signal) {
 			signal?.throwIfAborted();
 			const validated = validateSkillChatState(state);
-			const encoded = `${JSON.stringify(validated, null, 2)}\n`;
-			if (Buffer.byteLength(encoded) > 2 * 1024 * 1024) throw new Error("skill-chat: state exceeds 2 MiB");
+			const parts = stateParts(validated);
+			if (Object.values(parts).reduce((sum, part) => sum + Buffer.byteLength(part), 0) > 2 * 1024 * 1024) throw new Error("skill-chat: state exceeds 2 MiB");
+			const changed = Object.entries(parts).filter(([name, part]) => this.writtenParts[name] !== part);
 			this.stateWrite = this.stateWrite.then(async () => {
 				signal?.throwIfAborted();
-				await mkdir(dirname(this.stateFile), { recursive: true });
-				const temporary = `${this.stateFile}.${process.pid}.${Date.now()}.tmp`;
-				await writeFile(temporary, encoded, {
-					encoding: "utf8",
-					mode: 384
-				});
-				await rename(temporary, this.stateFile);
+				if (changed.length > 0) {
+					await mkdir(this.stateDir, { recursive: true });
+					for (const [name, part] of changed) {
+						const target = join(this.stateDir, `${name}.json`);
+						const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+						await writeFile(temporary, part, {
+							encoding: "utf8",
+							mode: 384
+						});
+						await rename(temporary, target);
+						this.writtenParts[name] = part;
+					}
+				}
 			});
 			await this.stateWrite;
 			this.cachedState = validated;
@@ -1704,6 +1757,27 @@ function parseRipgrepRows(stream, root) {
 		});
 	}
 	return found;
+}
+/**
+* Split one state document into the files it is stored as.
+*
+* Personas dominate the document — hundreds of entries against a handful of
+* rooms — so keeping them in their own file is what stops an unrelated edit
+* from rewriting them.
+* @param state - the validated document.
+* @returns each collection's file contents, keyed by file name.
+*/
+function stateParts(state) {
+	const encode = (value) => `${JSON.stringify(value, null, 2)}\n`;
+	const { rooms, roomSessions, personas, automations, automationRuns, ...meta } = state;
+	return {
+		meta: encode(meta),
+		rooms: encode(rooms),
+		roomSessions: encode(roomSessions),
+		personas: encode(personas),
+		automations: encode(automations),
+		automationRuns: encode(automationRuns ?? [])
+	};
 }
 /**
 * A terminal value with nothing in it.

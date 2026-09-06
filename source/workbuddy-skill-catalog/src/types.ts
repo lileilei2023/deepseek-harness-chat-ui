@@ -355,7 +355,12 @@ export interface SkillChatStateDocument {
   readonly roomSessions: readonly SkillChatRoomSessionDocument[]
   readonly personas: Readonly<Record<string, SkillChatPersonaDocument>>
   readonly automations: readonly SkillChatAutomationDocument[]
-  /** Newest first; the Host trims this to a bound on every write. */
+  /**
+   * Newest first; the Host trims this to a bound on every write.
+   *
+   * Optional on the way in — a client written before runs existed sends none —
+   * but a read always returns a list, so consumers have one shape to handle.
+   */
   readonly automationRuns?: readonly SkillChatAutomationRunDocument[]
   readonly migratedAt?: number
 }

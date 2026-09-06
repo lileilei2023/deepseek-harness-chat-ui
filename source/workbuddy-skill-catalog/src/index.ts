@@ -198,6 +198,10 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   private readonly roots: readonly ResolvedSkillRoot[]
   private readonly skillsShOrigin: string
   private readonly stateFile: string
+  /** Directory holding one file per collection, beside {@link stateFile}. */
+  private readonly stateDir: string
+  /** What each collection's file holds right now, so a save can skip the unchanged ones. */
+  private readonly writtenParts: Record<string, string> = {}
   private stateWrite = Promise.resolve()
   private cachedState: SkillChatStateDocument = emptySkillChatState()
   private readonly inheritLegacyState: boolean
@@ -232,6 +236,10 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     // means "use this document", and its absence means an empty one.
     this.inheritLegacyState = config.stateFile === undefined
     this.stateFile = config.stateFile === undefined ? defaultStateFile() : resolve(config.stateFile)
+    // Derived from the file rather than configured separately: a test that
+    // points `stateFile` at a temporary path must not leave the split directory
+    // pointing at the real one.
+    this.stateDir = `${this.stateFile.replace(/\.json$/u, '')}.parts`
     void this.getSkillChatState().catch(() => {})
     ctx.effect(() => ctx.systemPrompt.section({
       name: 'skill-chat:room-role',
@@ -1046,6 +1054,11 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   async getSkillChatState(signal?: AbortSignal): Promise<SkillChatStateDocument> {
     signal?.throwIfAborted()
     await this.stateWrite
+    const split = await this.readSplitState()
+    if (split !== undefined) {
+      this.cachedState = split
+      return this.cachedState
+    }
     try {
       const parsed = JSON.parse(await readFile(this.stateFile, 'utf8')) as unknown
       this.cachedState = validateSkillChatState(parsed)
@@ -1057,6 +1070,46 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
       }
       throw error
     }
+  }
+
+  /**
+   * Read the per-collection state directory.
+   *
+   * Absent means this Harness has not written since the split — the caller then
+   * falls back to the single document, and the first save creates the
+   * directory. A directory that exists but is missing one collection is read as
+   * that collection being empty, which is what a fresh install looks like.
+   * @returns the composed document, or undefined when the directory is absent.
+   */
+  private async readSplitState(): Promise<SkillChatStateDocument | undefined> {
+    const read = async (name: string): Promise<unknown> => {
+      try {
+        return JSON.parse(await readFile(join(this.stateDir, `${name}.json`), 'utf8')) as unknown
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+        throw error
+      }
+    }
+    const meta = await read('meta')
+    if (meta === undefined) return undefined
+    const list = async (name: string): Promise<unknown[]> => {
+      const value = await read(name)
+      return Array.isArray(value) ? value : []
+    }
+    const personas = await read('personas')
+    const composed = {
+      ...typeof meta === 'object' && meta !== null ? meta : {},
+      rooms: await list('rooms'),
+      roomSessions: await list('roomSessions'),
+      personas: typeof personas === 'object' && personas !== null ? personas : {},
+      automations: await list('automations'),
+      automationRuns: await list('automationRuns'),
+    }
+    const validated = validateSkillChatState(composed)
+    // Seed the write cache from disk, so the first save after a restart does not
+    // rewrite every collection just because nothing had been compared yet.
+    for (const [name, part] of Object.entries(stateParts(validated))) this.writtenParts[name] = part
+    return validated
   }
 
   /**
@@ -1122,14 +1175,26 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
   async putSkillChatState(state: SkillChatStateDocument, signal?: AbortSignal): Promise<SkillChatStateDocument> {
     signal?.throwIfAborted()
     const validated = validateSkillChatState(state)
-    const encoded = `${JSON.stringify(validated, null, 2)}\n`
-    if (Buffer.byteLength(encoded) > 2 * 1024 * 1024) throw new Error('skill-chat: state exceeds 2 MiB')
+    const parts = stateParts(validated)
+    const total = Object.values(parts).reduce((sum, part) => sum + Buffer.byteLength(part), 0)
+    if (total > 2 * 1024 * 1024) throw new Error('skill-chat: state exceeds 2 MiB')
+    // Only what actually changed. Renaming one room used to re-serialize and
+    // rewrite every persona with it — 361 of them at the time of writing — on
+    // every keystroke's worth of debounce. Comparing against the last write is
+    // what makes the cost proportional to the edit rather than to the document.
+    const changed = Object.entries(parts).filter(([name, part]) => this.writtenParts[name] !== part)
     this.stateWrite = this.stateWrite.then(async () => {
       signal?.throwIfAborted()
-      await mkdir(dirname(this.stateFile), { recursive: true })
-      const temporary = `${this.stateFile}.${process.pid}.${Date.now()}.tmp`
-      await writeFile(temporary, encoded, { encoding: 'utf8', mode: 0o600 })
-      await rename(temporary, this.stateFile)
+      if (changed.length > 0) {
+        await mkdir(this.stateDir, { recursive: true })
+        for (const [name, part] of changed) {
+          const target = join(this.stateDir, `${name}.json`)
+          const temporary = `${target}.${process.pid}.${Date.now()}.tmp`
+          await writeFile(temporary, part, { encoding: 'utf8', mode: 0o600 })
+          await rename(temporary, target)
+          this.writtenParts[name] = part
+        }
+      }
     })
     await this.stateWrite
     this.cachedState = validated
@@ -1467,6 +1532,28 @@ export function parseRipgrepRows(
     found.push({ path: full, name: basename(full), line: line.trim().slice(0, 160) })
   }
   return found
+}
+
+/**
+ * Split one state document into the files it is stored as.
+ *
+ * Personas dominate the document — hundreds of entries against a handful of
+ * rooms — so keeping them in their own file is what stops an unrelated edit
+ * from rewriting them.
+ * @param state - the validated document.
+ * @returns each collection's file contents, keyed by file name.
+ */
+function stateParts(state: SkillChatStateDocument): Record<string, string> {
+  const encode = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
+  const { rooms, roomSessions, personas, automations, automationRuns, ...meta } = state
+  return {
+    meta: encode(meta),
+    rooms: encode(rooms),
+    roomSessions: encode(roomSessions),
+    personas: encode(personas),
+    automations: encode(automations),
+    automationRuns: encode(automationRuns ?? []),
+  }
 }
 
 /**

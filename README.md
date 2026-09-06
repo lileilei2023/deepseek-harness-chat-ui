@@ -59,8 +59,12 @@ name, prompt and cadence, or start from a blank one.
 | Real invocation | Joining a room links the Skill into the Harness's own Skill root, so the model can actually load it |
 | Parallel members | When a task needs several members the coordinator delegates one background subagent per member, each loading that member's Skill — real concurrency, not a narrated one |
 | Per-speaker faces | Each relayed answer carries the portrait of the member who wrote it, so a group reads as a group |
-| Workspace | Project browser, file preview, terminal and sidecar task entry points |
-| Automation | A top-level destination beside the shell's own new-chat entry, scenario templates, room-bound definitions, run-now and persisted history |
+| Visible work | A members panel says what each member is doing; a working strip above the composer sits where a chat client puts "someone is typing"; tap a member to address them, or `@everyone` for one answer each |
+| Room notice | Standing conventions for a room, carried into every new session so you stop repeating them |
+| Workspace | Project files, terminal, deliverables, diff, browser and sidecar tasks; each room remembers the panel, expanded directories and open file tabs it left |
+| Terminal | A stream rather than one snapshot per command: output grows while the command runs, colour renders, and a runaway command can be stopped |
+| Deliverables | Taken from the mutation calls in the session log, so each file traces back to the turn and the member that wrote it; downloadable, openable in a new tab, and locatable in the file manager |
+| Automation | A top-level destination beside the shell's own new-chat entry, scenario templates, room-bound definitions and run-now; run history carries an unread count, failure reasons, retry and optional desktop notifications |
 | Appearance | Mint and Teamily-inspired skins using the DSH Web Skin Manifest v2 contract. A skin states identity and shape; light and dark stay the shell's, so every skin is complete in both |
 
 ![DeepSeek Harness Chat UI in dark mode](docs/images/deepseek-harness-chat-ui-dark.png)
@@ -164,7 +168,7 @@ Linking rather than copying is deliberate. The tool's own directory stays the si
 
 ## Known gaps
 
-The surface is broad; several details are not yet polished — the terminal in particular is a snapshot-per-command view rather than a live stream. `TODO.md` lists them in severity order, with what is wrong and what "done" looks like. `CLAUDE.md` carries the build, verification and footgun notes for anyone working in this repository.
+`TODO.md` lists what remains in severity order, with what is wrong and what "done" looks like; the debts paid in this round are listed at the end of it. The two largest open ones are that **deliverables have no versions, so you cannot see what changed between two generations**, and that **comparison mode only gets as far as "one answer each" — the answers are not yet side by side**. `CLAUDE.md` carries the build, verification and footgun notes for anyone working in this repository.
 
 ## Credits
 

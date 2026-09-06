@@ -5,7 +5,7 @@ import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import {
   bindLegacyGroups, CHAT_BINDINGS_KEY, groupsForWorkspace, responderForMessage,
-  SkillContactsBrowser, type ContactGroup, type SkillContact, parseDiff, preferLocalState } from '../src/client/SkillContactsBrowser.tsx'
+  SkillContactsBrowser, type ContactGroup, type SkillContact, memberForSubagent, parseDiff, preferLocalState } from '../src/client/SkillContactsBrowser.tsx'
 import {
   activeHarnessSession, type ChatRoom, defaultPersona, ensurePersonas, migrateLegacyState,
   migrateMemberKeys, roomForSession, skillNameOf,
@@ -472,5 +472,36 @@ describe('migrateMemberKeys', () => {
     const once = migrateMemberKeys(legacy())
     expect(migrateMemberKeys(once)).toBe(once)
     expect(skillNameOf('analyst')).toBe('analyst')
+  })
+})
+
+describe('memberForSubagent', () => {
+  const members = [
+    { key: 'stocks', name: '麦麦' },
+    { key: 'stock-analysis-router', name: '豆花' },
+    { key: 'novel-writer-cn', name: '圆圆' },
+  ]
+
+  it('matches the member the coordinator named in the child label', () => {
+    // The group prompt tells the coordinator to open each subagent with
+    // "先加载 <成员名> 这个 Skill", so the raw Skill name is what lands in the label.
+    expect(memberForSubagent('先加载 novel-writer-cn 这个 Skill，写第三章', members)).toBe('novel-writer-cn')
+    // A coordinator that writes the nickname instead is being helpful, not wrong.
+    expect(memberForSubagent('请 圆圆 续写', members)).toBe('novel-writer-cn')
+  })
+
+  it('prefers the longest name so a short one cannot steal another member\'s child', () => {
+    // `stocks` is a substring of nothing here, but `stock-analysis-router`
+    // contains no `stocks`; the reverse case is the trap: a member named
+    // `stock` would otherwise claim every `stock-analysis-router` child.
+    expect(memberForSubagent('先加载 stock-analysis-router 这个 Skill', members)).toBe('stock-analysis-router')
+    expect(memberForSubagent('先加载 stocks 这个 Skill', members)).toBe('stocks')
+  })
+
+  it('claims nothing when the label names no member', () => {
+    // The coordinator also starts children for itself. Attributing those to
+    // whoever sorts first would put a working dot on an idle member.
+    expect(memberForSubagent('整理一下前面的结论', members)).toBeUndefined()
+    expect(memberForSubagent('', members)).toBeUndefined()
   })
 })

@@ -35,7 +35,7 @@ import css from './SkillContactsBrowser.module.css'
 
 type View = 'chats' | 'groups' | 'contacts' | 'automations'
 type ContactMode = 'persona' | 'raw'
-type ProjectToolKind = 'artifacts' | 'files' | 'terminal' | 'diff' | 'browser'
+type ProjectToolKind = 'members' | 'artifacts' | 'files' | 'terminal' | 'diff' | 'browser'
 
 interface ProjectDirectoryListing {
   readonly path: string
@@ -539,6 +539,15 @@ interface HeaderBridgeValue {
   readonly workspaceTitle: string
   readonly coordinatorName?: string
   readonly memberPersonas: readonly { readonly id: string; readonly name: string; readonly avatarId: string }[]
+  /**
+   * Who is working, and on what.
+   *
+   * A group whose members are only names and faces cannot show that anything
+   * is happening. This is what the composer strip and the members panel read.
+   */
+  readonly memberActivity: readonly MemberActivity[]
+  /** Running children that matched no member, so the strip can still say something. */
+  readonly unattributedWork: number
   readonly headerActions: React.ReactNode
   readonly onHistory: (session: RoomSession) => void
   readonly onNewSession: () => void
@@ -553,6 +562,42 @@ interface HeaderBridgeValue {
 
 let headerBridgeValue: HeaderBridgeValue | null = null
 const headerBridgeListeners = new Set<() => void>()
+
+/** What one member is doing right now, as far as the session tree can say. */
+export interface MemberActivity {
+  /** The member's stored key, which is the Skill's name. */
+  readonly key: string
+  /** Persona name, so the strip reads as people rather than Skill ids. */
+  readonly name: string
+  readonly avatarId: string
+  readonly working: boolean
+  /** The running child's own label, when it has one worth showing. */
+  readonly doing?: string
+}
+
+/**
+ * Match one running subagent to the member it was started for.
+ *
+ * The coordinator is told to open each member's subagent prompt with "先加载
+ * <成员名> 这个 Skill", so the child's creation label carries the member's raw
+ * Skill name. The persona name is checked too, because a coordinator that
+ * writes the nickname instead is being helpful, not wrong.
+ * @param label - the child's creation label and title, already joined.
+ * @param members - the room's members with their persona names.
+ * @returns the matched member key, or undefined.
+ */
+export function memberForSubagent(
+  label: string,
+  members: readonly { readonly key: string; readonly name: string }[],
+): string | undefined {
+  const haystack = label.toLocaleLowerCase()
+  // Longest first: a member named `stocks` must not claim a child started for
+  // `stock-analysis-router` just because the shorter name is a substring.
+  const ranked = [...members].sort((left, right) =>
+    Math.max(right.key.length, right.name.length) - Math.max(left.key.length, left.name.length))
+  return ranked.find(member =>
+    haystack.includes(member.key.toLocaleLowerCase()) || haystack.includes(member.name.toLocaleLowerCase()))?.key
+}
 
 function publishHeaderBridge(value: HeaderBridgeValue | null): void {
   headerBridgeValue = value
@@ -590,6 +635,7 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
   // unlabelled glyphs competing with three text buttons made the room header
   // read as a toolbar; behind one labelled entry they read as what they are.
   const workbenchItems: readonly { readonly tool: ProjectToolKind, readonly label: string, readonly icon: React.JSX.Element }[] = [
+    { tool: 'members', label: tr('membersPanel'), icon: <IconNewChatOutline16/> },
     { tool: 'artifacts', label: tr('artifacts'), icon: <IconCodeOutline16/> },
     { tool: 'files', label: tr('projectFiles'), icon: <IconFolderOpenOutline16/> },
     { tool: 'terminal', label: tr('terminalLabel'), icon: <IconCodeOutline16/> },
@@ -632,6 +678,10 @@ interface WorkbenchDrawerProps {
   readonly terminalCommand: string
   readonly terminalBusy: boolean
   readonly browserUrl: string
+  readonly members: readonly MemberActivity[]
+  readonly coordinatorKey: string
+  readonly unattributedWork: number
+  readonly onMentionMember: (name: string) => void
   readonly artifacts: readonly RoomArtifact[]
   readonly artifactsTraced: boolean
   readonly onArtifactOrigin: (artifact: RoomArtifact) => string | null
@@ -707,6 +757,38 @@ export interface DiffLine {
  * and takes a numbered one (`increaseTitle`). Both leave the original in the
  * room's history, so a fork taken by mistake costs nothing.
  */
+/**
+ * Who in this room is working, shown above the composer.
+ *
+ * A group of Skills used to look identical whether three members were running
+ * in parallel or nothing was happening at all. This is the one always-visible
+ * signal that the room is alive, which is why it is also the only place in the
+ * product that animates.
+ * @param props - the session this strip belongs to.
+ * @returns the strip, or null when nothing is running.
+ */
+export function SkillChatWorkingStrip({ sessionId }: { readonly sessionId: SessionId }): React.JSX.Element | null {
+  const bridge = useHeaderBridge()
+  if (bridge === null || bridge.sessionId !== sessionId) return null
+  const working = bridge.memberActivity.filter(member => member.working)
+  if (working.length === 0 && bridge.unattributedWork === 0) return null
+  return <div className={css.workingStrip} aria-live="polite" aria-atomic="false">
+    {working.map(member => <span className={css.workingMember} key={member.key}>
+      <span className={css.workingAvatar}>
+        <Avatar avatarId={member.avatarId} label={member.name} seed={member.key} size={20}/>
+        <i className={css.workingDot}/>
+      </span>
+      <b>{member.name}</b>
+      <small>{member.doing ?? tr('memberWorking')}</small>
+    </span>)}
+    {bridge.unattributedWork === 0
+      ? null
+      // Children whose label named no member. Counting them beats pinning them
+      // on whoever happens to sort first.
+      : <span className={css.workingOther}>{tr('otherWork')} · {bridge.unattributedWork}</span>}
+  </div>
+}
+
 export function SkillChatMessageActions(
   { messageId }: { readonly messageId: string },
 ): React.JSX.Element | null {
@@ -1040,11 +1122,15 @@ function ProjectFileView(
 }
 
 function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
-  const title = props.tool === 'files' ? tr('projectFiles') : props.tool === 'terminal' ? tr('terminalLabel') : props.tool === 'diff' ? '代码变更' : tr('browserLabel')
+  const title = props.tool === 'members'
+    ? tr('membersPanel')
+    : props.tool === 'files'
+      ? tr('projectFiles')
+      : props.tool === 'terminal' ? tr('terminalLabel') : props.tool === 'diff' ? tr('viewDiff') : tr('browserLabel')
   return <Drawer className={css.workbenchDrawer} label={title} onClose={props.onClose}>
     <WorkbenchPanel>
       <header className={css.workbenchHeader}>
-        <span className={css.projectPanelIcon}>{props.tool === 'files' ? <IconFolderOpenOutline16/> : props.tool === 'terminal' ? <IconCodeOutline16/> : props.tool === 'diff' ? <IconBranchOutline16/> : <IconGlobeOutline14/>}</span>
+        <span className={css.projectPanelIcon}>{props.tool === 'members' ? <IconNewChatOutline16/> : props.tool === 'files' ? <IconFolderOpenOutline16/> : props.tool === 'terminal' ? <IconCodeOutline16/> : props.tool === 'diff' ? <IconBranchOutline16/> : <IconGlobeOutline14/>}</span>
         <span><strong>{title}</strong><small>{props.workspaceTitle}</small></span>
         <IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={props.onClose}>×</IconButton>
       </header>
@@ -1052,6 +1138,24 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
         * files pane beside it still answers "what is in here"; this one answers
         * "where is the thing the team just made", which is the question people
         * actually arrive with. */}
+      {props.tool === 'members' ? <div className={css.membersPanel}>
+        {props.members.length === 0
+          ? <div className={css.drawerEmpty}>{tr('noMembers')}</div>
+          : props.members.map(member => <div className={css.memberRow} data-working={member.working || undefined} key={member.key}>
+            <span className={css.workingAvatar}>
+              <Avatar avatarId={member.avatarId} label={member.name} seed={member.key} size={32}/>
+              {member.working ? <i className={css.workingDot}/> : null}
+            </span>
+            <span className={css.memberRowCopy}>
+              <strong>{member.name}{member.key === props.coordinatorKey ? <em>{tr('memberCoordinator')}</em> : null}</strong>
+              <small>{member.working ? member.doing ?? tr('memberWorking') : tr('memberIdle')}</small>
+            </span>
+            <button type="button" onClick={() => { props.onMentionMember(member.name) }}>@</button>
+          </div>)}
+        {props.unattributedWork === 0
+          ? null
+          : <div className={css.artifactCaption}>{tr('otherWork')} · {props.unattributedWork}</div>}
+      </div> : null}
       {props.tool === 'artifacts' ? <div className={css.fileWorkbench}>
         <div className={css.fileBrowser}>
           <div className={css.projectFileList}>
@@ -1423,6 +1527,46 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     ? undefined
     : memberContact(activeRoom.coordinatorId) ?? activeMembers[0]
   const currentSessionBlank = currentSessionId === undefined ? false : sessions.byId[currentSessionId]?.blank === true
+
+  /**
+   * Who in this room is working right now.
+   *
+   * The coordinator runs each member as its own subagent, and the Host already
+   * keeps a live catalog of those children per parent session. Reading it is
+   * what turns a roster of faces into a group where you can see work happening;
+   * without it a running turn looks exactly like an idle one.
+   */
+  const { memberActivity, unattributedWork } = useMemo(() => {
+    const members = activeMembers.map((member) => {
+      const display = displayOf(member, 'persona', state.personas)
+      return { key: member.name, name: display.name, avatarId: display.avatar }
+    })
+    const catalog = currentSessionId === undefined ? undefined : sessions.subagentsByParent[currentSessionId]
+    const running = (catalog?.entries ?? []).flatMap((entry) => {
+      if (entry.kind !== 'child' || entry.activity !== 'running') return []
+      const label = [entry.mode === 'one-shot' ? entry.label ?? '' : entry.label, sessions.byId[entry.id]?.title ?? '']
+        .filter(Boolean).join(' ')
+      return [{ id: entry.id, label }]
+    })
+    const claimed = new Set<string>()
+    const doingByMember = new Map<string, string>()
+    for (const child of running) {
+      const key = memberForSubagent(child.label, members)
+      if (key === undefined || claimed.has(key)) continue
+      claimed.add(key)
+      if (child.label !== '') doingByMember.set(key, child.label)
+    }
+    return {
+      memberActivity: members.map(member => ({
+        ...member,
+        working: claimed.has(member.key),
+        ...doingByMember.has(member.key) ? { doing: doingByMember.get(member.key) as string } : {},
+      })),
+      // Children the coordinator started for itself, or whose label never named
+      // a member. Counting them is honest; guessing an owner would not be.
+      unattributedWork: running.length - claimed.size,
+    }
+  }, [activeMembers, currentSessionId, sessions.byId, sessions.subagentsByParent, state.personas])
 
   const replaceState = (next: SkillChatState): SkillChatState => {
     stateRef.current = next
@@ -2139,6 +2283,18 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     }
   }, [projectTool, currentSessionId, activeTerminalId, readTerminal])
 
+  /**
+   * Address one member directly from the roster.
+   *
+   * Typing `@` and picking from a list is the long way round when the member is
+   * already on screen; every messaging client lets you tap the person instead.
+   * @param name - the member's persona name.
+   */
+  const mentionMember = (name: string): void => {
+    if (currentSessionId === undefined) return
+    setNotice(attachToComposer(currentSessionId, `@${name} `) ? '' : t('attachFailed'))
+  }
+
   /** Show one workspace path in the desktop file manager. */
   const revealPath = (path: string): void => {
     if (activeWorkspace === undefined) return
@@ -2430,6 +2586,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
         const display = displayOf(member, 'persona', state.personas)
         return { id: member.id, name: display.name, avatarId: display.avatar }
       }),
+      memberActivity,
+      unattributedWork,
       headerActions: renderSlot('ds-chat.room.header.actions', { roomId: activeRoom.roomId, sessionId: currentSessionId }),
       onHistory: item => { openHistorySession(activeRoom, item) },
       onNewSession: () => { void createRoomSession(activeRoom, activeRoom.type !== 'general') },
@@ -2443,7 +2601,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     return () => {
       if (headerBridgeValue?.sessionId === currentSessionId) publishHeaderBridge(null)
     }
-  }, [activeCoordinator, activeMembers, activeRoom, activeWorkspace?.title, currentSessionId, messageSeq, renderSlot, state.personas, state.roomSessions])
+  }, [activeCoordinator, activeMembers, activeRoom, activeWorkspace?.title, currentSessionId, memberActivity,
+    messageSeq, renderSlot, state.personas, state.roomSessions, unattributedWork])
 
   // Publish the speaking Skill's portrait to the document so the transcript can
   // put a face beside the reply. The conversation column is the shell's, drawn
@@ -2688,6 +2847,10 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       workspacePath={activeWorkspace.path}
       listing={projectListing}
       file={projectFile}
+      members={memberActivity}
+      coordinatorKey={activeRoom?.coordinatorId ?? ''}
+      unattributedWork={unattributedWork}
+      onMentionMember={mentionMember}
       artifacts={artifacts}
       artifactsTraced={artifactsTraced}
       onArtifactOrigin={artifactOrigin}

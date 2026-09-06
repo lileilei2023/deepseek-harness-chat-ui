@@ -18,7 +18,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillChatMessageActions, SkillContactsBrowser, STATE_KEY,
+  CHAT_BINDINGS_KEY, displayOf, DSChatBrand, MODE_KEY, readStored, SkillChatHeaderTools, SkillChatMessageActions,
+  SkillChatWorkingStrip, SkillContactsBrowser, STATE_KEY,
 } from './SkillContactsBrowser.tsx'
 import type { ChatBinding, ContactGroup, ExternalSkillContact, SkillContact } from './SkillContactsBrowser.tsx'
 import type { SkillChatState } from './model.ts'
@@ -381,6 +382,15 @@ function registerUi(ctx: Context): void {
     id: 'skill-chat-tools',
     order: 20,
   }, SkillChatHeaderTools))
+
+  // Above the composer, where a chat client puts "someone is typing". The room
+  // header is already crowded and, more importantly, is not where a person
+  // looks while waiting for an answer.
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'skill-chat-working',
+    order: 5,
+  }, SkillChatWorkingStrip))
 
   ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({
     name: 'sidebar.brand.name',

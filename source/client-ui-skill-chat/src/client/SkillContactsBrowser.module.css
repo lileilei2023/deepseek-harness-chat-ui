@@ -1016,6 +1016,29 @@
 .artifactRow b { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .artifactRow small { overflow: hidden; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); text-overflow: ellipsis; white-space: nowrap; }
 .artifactCaption { padding: 8px 12px; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); line-height: 1.6; }
+/* The one animated thing in the product. A group of Skills otherwise looks
+ * identical whether three members are running in parallel or nothing is
+ * happening, so this pulse is the signal that the room is alive — and keeping
+ * it the only one is what stops it becoming decoration. */
+.workingStrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 4px 8px; font-size: var(--ds-chat-text-caption); }
+.workingMember { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.workingMember b { flex: 0 0 auto; color: var(--ds-chat-text-color); font-weight: 500; }
+.workingMember small { overflow: hidden; max-width: 22ch; color: var(--ds-chat-muted); text-overflow: ellipsis; white-space: nowrap; }
+.workingOther { color: var(--ds-chat-muted); }
+.workingAvatar { position: relative; display: inline-flex; flex: 0 0 auto; }
+.workingDot { position: absolute; right: -1px; bottom: -1px; width: 7px; height: 7px; border: 2px solid var(--ds-chat-surface); border-radius: 50%; background: var(--ds-chat-accent-solid); box-sizing: content-box; animation: dsChatPulse 1.2s ease-in-out infinite; }
+@keyframes dsChatPulse { 0%, 100% { box-shadow: 0 0 0 0 var(--ds-chat-accent-soft); } 50% { box-shadow: 0 0 0 4px var(--ds-chat-accent-soft); } }
+@media (prefers-reduced-motion: reduce) { .workingDot { animation: none; } }
+
+.membersPanel { min-height: 0; flex: 1; overflow: auto; padding: 8px; }
+.memberRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; }
+.memberRow[data-working] { background: var(--ds-chat-accent-soft); }
+.memberRowCopy { display: grid; min-width: 0; gap: 1px; }
+.memberRowCopy strong { display: flex; align-items: center; gap: 6px; overflow: hidden; font-size: var(--ds-chat-text-body); font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.memberRowCopy em { flex: 0 0 auto; padding: 1px 5px; border-radius: 5px; color: var(--ds-chat-accent-text); background: var(--ds-chat-accent-soft); font-size: var(--ds-chat-text-caption); font-style: normal; }
+.memberRowCopy small { overflow: hidden; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.memberRow button { width: 28px; height: 28px; border: var(--ds-chat-hairline) solid var(--ds-chat-border); border-radius: 8px; color: var(--ds-chat-text-secondary); background: transparent; cursor: pointer; }
+.memberRow button:hover { color: var(--ds-chat-accent-text); background: var(--ds-chat-hover); }
 .terminalLine { display: block; min-height: 1.65em; }
 .terminalEarlier { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--ds-chat-code-border); padding: 7px 12px; color: var(--ds-chat-code-fg); background: var(--ds-chat-code-bg-raised); font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: left; opacity: .72; cursor: pointer; }
 .terminalEarlier:hover { color: var(--ds-chat-accent-bright); opacity: 1; }

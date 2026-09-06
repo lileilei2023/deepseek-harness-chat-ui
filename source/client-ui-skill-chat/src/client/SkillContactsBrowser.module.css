@@ -995,6 +995,9 @@
 .filePreviewMeta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border-bottom: var(--ds-chat-hairline) solid var(--ds-chat-code-border); background: var(--ds-chat-code-bg-raised); }
 .filePreviewMeta strong { overflow: hidden; font-size: var(--ds-chat-text-footnote); text-overflow: ellipsis; white-space: nowrap; }
 .filePreviewMeta small { flex: 0 0 auto; color: var(--ds-chat-code-muted); font-size: var(--ds-chat-text-caption); }
+/* `margin-left: auto` keeps the actions right-aligned whether there are two of
+ * them or four, so the row does not re-centre as a file's capabilities change. */
+.previewActions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; margin-left: auto; }
 .filePreview pre,
 .terminalOutput { flex: 1; overflow: auto; margin: 0; padding: 16px; font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .drawerEmpty { display: grid; flex: 1; place-items: center; padding: 24px; color: var(--ds-chat-code-muted); font-size: var(--ds-chat-text-footnote); text-align: center; }

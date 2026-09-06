@@ -651,6 +651,7 @@ interface WorkbenchDrawerProps {
   readonly onToggleArtifactRest: () => void
   readonly renderedFile: boolean
   readonly onToggleRendered: () => void
+  readonly onRevealFile: (path: string) => void
   readonly browserDraft: string
   readonly canGoBack: boolean
   readonly canGoForward: boolean
@@ -951,18 +952,71 @@ function isDeliverable(name: string): boolean {
   return /\.(md|markdown|html?|pdf|docx?|pptx?|xlsx?|csv|txt)$/i.test(name)
 }
 
+/**
+ * MIME type for a preview, so a saved or reopened file behaves like itself.
+ * @param file - the previewed file.
+ * @returns a content type for the Blob.
+ */
+function fileMediaType(file: ProjectFilePreview): string {
+  const extension = file.name.toLocaleLowerCase().split('.').pop() ?? ''
+  if (extension === 'html' || extension === 'htm') return 'text/html;charset=utf-8'
+  if (extension === 'svg') return 'image/svg+xml;charset=utf-8'
+  if (extension === 'json') return 'application/json;charset=utf-8'
+  if (extension === 'csv') return 'text/csv;charset=utf-8'
+  return 'text/plain;charset=utf-8'
+}
+
+/**
+ * Hand the previewed file to the browser, to save or to open on its own.
+ *
+ * A workspace file has no HTTP address and `file://` is blocked from this
+ * origin, so a Blob of the content already read is the route out. That is also
+ * why a truncated or binary preview offers neither: saving the visible prefix
+ * under the real file's name would hand someone a corrupt copy.
+ * @param file - the previewed file.
+ * @param mode - save it, or open it in a new tab.
+ */
+function takeFileAway(file: ProjectFilePreview, mode: 'download' | 'open'): void {
+  const url = URL.createObjectURL(new Blob([file.content ?? ''], { type: fileMediaType(file) }))
+  try {
+    if (mode === 'open') {
+      window.open(url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    const link = document.createElement('a')
+    link.href = url
+    link.download = file.name
+    link.rel = 'noopener'
+    document.body.append(link)
+    link.click()
+    link.remove()
+  } finally {
+    // The tab keeps its own reference once it has loaded, and the download has
+    // already started; holding the object alive past that only leaks it.
+    setTimeout(() => { URL.revokeObjectURL(url) }, 60_000)
+  }
+}
+
 function ProjectFileView(
-  { file, rendered, onToggle }: {
+  { file, rendered, onToggle, onReveal }: {
     readonly file: ProjectFilePreview
     readonly rendered: boolean
     readonly onToggle: () => void
+    readonly onReveal: (path: string) => void
   },
 ): React.JSX.Element {
+  // A prefix saved under the real file's name is worse than no download.
+  const complete = !file.binary && !file.truncated
   return <>
     <div className={css.filePreviewMeta}>
       <strong>{file.name}</strong>
       <small>{file.language} · {fileSize(file.size)}{file.truncated ? tr('truncated') : ''}</small>
-      {isRenderable(file) ? <button className={css.previewToggle} type="button" onClick={onToggle}>{rendered ? tr('viewSource') : tr('viewRendered')}</button> : null}
+      <span className={css.previewActions}>
+        {isRenderable(file) ? <button className={css.previewToggle} type="button" onClick={onToggle}>{rendered ? tr('viewSource') : tr('viewRendered')}</button> : null}
+        {complete ? <button className={css.previewToggle} type="button" onClick={() => { takeFileAway(file, 'download') }}>{tr('downloadFile')}</button> : null}
+        {complete && isRenderable(file) ? <button className={css.previewToggle} type="button" onClick={() => { takeFileAway(file, 'open') }}>{tr('openInTab')}</button> : null}
+        <button className={css.previewToggle} type="button" onClick={() => { onReveal(file.path) }}>{tr('revealFile')}</button>
+      </span>
     </div>
     {file.binary
       ? <div className={css.drawerEmpty}>{tr('binaryFile')}</div>
@@ -1039,7 +1093,7 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
         <div className={css.filePreview}>
           {props.file === null
             ? <div className={css.drawerEmpty}>{tr('pickArtifactHint')}</div>
-            : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered}/>}
+            : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered} onReveal={props.onRevealFile}/>}
         </div>
       </div> : null}
       {props.tool === 'files' ? <div className={css.fileWorkbench}>
@@ -1111,7 +1165,7 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
               onClick={() => { props.onPreviewFile(item.path) }}
             >{item.name}<b onClick={(event) => { event.stopPropagation(); props.onCloseFile(item.path) }}>×</b></button>)}
           </div>}
-          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered}/>}
+          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered} onReveal={props.onRevealFile}/>}
         </div>
       </div> : null}
       {props.tool === 'diff' ? <div className={css.diffWorkbench}>
@@ -2062,6 +2116,13 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     }
   }, [projectTool, currentSessionId, activeTerminalId, readTerminal])
 
+  /** Show one workspace path in the desktop file manager. */
+  const revealPath = (path: string): void => {
+    if (activeWorkspace === undefined) return
+    void revealProjectPath(activeWorkspace.workspaceId, path, new AbortController().signal)
+      .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
+  }
+
   /** Open one more shell in this room's workspace. */
   const addTerminal = (): void => {
     if (activeWorkspace === undefined || currentSessionId === undefined) return
@@ -2614,6 +2675,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       onToggleArtifactRest={() => { setArtifactRestOpen(current => !current) }}
       renderedFile={renderedFile}
       onToggleRendered={() => { setRenderedFile(current => !current) }}
+      onRevealFile={revealPath}
       error={projectListingError}
       terminal={terminal}
       terminalCommand={terminalCommand}
@@ -2649,12 +2711,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
         <div className={css.roomMenu} style={{ left: `${Math.min(target.x, window.innerWidth - 210)}px`, top: `${Math.min(target.y, window.innerHeight - 190)}px` }} onMouseDown={(event) => { event.stopPropagation() }}>
           <button type="button" onClick={() => { attachPath(target.path); close() }}>{t('attachToChat')}</button>
           <button type="button" onClick={() => { void navigator.clipboard?.writeText(target.path).then(() => { setNotice(t('copied')) }, () => {}); close() }}>{t('copyPath')}</button>
-          <button type="button" onClick={() => {
-            if (activeWorkspace === undefined) { close(); return }
-            void revealProjectPath(activeWorkspace.workspaceId, target.path, new AbortController().signal)
-              .catch((error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
-            close()
-          }}>{t('revealInFinder')}</button>
+          <button type="button" onClick={() => { revealPath(target.path); close() }}>{t('revealInFinder')}</button>
           <button type="button" onClick={() => {
             const directory = target.kind === 'directory' ? target.path : target.path.slice(0, target.path.lastIndexOf('/'))
             openProjectTool('terminal')

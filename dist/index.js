@@ -521,8 +521,7 @@ let WorkBuddySkillCatalog = (() => {
 				text: ({ scope }) => {
 					const sessionId = stringId(scope);
 					if (sessionId === void 0) return "";
-					const roomSession = this.cachedState.roomSessions.find((item) => item.harnessSessionId === sessionId);
-					const room = roomSession === void 0 ? void 0 : this.cachedState.rooms.find((item) => item.roomId === roomSession.roomId);
+					const room = this.roomForSession(sessionId);
 					if (room?.type !== "group") return "";
 					const configuredPrompt = room.systemPrompt?.trim();
 					if (configuredPrompt !== void 0 && configuredPrompt !== "") return configuredPrompt;
@@ -530,6 +529,16 @@ let WorkBuddySkillCatalog = (() => {
 					return `你是「${room.title}」的协调者。根据用户目标组织群组成员（${members}）协作。没有明确 @ 时你先拆解任务再决定交给谁，有 @ 时优先尊重指定成员。一次需要多个成员时，用 subagent 工具为每个成员各起一个后台子代理并发进行，并在提示里写明「先加载 <成员名> 这个 Skill，再按它的方法完成以下任务」；单个成员能完成时直接自己加载对应 Skill 处理。转述成员结果时该段以「@成员名」开头再换行写内容，界面据此标注发言人。只陈述真实发生的事。`;
 				}
 			}), "workBuddySkillCatalog.roomSystemPrompt()");
+			ctx.effect(() => ctx.systemPrompt.section({
+				name: "skill-chat:room-notice",
+				order: ctx.systemPrompt.getSectionOrder("TEAM_POLICY"),
+				text: ({ scope }) => {
+					const sessionId = stringId(scope);
+					if (sessionId === void 0) return "";
+					const notice = this.roomForSession(sessionId)?.notice?.trim();
+					return notice === void 0 || notice === "" ? "" : `这个对话的长期约定（由用户设定，优先于临时指示）：\n${notice}`;
+				}
+			}), "workBuddySkillCatalog.roomNotice()");
 			ctx.effect(() => ctx.systemPrompt.section({
 				name: "skill-chat:imported-skill-runtime",
 				order: ctx.systemPrompt.getSectionOrder("TEAM_POLICY"),
@@ -1253,6 +1262,15 @@ let WorkBuddySkillCatalog = (() => {
 		* @param id - the stored contact id.
 		* @returns a name the model can pass to the `skill` tool.
 		*/
+		/**
+		* The Room one Harness session belongs to.
+		* @param sessionId - the session being prompted.
+		* @returns the owning Room, or undefined for a session no Room claims.
+		*/
+		roomForSession(sessionId) {
+			const roomSession = this.cachedState.roomSessions.find((item) => item.harnessSessionId === sessionId);
+			return roomSession === void 0 ? void 0 : this.cachedState.rooms.find((item) => item.roomId === roomSession.roomId);
+		}
 		memberSkillName(roomId, key) {
 			const persona = this.cachedState.personas[key]?.originalName;
 			if (persona !== void 0 && persona !== "") return persona;

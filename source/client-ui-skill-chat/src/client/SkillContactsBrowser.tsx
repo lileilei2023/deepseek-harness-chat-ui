@@ -19,7 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import {
   ANIMAL_AVATARS, EMPTY_SKILL_CHAT_STATE, activeHarnessSession, defaultPersona, ensurePersonas,
-  migrateLegacyState, migrateMemberKeys, orderRooms, roomForSession, skillNameOf,
+  migrateLegacyState, migrateMemberKeys, oneLineBio, orderRooms, roomForSession, skillNameOf,
   type AutomationDefinition, type ChatRoom, type RoomSession,
   type SkillChatState, type SkillPersona,
 } from './model.ts'
@@ -682,6 +682,7 @@ interface WorkbenchDrawerProps {
   readonly coordinatorKey: string
   readonly unattributedWork: number
   readonly onMentionMember: (name: string) => void
+  readonly onBroadcast: () => void
   readonly artifacts: readonly RoomArtifact[]
   readonly artifactsTraced: boolean
   readonly onArtifactOrigin: (artifact: RoomArtifact) => string | null
@@ -1139,6 +1140,14 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
         * "where is the thing the team just made", which is the question people
         * actually arrive with. */}
       {props.tool === 'members' ? <div className={css.membersPanel}>
+        {/* Broadcast, the way a group chat's `@everyone` works. It writes the
+          * instruction rather than a bare mention because the coordinator has
+          * to be told what "everyone" means: one answer each, in parallel,
+          * without it summarising them into a single voice. */}
+        {props.members.length < 2 ? null : <button className={css.broadcastRow} type="button" onClick={props.onBroadcast}>
+          <span>@{tr('everyone')}</span>
+          <small>{tr('everyoneHint')}</small>
+        </button>}
         {props.members.length === 0
           ? <div className={css.drawerEmpty}>{tr('noMembers')}</div>
           : props.members.map(member => <div className={css.memberRow} data-working={member.working || undefined} key={member.key}>
@@ -1401,6 +1410,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const [roomSettingsOpen, setRoomSettingsOpen] = useState(false)
   const [roomTitleDraft, setRoomTitleDraft] = useState('')
   const [roomPromptDraft, setRoomPromptDraft] = useState('')
+  const [roomNoticeDraft, setRoomNoticeDraft] = useState('')
   const [roomAvatarDraft, setRoomAvatarDraft] = useState('bear-honey')
   const [roomWorkspaceIds, setRoomWorkspaceIds] = useState<readonly WorkspaceId[]>([])
   const [projectTool, setProjectTool] = useState<ProjectToolKind | null>(null)
@@ -2081,7 +2091,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     }))
   }
 
-  const updateRoom = (roomId: string, patch: Partial<Pick<ChatRoom, 'title' | 'memberIds' | 'coordinatorId' | 'systemPrompt' | 'avatarId' | 'workspaceId' | 'workspaceIds' | 'archivedAt'>>): void => {
+  const updateRoom = (roomId: string, patch: Partial<Pick<ChatRoom, 'title' | 'memberIds' | 'coordinatorId' | 'systemPrompt' | 'notice' | 'avatarId' | 'workspaceId' | 'workspaceIds' | 'archivedAt'>>): void => {
     updateState(current => ({ ...current, rooms: current.rooms.map(room => room.roomId === roomId ? { ...room, ...patch, updatedAt: Date.now() } : room) }))
   }
 
@@ -2090,7 +2100,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const included = activeRoom.memberIds.includes(skillName)
     const memberIds = included ? activeRoom.memberIds.filter(name => name !== skillName) : [...activeRoom.memberIds, skillName]
     if (memberIds.length < 2) { setNotice(t('groupNeedsMember')); return }
-    if (!included) ensureLinked([skillName])
+    if (!included) {
+      ensureLinked([skillName])
+      // A member appearing silently in a roster is not an arrival. Every
+      // messaging client says who joined; this says it and what they are for.
+      const joined = memberContact(skillName)
+      if (joined !== undefined) {
+        const display = displayOf(joined, mode, state.personas)
+        setNotice(`${display.name} ${t('memberJoined')} · ${oneLineBio(joined.description)}`)
+      }
+    }
     updateRoom(activeRoom.roomId, {
       memberIds,
       coordinatorId: memberIds.includes(activeRoom.coordinatorId) ? activeRoom.coordinatorId : memberIds[0] ?? activeRoom.coordinatorId,
@@ -2237,6 +2256,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     setRoomTitleDraft(room.title)
     setRoomPromptDraft(room.systemPrompt ?? generatedGroupPrompt(room.title, room.memberIds.flatMap(id => memberContact(id) ?? [])))
     setRoomAvatarDraft(room.avatarId ?? ANIMAL_AVATARS[hashOf(room.roomId) % ANIMAL_AVATARS.length] ?? 'bear-honey')
+    setRoomNoticeDraft(room.notice ?? '')
     setRoomWorkspaceIds(room.workspaceIds ?? [room.workspaceId])
     setMemberQuery('')
     setRoomSettingsOpen(true)
@@ -2293,6 +2313,21 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const mentionMember = (name: string): void => {
     if (currentSessionId === undefined) return
     setNotice(attachToComposer(currentSessionId, `@${name} `) ? '' : t('attachFailed'))
+  }
+
+  /**
+   * Ask every member to answer the same question, independently.
+   *
+   * The most natural reason to put several Skills in one room is to hear each
+   * of them on the same question, and that was previously only reachable by
+   * writing the instruction out by hand every time. The text is explicit that
+   * the coordinator must not merge the answers: left to itself it summarises,
+   * and one blended voice is exactly what a group is not for.
+   */
+  const broadcastToMembers = (): void => {
+    if (currentSessionId === undefined || activeMembers.length < 2) return
+    const names = activeMembers.map(member => `@${displayOf(member, mode, state.personas).name}`).join(' ')
+    setNotice(attachToComposer(currentSessionId, `${names}\n${t('everyonePrompt')}\n\n`) ? '' : t('attachFailed'))
   }
 
   /** Show one workspace path in the desktop file manager. */
@@ -2835,7 +2870,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
           <button className={css.generatePrompt} type="button" disabled={groupMembers.length === 0} onClick={() => { const members = allContacts.filter(contact => groupMembers.includes(contact.id)); setGroupPrompt(generatedGroupPrompt(groupName.trim() || t('collabGroup'), members)) }}>{t('generateFromMembers')}</button>
           <div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>{t('bindProjects')}</strong><small>{t('bindDefaultHint')}</small></span><button type="button" onClick={() => { void addLinkedWorkspace('create') }}>{t('addDirectory')}</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={groupWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('create', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{groupWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div>
         </div> : null}<div className={css.memberToolbar}><div><strong>{t('pickMembers')}</strong><small>已选 {groupMembers.length} 个，点击成员可加入或剔出</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder="搜索昵称、原始 Skill、能力或 skills.sh…" aria-label={t('searchMembers')} autoComplete="off" spellCheck={false} type="search"/></div>
-        <div className={css.groupCandidates}>{visibleMemberContacts.map(contact => { const display = displayOf(contact, 'persona', state.personas); const included = groupMembers.includes(contact.id); return <button className={css.pickRow} data-included={included || undefined} type="button" key={contact.id} onClick={() => { setGroupMembers(current => included ? current.filter(id => id !== contact.id) : [...current, contact.id]) }}><AnimalAvatar avatarId={display.avatar} label={display.name}/><span className={css.pickCopy}><strong>{display.name}</strong><small>{contact.name} · {contact.description}</small></span><b>{included ? '−' : '＋'}</b></button> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'draft-group'))}</div>
+        <div className={css.groupCandidates}>{visibleMemberContacts.map(contact => { const display = displayOf(contact, 'persona', state.personas); const included = groupMembers.includes(contact.id); return <button className={css.pickRow} data-included={included || undefined} type="button" key={contact.id} onClick={() => { setGroupMembers(current => included ? current.filter(id => id !== contact.id) : [...current, contact.id]) }}><AnimalAvatar avatarId={display.avatar} label={display.name}/><span className={css.pickCopy}><strong>{display.name}</strong><small>{contact.name} · {oneLineBio(contact.description)}</small></span><b>{included ? '−' : '＋'}</b></button> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'draft-group'))}</div>
         </div><div className={css.groupFooter}><Button className={css.secondary} onClick={() => { setGroupOpen(false) }}>{t('cancel')}</Button><Button className={css.create} variant="primary" disabled={groupMembers.length < 2 || workspaceId === undefined} onClick={createGroup}>{t('create')}</Button></div>
     </Dialog> : null}
 
@@ -2851,6 +2886,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       coordinatorKey={activeRoom?.coordinatorId ?? ''}
       unattributedWork={unattributedWork}
       onMentionMember={mentionMember}
+      onBroadcast={broadcastToMembers}
       artifacts={artifacts}
       artifactsTraced={artifactsTraced}
       onArtifactOrigin={artifactOrigin}
@@ -2938,7 +2974,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
     {archiveConfirm !== null ? <Dialog className={css.confirmDialog} label="归档群组" onClose={() => { setArchiveConfirm(null) }}><h2>{t('archiveGroupTitle')}</h2><p>{t('archiveGroupBody')}</p><div className={css.confirmActions}><Button onClick={() => { setArchiveConfirm(null) }}>取消</Button><Button variant="danger" onClick={() => { updateRoom(archiveConfirm, { archivedAt: Date.now() }); setArchiveConfirm(null); setRoomSettingsOpen(false) }}>归档</Button></div></Dialog> : null}
 
-    {roomSettingsOpen && activeRoom?.type === 'group' ? <Drawer className={`${css.panel} ${css.groupSettingsPanel}`} label={t('groupSettings')} onClose={() => { setRoomSettingsOpen(false) }}><div className={css.panelTop}><GroupAvatar avatarId={roomAvatarDraft} label={activeRoom.title}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setRoomSettingsOpen(false) }}>×</IconButton></div><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={roomAvatarDraft === avatarId} key={avatarId} onClick={() => { setRoomAvatarDraft(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div><label className={css.field}><span>{t('groupNameLabel')}</span><input value={roomTitleDraft} onChange={event => { setRoomTitleDraft(event.target.value) }}/></label><label className={css.field}><span>{t('groupRolePrompt')}</span><textarea value={roomPromptDraft} onChange={event => { setRoomPromptDraft(event.target.value) }} placeholder={t('groupRolePlaceholder')}/></label><button className={css.generatePrompt} type="button" onClick={() => { setRoomPromptDraft(generatedGroupPrompt(roomTitleDraft.trim() || activeRoom.title, activeMembers)) }}>{t('regenerateFromMembers')}</button><div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>{t('bindProjects')}</strong><small>{t('bindingHint')}</small></span><button type="button" onClick={() => { void addLinkedWorkspace('settings') }}>{t('addDirectory')}</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={roomWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('settings', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{roomWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div><div className={css.panelHint}>{t('memberPanelHint')}</div><div className={css.memberToolbar}><div><strong>{t('allMembers')}</strong><small>{activeRoom.memberIds.length} 个已加入</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder={t('searchMembersPlaceholder')} aria-label={t('searchMembers')} autoComplete="off" spellCheck={false} type="search"/></div><div className={css.roomMemberGrid}>{visibleMemberContacts.map(contact => { const included = activeRoom.memberIds.includes(contact.name); const coordinator = activeRoom.coordinatorId === contact.name; const display = displayOf(contact, 'persona', state.personas); return <div className={css.roomMemberItem} data-included={included || undefined} key={contact.id}><button type="button" className={css.memberPersona} disabled={!included} onClick={() => { updateRoom(activeRoom.roomId, { coordinatorId: contact.name }) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span><strong>{display.name}</strong><small>{coordinator ? t('coordinator') : contact.name}</small></span></button><button type="button" className={css.memberToggle} onClick={() => { toggleActiveRoomMember(contact.name) }}>{included ? '−' : '＋'}</button></div> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'active-group'))}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { const linked = roomWorkspaceIds.length === 0 ? [activeRoom.workspaceId] : roomWorkspaceIds; if (roomTitleDraft.trim() !== '') updateRoom(activeRoom.roomId, { title: roomTitleDraft.trim(), systemPrompt: roomPromptDraft.trim(), avatarId: roomAvatarDraft, workspaceId: linked[0] ?? activeRoom.workspaceId, workspaceIds: linked }); setRoomSettingsOpen(false) }}>{t('saveGroup')}</Button><Button className={css.danger} variant="danger" onClick={() => { setArchiveConfirm(activeRoom.roomId) }}>{t('archiveGroup')}</Button></div></Drawer> : null}
+    {roomSettingsOpen && activeRoom?.type === 'group' ? <Drawer className={`${css.panel} ${css.groupSettingsPanel}`} label={t('groupSettings')} onClose={() => { setRoomSettingsOpen(false) }}><div className={css.panelTop}><GroupAvatar avatarId={roomAvatarDraft} label={activeRoom.title}/><IconButton className={css.close} variant="ghost" aria-label="关闭" onClick={() => { setRoomSettingsOpen(false) }}>×</IconButton></div><div className={css.groupAvatarLibrary}>{ANIMAL_AVATARS.map(avatarId => <button type="button" data-selected={roomAvatarDraft === avatarId} key={avatarId} onClick={() => { setRoomAvatarDraft(avatarId) }}><GroupAvatar avatarId={avatarId} label={avatarId} small/></button>)}</div><label className={css.field}><span>{t('groupNameLabel')}</span><input value={roomTitleDraft} onChange={event => { setRoomTitleDraft(event.target.value) }}/></label><label className={css.field}><span>{t('groupRolePrompt')}</span><textarea value={roomPromptDraft} onChange={event => { setRoomPromptDraft(event.target.value) }} placeholder={t('groupRolePlaceholder')}/></label><label className={css.field}><span>{t('roomNotice')}</span><textarea value={roomNoticeDraft} onChange={event => { setRoomNoticeDraft(event.target.value) }} placeholder={t('roomNoticePlaceholder')}/><small className={css.fieldHint}>{t('roomNoticeHint')}</small></label><button className={css.generatePrompt} type="button" onClick={() => { setRoomPromptDraft(generatedGroupPrompt(roomTitleDraft.trim() || activeRoom.title, activeMembers)) }}>{t('regenerateFromMembers')}</button><div className={css.workspaceBindings}><div className={css.bindingHeader}><span><strong>{t('bindProjects')}</strong><small>{t('bindingHint')}</small></span><button type="button" onClick={() => { void addLinkedWorkspace('settings') }}>{t('addDirectory')}</button></div>{workspaces.items.map(workspace => <button type="button" data-selected={roomWorkspaceIds.includes(workspace.workspaceId)} key={workspace.workspaceId} onClick={() => { toggleWorkspaceBinding('settings', workspace.workspaceId) }}><IconFolderOpenOutline16/><span><strong>{workspace.title}</strong><small>{workspace.path}</small></span><b>{roomWorkspaceIds.includes(workspace.workspaceId) ? '✓' : '＋'}</b></button>)}</div><div className={css.panelHint}>{t('memberPanelHint')}</div><div className={css.memberToolbar}><div><strong>{t('allMembers')}</strong><small>{activeRoom.memberIds.length} 个已加入</small></div><input value={memberQuery} onChange={event => { setMemberQuery(event.target.value) }} placeholder={t('searchMembersPlaceholder')} aria-label={t('searchMembers')} autoComplete="off" spellCheck={false} type="search"/></div><div className={css.roomMemberGrid}>{visibleMemberContacts.map(contact => { const included = activeRoom.memberIds.includes(contact.name); const coordinator = activeRoom.coordinatorId === contact.name; const display = displayOf(contact, 'persona', state.personas); return <div className={css.roomMemberItem} data-included={included || undefined} key={contact.id}><button type="button" className={css.memberPersona} disabled={!included} onClick={() => { updateRoom(activeRoom.roomId, { coordinatorId: contact.name }) }}><AnimalAvatar avatarId={display.avatar} label={display.name} seed={contact.id}/><span><strong>{display.name}</strong><small>{coordinator ? t('coordinator') : contact.name}</small></span></button><button type="button" className={css.memberToggle} onClick={() => { toggleActiveRoomMember(contact.name) }}>{included ? '−' : '＋'}</button></div> })}{deferredMemberQuery.length >= 2 && externalPhase === 'loading' ? <div className={css.status}>{t('searchingExternal')}</div> : null}{externalResults.map(result => marketplaceRow(result, 'active-group'))}</div><div className={css.profileActions}><Button className={css.primary} variant="primary" onClick={() => { const linked = roomWorkspaceIds.length === 0 ? [activeRoom.workspaceId] : roomWorkspaceIds; if (roomTitleDraft.trim() !== '') updateRoom(activeRoom.roomId, { title: roomTitleDraft.trim(), systemPrompt: roomPromptDraft.trim(), notice: roomNoticeDraft.trim(), avatarId: roomAvatarDraft, workspaceId: linked[0] ?? activeRoom.workspaceId, workspaceIds: linked }); setRoomSettingsOpen(false) }}>{t('saveGroup')}</Button><Button className={css.danger} variant="danger" onClick={() => { setArchiveConfirm(activeRoom.roomId) }}>{t('archiveGroup')}</Button></div></Drawer> : null}
   </div>
 }
 

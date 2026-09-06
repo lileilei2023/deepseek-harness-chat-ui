@@ -34,6 +34,7 @@ import type {
   SkillChatSidecarSendRequest,
   SkillChatSidecarStartRequest,
   SkillChatSidecarValue,
+  SkillChatRoomDocument,
   SkillChatStateDocument,
   SkillLinkRequest,
   SkillLinkValue,
@@ -235,8 +236,7 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
       text: ({ scope }) => {
         const sessionId = stringId(scope)
         if (sessionId === undefined) return ''
-        const roomSession = this.cachedState.roomSessions.find(item => item.harnessSessionId === sessionId)
-        const room = roomSession === undefined ? undefined : this.cachedState.rooms.find(item => item.roomId === roomSession.roomId)
+        const room = this.roomForSession(sessionId)
         if (room?.type !== 'group') return ''
         const configuredPrompt = room.systemPrompt?.trim()
         if (configuredPrompt !== undefined && configuredPrompt !== '') return configuredPrompt
@@ -255,6 +255,19 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
           + '只陈述真实发生的事。'
       },
     }), 'workBuddySkillCatalog.roomSystemPrompt()')
+    // The room's standing note. Separate from the group brief because it
+    // applies to a direct chat and a plain conversation too, and because the
+    // brief describes the team while this describes the work.
+    ctx.effect(() => ctx.systemPrompt.section({
+      name: 'skill-chat:room-notice',
+      order: ctx.systemPrompt.getSectionOrder('TEAM_POLICY'),
+      text: ({ scope }) => {
+        const sessionId = stringId(scope)
+        if (sessionId === undefined) return ''
+        const notice = this.roomForSession(sessionId)?.notice?.trim()
+        return notice === undefined || notice === '' ? '' : `这个对话的长期约定（由用户设定，优先于临时指示）：\n${notice}`
+      },
+    }), 'workBuddySkillCatalog.roomNotice()')
     // Imported Skills were written against other agents' runtimes. Their
     // instructions say things like "use the glob tool" or open with `require`,
     // and once loaded those instructions sit right next to the task and win
@@ -1001,6 +1014,16 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
    * @param id - the stored contact id.
    * @returns a name the model can pass to the `skill` tool.
    */
+  /**
+   * The Room one Harness session belongs to.
+   * @param sessionId - the session being prompted.
+   * @returns the owning Room, or undefined for a session no Room claims.
+   */
+  private roomForSession(sessionId: string): SkillChatRoomDocument | undefined {
+    const roomSession = this.cachedState.roomSessions.find(item => item.harnessSessionId === sessionId)
+    return roomSession === undefined ? undefined : this.cachedState.rooms.find(item => item.roomId === roomSession.roomId)
+  }
+
   private memberSkillName(roomId: string, key: string): string {
     const persona = this.cachedState.personas[key]?.originalName
     if (persona !== undefined && persona !== '') return persona

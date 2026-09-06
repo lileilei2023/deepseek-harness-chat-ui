@@ -1030,7 +1030,14 @@
 @keyframes dsChatPulse { 0%, 100% { box-shadow: 0 0 0 0 var(--ds-chat-accent-soft); } 50% { box-shadow: 0 0 0 4px var(--ds-chat-accent-soft); } }
 @media (prefers-reduced-motion: reduce) { .workingDot { animation: none; } }
 
+/* Under the control it explains, not floating beside it: the notice needs a
+ * sentence saying what it is for, or it reads as a second prompt box. */
+.fieldHint { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); line-height: 1.5; }
 .membersPanel { min-height: 0; flex: 1; overflow: auto; padding: 8px; }
+.broadcastRow { display: grid; width: 100%; gap: 2px; margin-bottom: 6px; padding: 9px 10px; border: var(--ds-chat-hairline) dashed var(--ds-chat-border-strong); border-radius: 10px; background: transparent; text-align: left; cursor: pointer; }
+.broadcastRow span { color: var(--ds-chat-accent-text); font-size: var(--ds-chat-text-body); font-weight: 500; }
+.broadcastRow small { color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); }
+.broadcastRow:hover { background: var(--ds-chat-hover); }
 .memberRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; }
 .memberRow[data-working] { background: var(--ds-chat-accent-soft); }
 .memberRowCopy { display: grid; min-width: 0; gap: 1px; }

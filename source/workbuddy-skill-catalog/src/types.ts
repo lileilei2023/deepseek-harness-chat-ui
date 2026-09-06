@@ -267,6 +267,8 @@ export interface SkillChatRoomDocument {
   readonly memberIds: readonly string[]
   readonly coordinatorId: string
   readonly systemPrompt?: string
+  /** Standing note prepended to every session started in this room. */
+  readonly notice?: string
   readonly sessionIds: readonly string[]
   readonly activeSessionId?: string
   readonly createdAt: number

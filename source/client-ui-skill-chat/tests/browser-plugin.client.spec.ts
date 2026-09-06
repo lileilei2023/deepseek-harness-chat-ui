@@ -8,7 +8,7 @@ import {
   SkillContactsBrowser, type ContactGroup, type SkillContact, memberForSubagent, parseDiff, preferLocalState } from '../src/client/SkillContactsBrowser.tsx'
 import {
   activeHarnessSession, type ChatRoom, defaultPersona, ensurePersonas, migrateLegacyState,
-  migrateMemberKeys, roomForSession, skillNameOf,
+  migrateMemberKeys, oneLineBio, roomForSession, skillNameOf,
 } from '../src/client/model.ts'
 import { inject, mergeContacts, mountSkillChatUi } from '../src/client/index.ts'
 import { createSkinRuntime, SKIN_PREFERENCE_KEY, validateSkinPackage } from '../src/client/skin/index.ts'
@@ -503,5 +503,28 @@ describe('memberForSubagent', () => {
     // whoever sorts first would put a working dot on an idle member.
     expect(memberForSubagent('整理一下前面的结论', members)).toBeUndefined()
     expect(memberForSubagent('', members)).toBeUndefined()
+  })
+})
+
+describe('oneLineBio', () => {
+  it('keeps the sentence a person reads and drops the router keywords', () => {
+    // A SKILL.md description is written for a router: the job first, then every
+    // trigger word the author could think of. Truncated into a roster row that
+    // became a wall of keywords.
+    const raw = '分析 A 股主线与板块轮动。触发词：复盘、涨停、龙虎榜、题材、北向资金、industry analysis'
+    expect(oneLineBio(raw)).toBe('分析 A 股主线与板块轮动')
+    expect(oneLineBio('Build 3-statement models in Excel. Pairs with excel-author.'))
+      .toBe('Build 3-statement models in Excel')
+  })
+
+  it('keeps the whole line when the first sentence is only a title', () => {
+    // "Codex." is not a description; the fragment reads worse than the line.
+    expect(oneLineBio('Codex. Delegate coding tasks to the Codex CLI agent.'))
+      .toContain('Delegate coding tasks')
+  })
+
+  it('handles an empty or single-clause description without inventing text', () => {
+    expect(oneLineBio('   ')).toBe('')
+    expect(oneLineBio('Search arXiv papers by keyword')).toBe('Search arXiv papers by keyword')
   })
 })

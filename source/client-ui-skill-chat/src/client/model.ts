@@ -49,6 +49,15 @@ export interface ChatRoom {
   readonly memberIds: readonly string[]
   readonly coordinatorId: string
   readonly systemPrompt?: string
+  /**
+   * A standing note every session in this room starts with.
+   *
+   * A room's system prompt describes the team; this describes the work — the
+   * conventions, the current goal, the thing you keep having to repeat. It is
+   * the cheapest form of memory a room can have, and unlike a session it
+   * outlives the conversation it was written in.
+   */
+  readonly notice?: string
   readonly sessionIds: readonly string[]
   readonly activeSessionId?: string
   readonly createdAt: number
@@ -147,6 +156,32 @@ export function stableHash(value: string): number {
   return hash >>> 0
 }
 
+/**
+ * One line saying what a Skill is for.
+ *
+ * A `SKILL.md` description is written for a router, not a reader: it opens with
+ * the job and then lists every trigger word the author could think of. Truncated
+ * into a roster row it becomes a wall of keywords, which is where the
+ * personification stopped. The first sentence is the part a person actually
+ * reads.
+ * @param description - the raw Skill description.
+ * @returns a single readable line, or the description when it has no sentence break.
+ */
+export function oneLineBio(description: string): string {
+  const text = description.trim().replace(/\s+/gu, ' ')
+  if (text === '') return ''
+  // Sentence-final punctuation in either script, plus the em dash a lot of
+  // descriptions use where a full stop belongs.
+  const end = text.search(/[。．.!?！？；;]|\s—\s/u)
+  const first = end === -1 ? text : text.slice(0, end).trim()
+  // A first "sentence" of two words is a title, not a description; the whole
+  // line reads better than a fragment.
+  return first.length >= 8 ? first.slice(0, BIO_MAX_CHARS) : text.slice(0, BIO_MAX_CHARS)
+}
+
+/** Characters kept for a one-line description; beyond this a row cannot show it anyway. */
+const BIO_MAX_CHARS = 72
+
 function capabilityList(contact: SkillContact): readonly string[] {
   const values = `${contact.description} ${contact.whenToUse ?? ''}`
     .split(/[。；;,.，\n]/u)
@@ -177,7 +212,7 @@ export function defaultPersona(contact: SkillContact, now = Date.now()): SkillPe
     roleLabel: contact.source === 'harness'
       ? '项目内 AI 同事'
       : contact.source === 'workbuddy' ? `${contact.sourceShort ?? 'WorkBuddy'} 专家` : '社区 Skill 专家',
-    bio: contact.description,
+    bio: oneLineBio(contact.description),
     capabilities: capabilityList(contact),
     source: contact.sourceLabel,
     ...(contact.homepage === undefined ? {} : { homepage: contact.homepage }),
@@ -225,7 +260,7 @@ export function ensurePersonas(
       ...staleAvatar ? { avatarId: generated.avatarId } : {},
       ...current.customizedName ? {} : { displayName: generatedName },
       originalName: contact.name,
-      bio: contact.description,
+      bio: oneLineBio(contact.description),
       capabilities: capabilityList(contact),
       // Derived from the contact, never chosen by the user, so it follows the
       // catalog: personas minted while every root reported WorkBuddy keep

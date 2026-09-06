@@ -961,7 +961,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const abort = new AbortController()
     const timer = window.setTimeout(() => {
       void saveState(state, abort.signal).catch((error: unknown) => {
-        if (!abort.signal.aborted) setNotice(`状态保存失败：${error instanceof Error ? error.message : String(error)}`)
+        if (abort.signal.aborted) return
+        const reason = error instanceof Error ? error.message : String(error)
+        // The one failure a person can actually fix, and the one whose own
+        // message says nothing: the browser has this build's client half while
+        // the Host process still has an older one. Updating a plugin does not
+        // reload the Host — only restarting it does. Nothing was written, so
+        // the stored document is intact until then.
+        setNotice(reason.includes('unsupported or malformed state')
+          ? t('staleHost')
+          : `${t('saveFailed')}：${reason}`)
       })
     }, 180)
     return () => { window.clearTimeout(timer); abort.abort() }

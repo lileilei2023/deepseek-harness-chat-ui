@@ -7935,6 +7935,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			memberWorking: "正在处理",
 			roomNotice: "群公告",
 			runHistory: "运行记录",
+			saveFailed: "状态保存失败",
+			staleHost: "宿主还在跑旧版本的插件，本次改动没有保存（已存的数据没有动）。重启 dsh 后即可。",
 			versions: "历史版本",
 			renameFile: "重命名",
 			newFileHere: "在这里新建文件",
@@ -8260,6 +8262,8 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			memberWorking: "working",
 			roomNotice: "Room notice",
 			runHistory: "Run history",
+			saveFailed: "Could not save",
+			staleHost: "The Host is still running an older build of this plugin, so this change was not saved (nothing stored was touched). Restart dsh and it will be.",
 			versions: "Versions",
 			renameFile: "Rename",
 			newFileHere: "New file here",
@@ -10274,7 +10278,9 @@ ${roster}
 				const abort = new AbortController();
 				const timer = window.setTimeout(() => {
 					saveState(state, abort.signal).catch((error) => {
-						if (!abort.signal.aborted) setNotice(`状态保存失败：${error instanceof Error ? error.message : String(error)}`);
+						if (abort.signal.aborted) return;
+						const reason = error instanceof Error ? error.message : String(error);
+						setNotice(reason.includes("unsupported or malformed state") ? t("staleHost") : `${t("saveFailed")}：${reason}`);
 					});
 				}, 180);
 				return () => {

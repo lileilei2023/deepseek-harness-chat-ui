@@ -1743,13 +1743,21 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     const original = headline.textContent
     headline.textContent = activeRoom.type === 'general' ? t('startNewChat') : `和「${activeRoom.title}」一起开始`
     welcome.dataset.skillChatWelcome = activeRoom.type
-    welcome.dataset.skillChatHint = activeRoom.type === 'general' ? t('plainChatHint') : activeRoom.type === 'group' ? t('composerGroup') : t('composerSkill')
+    // A group's greeting used to say only "type a message, or @ a member",
+    // which is true of every group and tells you nothing about this one. The
+    // roster is what a person opening a room actually needs.
+    const roster = activeMembers.map(member => `@${displayOf(member, mode, state.personas).name}`).join(' ')
+    welcome.dataset.skillChatHint = activeRoom.type === 'general'
+      ? t('plainChatHint')
+      : activeRoom.type === 'group'
+        ? (roster === '' ? t('composerGroup') : `${t('composerGroup')} · ${roster}`)
+        : t('composerSkill')
     return () => {
       headline.textContent = original
       delete welcome.dataset.skillChatWelcome
       delete welcome.dataset.skillChatHint
     }
-  }, [activeRoom])
+  }, [activeMembers, activeRoom, mode, state.personas, t])
 
   const bindChat = (sessionId: SessionId, binding: ChatBinding): void => {
     setChatBindings(current => ({ ...current, [sessionId]: binding }))
@@ -2864,7 +2872,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       onDrop={(event) => { event.preventDefault(); if (dragRoom !== null) reorderRooms(dragRoom, room.roomId); setDragRoom(null); setDropRoom(null) }}
       onContextMenu={(event) => { event.preventDefault(); setRoomMenu({ roomId: room.roomId, x: event.clientX, y: event.clientY }) }}
     >
-      <HoverCard anchor={<RoomRow className={css.roomRow} selected={activeRoom?.roomId === room.roomId} onClick={() => { void openRoom(room) }}><span className={css.avatarStatusWrap}>{roomAvatar(room)}{unread > 0 ? <span className={css.unreadBadge}>{unread > 99 ? '99+' : unread}</span> : null}</span><span className={css.copy}><span className={css.nameLine}><span className={css.name}>{room.title}</span><span className={css.source}>{meta}</span></span><span className={css.description} data-running={running || undefined}>{preview}</span></span><span className={css.time}>{pinned ? <span className={css.pinMark} title={t('pinned')}>▴</span> : null}{roomTime(room.updatedAt)}</span></RoomRow>} content={hover} copyLabel={t('copyRoom')} copiedLabel={t('copied')}/>
+      <HoverCard anchor={<RoomRow className={css.roomRow} selected={activeRoom?.roomId === room.roomId} onClick={() => { void openRoom(room) }}><span className={css.avatarStatusWrap}>{roomAvatar(room)}{unread > 0 ? <span className={css.unreadBadge}>{unread > 99 ? '99+' : unread}</span> : null}</span><span className={css.copy}><span className={css.nameLine}><span className={css.name}>{room.title}</span>{meta === '' ? null : <span className={css.source}>{meta}</span>}</span><span className={css.description} data-running={running || undefined}>{preview}</span></span><span className={css.time}>{pinned ? <span className={css.pinMark} title={t('pinned')}>▴</span> : null}{roomTime(room.updatedAt)}</span></RoomRow>} content={hover} copyLabel={t('copyRoom')} copiedLabel={t('copied')}/>
       {/* Keyboard and touch reach the same actions the right-click menu holds;
         * a drag-only or right-click-only affordance is unreachable for both. */}
       <button

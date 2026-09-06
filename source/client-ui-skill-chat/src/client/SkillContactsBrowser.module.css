@@ -1182,10 +1182,11 @@
   backdrop-filter: none;
 }
 
+/* A flat ground. The radial wash that used to sit in the top-left corner was
+ * the only decoration in the product and pointed at nothing; the one thing that
+ * draws the eye here should be the members' working dots. */
 :global([data-conversation-scroll]) {
-  background:
-    radial-gradient(circle at 10% 20%, var(--ds-chat-accent-soft), transparent 24%),
-    var(--ds-chat-fill-quaternary);
+  background: var(--ds-chat-fill-quaternary);
 }
 
 :global([data-chat-flow]) {
@@ -1669,10 +1670,12 @@
 :global([data-skill-chat-welcome]) {
   width: min(560px, calc(100vw - 380px));
   padding: 22px 28px 18px;
-  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border: 0;
   border-radius: 18px;
-  background: var(--ds-chat-surface);
-  box-shadow: var(--ds-chat-shadow-1);
+  /* No card. Nothing sits behind the greeting, so a border and a shadow were
+   * separating it from nothing — the room's own ground reads as one surface. */
+  background: transparent;
+  box-shadow: none;
 }
 
 /* The room's portrait, published as a data URI by the browser component. The

@@ -96,14 +96,18 @@
 .button:disabled,
 .iconButton:disabled { opacity: .4; cursor: default; }
 
+/* The fill, not the accent itself: this button carries white text at 12-13px,
+ * and white on the brand green measures 2.57:1. Fixing it on the variant rather
+ * than on each caller is also what makes it stick — `[data-variant]` outranks a
+ * plain class, so a caller's own background rule loses to this one. */
 .button[data-variant='primary'] {
   border-color: transparent;
   color: var(--ds-chat-on-accent);
-  background: var(--ds-chat-accent-solid);
+  background: var(--ds-chat-accent-fill);
   font-weight: var(--ds-chat-weight-semibold);
 }
 
-.button[data-variant='primary']:hover:not(:disabled) { background: var(--ds-chat-accent-hover); }
+.button[data-variant='primary']:hover:not(:disabled) { background: var(--ds-chat-accent-hover-fill, color-mix(in srgb, var(--ds-chat-accent-fill) 88%, black)); }
 
 .button[data-variant='ghost'],
 .iconButton[data-variant='ghost'] {

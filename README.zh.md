@@ -36,6 +36,13 @@ DeepSeek Harness 提供了强大的 Agent Runtime，但默认界面更偏向 Ses
 
 ![创建 DeepSeek Harness 多智能体群组](docs/images/deepseek-harness-chat-ui-groups.png)
 
+### 看得见谁在干活
+
+成员面板列出这个房间里的每位成员在做什么——状态来自宿主为协调者起的那些后台子代理，
+不是一句叙述。点头像旁的 @ 直接指名，`@所有人` 让每位成员各答一次而不合并成一段。
+
+![DeepSeek Harness Chat UI 成员面板](docs/images/deepseek-harness-chat-ui-members.png)
+
 ### 定时自动化
 
 每条自动化都跑在它所属的房间里。选一张场景卡片即可预填名称、提示词和周期，也可以从空白开始。

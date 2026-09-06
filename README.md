@@ -36,6 +36,15 @@ Search installed Skills, add or remove them like group members, choose a circula
 
 ![Create a DeepSeek Harness multi-agent group](docs/images/deepseek-harness-chat-ui-groups.png)
 
+### See who is working
+
+The members panel says what each member of the room is doing. The state comes from
+the background subagents the coordinator actually started, not from a narration.
+The `@` beside a member addresses them directly; `@everyone` asks each of them to
+answer once rather than merging into a single voice.
+
+![The DeepSeek Harness Chat UI members panel](docs/images/deepseek-harness-chat-ui-members.png)
+
 ### Scheduled automations
 
 Every automation runs in the room it belongs to. Pick a scenario to prefill the

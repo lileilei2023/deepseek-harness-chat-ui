@@ -65,6 +65,16 @@ dsh web --port 7811 --no-open
 鉴权只认页面自己的 cookie——所以从页面 console 里 `fetch` 调，curl 会 401。
 这是绕开 UI 直接验一个 Remote 最快的方式。
 
+重拍 README 截图：
+
+```bash
+node scripts/shoot.mjs 'http://127.0.0.1:7811/?token=…' docs/images
+```
+
+它用 DevTools 协议驱动无头 Chrome，拍的是浏览器真正画出来的东西。**务必指向一个
+自己的 `DSH_HOME` 演示实例**——这些图会进仓库，而真实实例里是你自己的对话。没有
+配 API Key 的实例，会话区会显示一条红色的凭据报错，那几张就不要用。
+
 **跑一个演示实例务必带 `--no-open`**：否则 `dsh web` 会打开用户的真实浏览器，
 那个标签页可能持有旧的 bundle 与陈旧的 localStorage，会把服务端状态覆盖掉，
 表现为「我改的东西没生效」或「数据莫名其妙没了」。

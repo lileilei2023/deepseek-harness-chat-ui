@@ -113,11 +113,17 @@ automationRuns），或至少 debounce + 差量。
 `bindLegacyGroups`、`parseAnsiLines`、`migrateMemberKeys`、`memberForSubagent`、
 `oneLineBio`。**没有任何组件渲染测试**。
 
-### 11. 演示媒体是手工流程
+### 11. 三张截图还欠一次带模型的重拍
 
-`scratchpad` 里的 `shoot.mjs` / `record.mjs` 不在仓库里，每次改 UI 都要手工重录
-README 的截图和 GIF。应该收进 `scripts/` 并写进文档。**这一轮的 UI 改动没有
-重拍截图**，`docs/images/` 里的五张仍是上一轮的界面。
+`scripts/shoot.mjs` 已经进仓库（用法见 CLAUDE.md）。这一轮用它重拍了 `themes`
+（旧图还画着第七轮已撤回的「夜航」皮肤，是错的）、`groups`（能看到一句话简介的
+改进），并新增了 `members`。
+
+`main`、`dark`、`automations` **没有换**：演示实例没有 API Key，会话区里是一条
+「本轮运行失败 · no API key」的红色报错，放进 README 会让人以为产品是坏的。这三张
+要等一次配了模型的演示实例再拍。
+
+`record.mjs`（README 的 GIF）仍不在仓库里。
 
 ---
 

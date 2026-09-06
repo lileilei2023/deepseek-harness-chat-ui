@@ -80,6 +80,13 @@ interface RoomArtifact {
   readonly revisions?: number
 }
 
+/** One earlier state of a produced file, from the workspace's git history. */
+interface ArtifactVersion {
+  readonly ref: string
+  readonly at: number
+  readonly subject: string
+}
+
 interface TerminalSnapshot {
   readonly terminalId: string
   readonly text: string
@@ -169,6 +176,15 @@ interface SkillContactsInjected {
   roomArtifacts: (workspaceId: WorkspaceId, sessionIds: readonly string[], signal: AbortSignal) => Promise<{
     readonly files: readonly RoomArtifact[]
     readonly unavailable: boolean
+  }>
+  artifactHistory: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<{
+    readonly available: boolean
+    readonly versions: readonly ArtifactVersion[]
+    readonly dirty: boolean
+  }>
+  artifactDiff: (workspaceId: WorkspaceId, path: string, range: { from?: string; to?: string }, signal: AbortSignal) => Promise<{
+    readonly patch: string
+    readonly truncated: boolean
   }>
   readTerminal: (sessionId: SessionId, terminalId: string, page: { offset?: number; count?: number }, signal: AbortSignal) => Promise<TerminalSnapshot>
   signalTerminal: (sessionId: SessionId, terminalId: string, kind: 'SIGINT' | 'SIGTERM', signal: AbortSignal) => Promise<TerminalSnapshot>
@@ -719,6 +735,10 @@ interface WorkbenchDrawerProps {
   readonly artifacts: readonly RoomArtifact[]
   readonly artifactsTraced: boolean
   readonly onArtifactOrigin: (artifact: RoomArtifact) => string | null
+  readonly history: { readonly available: boolean; readonly versions: readonly ArtifactVersion[]; readonly dirty: boolean } | null
+  readonly diff: string | null
+  readonly onArtifactDiff: (from: string, to?: string) => void
+  readonly onCloseArtifactDiff: () => void
   readonly artifactsBusy: boolean
   readonly artifactRestOpen: boolean
   readonly fileQuery: string
@@ -1155,6 +1175,41 @@ function ProjectFileView(
   </>
 }
 
+/**
+ * The previewed file, with whatever history the workspace can show for it.
+ *
+ * Both the deliverables pane and the files pane render this: a report you are
+ * reading has the same question either way — what did the last pass change.
+ * @param props - the drawer's props.
+ * @returns the version bar and either the file or a diff.
+ */
+function filePreview(props: WorkbenchDrawerProps): React.JSX.Element | null {
+  if (props.file === null) return null
+  const history = props.history
+  return <>
+    {history === null || !history.available || history.versions.length === 0
+      ? null
+      : <div className={css.versionBar}>
+        <span>{tr('versions')}</span>
+        {history.dirty
+          ? <button type="button" onClick={() => { props.onArtifactDiff(history.versions[0]?.ref ?? '') }}>{tr('uncommittedChange')}</button>
+          : null}
+        {history.versions.slice(0, 8).map((version, index) => <button
+          type="button"
+          key={version.ref}
+          title={version.subject}
+          onClick={() => { props.onArtifactDiff(history.versions[index + 1]?.ref ?? version.ref, version.ref) }}
+        >{roomTime(version.at)}</button>)}
+      </div>}
+    {props.diff === null
+      ? <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered} onReveal={props.onRevealFile}/>
+      : <div className={css.versionDiff}>
+        <button className={css.versionBack} type="button" onClick={props.onCloseArtifactDiff}>{tr('backToFile')}</button>
+        {props.diff === '' ? <div className={css.status}>{tr('loading')}</div> : <DiffView text={props.diff}/>}
+      </div>}
+  </>
+}
+
 function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
   const title = props.tool === 'members'
     ? tr('membersPanel')
@@ -1242,7 +1297,7 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
         <div className={css.filePreview}>
           {props.file === null
             ? <div className={css.drawerEmpty}>{tr('pickArtifactHint')}</div>
-            : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered} onReveal={props.onRevealFile}/>}
+            : filePreview(props)}
         </div>
       </div> : null}
       {props.tool === 'files' ? <div className={css.fileWorkbench}>
@@ -1314,7 +1369,7 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
               onClick={() => { props.onPreviewFile(item.path) }}
             >{item.name}<b onClick={(event) => { event.stopPropagation(); props.onCloseFile(item.path) }}>×</b></button>)}
           </div>}
-          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : <ProjectFileView file={props.file} rendered={props.renderedFile} onToggle={props.onToggleRendered} onReveal={props.onRevealFile}/>}
+          {props.file === null ? <div className={css.drawerEmpty}>{tr('pickFileHint')}</div> : filePreview(props)}
         </div>
       </div> : null}
       {props.tool === 'diff' ? <div className={css.diffWorkbench}>
@@ -1397,7 +1452,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
-    linkSkill, forkSession, messageSeq, recentProjectFiles, roomArtifacts, readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
+    linkSkill, forkSession, messageSeq, recentProjectFiles, roomArtifacts, artifactHistory, artifactDiff,
+    readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
   const sessions = useSessions(value => value)
@@ -1458,6 +1514,16 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   // caption, because "what this team produced" and "what changed on disk" are
   // different claims and the panel should not make the stronger one by mistake.
   const [artifactsTraced, setArtifactsTraced] = useState(false)
+  // The previewed file's earlier states, and the one being compared against.
+  // `available: false` means the workspace is not a repository, which the panel
+  // says rather than showing an empty history as if nothing had changed.
+  const [artifactHistoryValue, setArtifactHistoryValue] = useState<{
+    path: string
+    available: boolean
+    versions: readonly ArtifactVersion[]
+    dirty: boolean
+  } | null>(null)
+  const [artifactDiffPatch, setArtifactDiffPatch] = useState<string | null>(null)
   const [artifactsBusy, setArtifactsBusy] = useState(false)
   const [artifactRestOpen, setArtifactRestOpen] = useState(false)
   // Notification.permission is not reactive, so the prompt's outcome needs a
@@ -2010,6 +2076,32 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       .finally(() => { if (!abort.signal.aborted) setArtifactsBusy(false) })
     return () => { abort.abort() }
   }, [activeRoom, projectTool, recentProjectFiles, roomArtifacts, state.roomSessions, workspaceId])
+
+  /** Load the previewed file's history whenever the preview changes. */
+  useEffect(() => {
+    setArtifactDiffPatch(null)
+    if (projectFile === null || workspaceId === undefined) { setArtifactHistoryValue(null); return }
+    const path = projectFile.path
+    const abort = new AbortController()
+    void artifactHistory(workspaceId, path, abort.signal).then((value) => {
+      if (!abort.signal.aborted) setArtifactHistoryValue({ path, ...value })
+    }, () => { if (!abort.signal.aborted) setArtifactHistoryValue(null) })
+    return () => { abort.abort() }
+  }, [artifactHistory, projectFile, workspaceId])
+
+  /**
+   * Show what changed between two states of the previewed file.
+   * @param from - the older commit; the newest commit when comparing with the working copy.
+   * @param to - the newer commit, or undefined for the working copy.
+   */
+  const showArtifactDiff = (from: string, to?: string): void => {
+    if (projectFile === null || workspaceId === undefined) return
+    const abort = new AbortController()
+    setArtifactDiffPatch('')
+    void artifactDiff(workspaceId, projectFile.path, { from, ...to === undefined ? {} : { to } }, abort.signal)
+      .then((value) => { setArtifactDiffPatch(value.patch === '' ? tr('noArtifactChange') : value.patch) },
+        (error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
+  }
 
   /**
    * Name the member a produced file came from.
@@ -3042,6 +3134,10 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       artifacts={artifacts}
       artifactsTraced={artifactsTraced}
       onArtifactOrigin={artifactOrigin}
+      history={artifactHistoryValue !== null && artifactHistoryValue.path === projectFile?.path ? artifactHistoryValue : null}
+      diff={artifactDiffPatch}
+      onArtifactDiff={showArtifactDiff}
+      onCloseArtifactDiff={() => { setArtifactDiffPatch(null) }}
       artifactsBusy={artifactsBusy}
       artifactRestOpen={artifactRestOpen}
       fileQuery={fileQuery}

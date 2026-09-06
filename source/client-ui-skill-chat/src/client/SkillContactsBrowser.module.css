@@ -1045,6 +1045,15 @@
 /* An always-present live region. Mounting one only when there is something to
  * say means the first announcement arrives with the element and is missed. */
 .noticeRegion:empty { display: none; }
+/* A row of moments, not a list of commits: the question is "what did the
+ * second draft change", so each chip is a time you can compare against. */
+.versionBar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: var(--ds-chat-hairline) solid var(--ds-chat-code-border); background: var(--ds-chat-code-bg-raised); }
+.versionBar > span { color: var(--ds-chat-code-muted); font-size: var(--ds-chat-text-caption); }
+.versionBar button { padding: 3px 8px; border: var(--ds-chat-hairline) solid var(--ds-chat-code-border); border-radius: 7px; color: var(--ds-chat-code-fg); background: transparent; cursor: pointer; font: inherit; font-size: var(--ds-chat-text-caption); font-variant-numeric: tabular-nums; }
+.versionBar button:hover { border-color: var(--ds-chat-accent-bright); color: var(--ds-chat-accent-bright); }
+.versionDiff { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto; }
+.versionBack { align-self: flex-start; margin: 8px 12px 0; padding: 3px 8px; border: 0; border-radius: 7px; color: var(--ds-chat-code-muted); background: transparent; cursor: pointer; font: inherit; font-size: var(--ds-chat-text-caption); }
+.versionBack:hover { color: var(--ds-chat-accent-bright); }
 .runList { display: grid; gap: 4px; }
 .runRow { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; cursor: pointer; }
 .runRow:hover { background: var(--ds-chat-hover); }

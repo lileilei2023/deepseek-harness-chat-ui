@@ -219,6 +219,55 @@ export interface SkillChatArtifactValue {
   readonly unavailable: boolean
 }
 
+/** Ask for one produced file's history. */
+export interface SkillChatArtifactHistoryRequest {
+  readonly workspaceId: string
+  readonly path: string
+}
+
+/** One earlier state of a produced file. */
+export interface SkillChatArtifactVersion {
+  /** Commit that contains this state. */
+  readonly ref: string
+  /** Author date of that commit, in epoch milliseconds. */
+  readonly at: number
+  /** First line of the commit message. */
+  readonly subject: string
+}
+
+/**
+ * A produced file's earlier states, taken from the Workspace's git history.
+ *
+ * Storing snapshots ourselves would put file contents inside a state document
+ * that is already read and written whole; a repository already keeps exactly
+ * this, and keeps it correctly. A Workspace that is not a repository has no
+ * history to show, which `available: false` says rather than pretending the
+ * file was never changed.
+ */
+export interface SkillChatArtifactHistoryValue {
+  readonly available: boolean
+  /** Newest first, bounded. */
+  readonly versions: readonly SkillChatArtifactVersion[]
+  /** True when the working copy differs from the newest commit. */
+  readonly dirty: boolean
+}
+
+/** Ask for the difference between two states of a produced file. */
+export interface SkillChatArtifactDiffRequest {
+  readonly workspaceId: string
+  readonly path: string
+  /** Older commit; omitted compares the newest commit with the working copy. */
+  readonly from?: string
+  /** Newer commit; omitted means the working copy. */
+  readonly to?: string
+}
+
+/** A unified diff of one produced file between two states. */
+export interface SkillChatArtifactDiffValue {
+  readonly patch: string
+  readonly truncated: boolean
+}
+
 /** Start a temporary side conversation from the visible Room context. */
 export interface SkillChatSidecarStartRequest {
   readonly sourceSessionId: string

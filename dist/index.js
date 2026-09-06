@@ -134,6 +134,10 @@ const ARTIFACT_MAX_FILES = 200;
 const ARTIFACT_MAX_EXAMINED = 4e3;
 /** Room sessions whose logs one artifact listing will read. */
 const ARTIFACT_MAX_SESSIONS = 40;
+/** Earlier states listed for one produced file. */
+const ARTIFACT_MAX_VERSIONS = 20;
+/** Bytes of one diff returned to the panel. */
+const ARTIFACT_DIFF_BYTES = 512 * 1024;
 /** Automation runs kept. Older ones are the sort of history nobody scrolls to. */
 const AUTOMATION_RUN_HISTORY = 60;
 /** Characters of an assistant message kept for member attribution. */
@@ -185,6 +189,8 @@ let WorkBuddySkillCatalog = (() => {
 	let _unlinkSkill_decorators;
 	let _recentProjectFiles_decorators;
 	let _roomArtifacts_decorators;
+	let _artifactHistory_decorators;
+	let _artifactDiff_decorators;
 	let _readSkillChatTerminal_decorators;
 	let _signalSkillChatTerminal_decorators;
 	let _searchProjectFiles_decorators;
@@ -210,6 +216,8 @@ let WorkBuddySkillCatalog = (() => {
 			_unlinkSkill_decorators = [Remote];
 			_recentProjectFiles_decorators = [Remote];
 			_roomArtifacts_decorators = [Remote];
+			_artifactHistory_decorators = [Remote];
+			_artifactDiff_decorators = [Remote];
 			_readSkillChatTerminal_decorators = [Remote];
 			_signalSkillChatTerminal_decorators = [Remote];
 			_searchProjectFiles_decorators = [Remote];
@@ -299,6 +307,28 @@ let WorkBuddySkillCatalog = (() => {
 				access: {
 					has: (obj) => "roomArtifacts" in obj,
 					get: (obj) => obj.roomArtifacts
+				},
+				metadata: _metadata
+			}, null, _instanceExtraInitializers);
+			__esDecorate(this, null, _artifactHistory_decorators, {
+				kind: "method",
+				name: "artifactHistory",
+				static: false,
+				private: false,
+				access: {
+					has: (obj) => "artifactHistory" in obj,
+					get: (obj) => obj.artifactHistory
+				},
+				metadata: _metadata
+			}, null, _instanceExtraInitializers);
+			__esDecorate(this, null, _artifactDiff_decorators, {
+				kind: "method",
+				name: "artifactDiff",
+				static: false,
+				private: false,
+				access: {
+					has: (obj) => "artifactDiff" in obj,
+					get: (obj) => obj.artifactDiff
 				},
 				metadata: _metadata
 			}, null, _instanceExtraInitializers);
@@ -860,6 +890,128 @@ let WorkBuddySkillCatalog = (() => {
 				files: files.slice(0, ARTIFACT_MAX_FILES),
 				unavailable: false
 			};
+		}
+		/**
+		* List a produced file's earlier states.
+		*
+		* The panel could say a file had been written three times but showed only its
+		* final content, so "what changed in the second draft" had no answer.
+		* Snapshots of our own would put file contents inside a state document that
+		* is already read and written whole; the Workspace's repository already keeps
+		* this, so that is where it comes from.
+		* @param request - the Workspace and the file.
+		* @param signal - cancellation.
+		* @returns the commits that touched it, newest first.
+		*/
+		async artifactHistory(request, signal) {
+			const { root, target } = await this.artifactTarget(request.workspaceId, request.path);
+			const log = await this.git(root, [
+				"log",
+				`--max-count=${String(ARTIFACT_MAX_VERSIONS)}`,
+				"--format=%H%x1f%at%x1f%s",
+				"--follow",
+				"--",
+				target
+			], signal);
+			if (log === void 0) return {
+				available: false,
+				versions: [],
+				dirty: false
+			};
+			const versions = log.split("\n").flatMap((row) => {
+				const [ref, at, ...subject] = row.split("");
+				if (ref === void 0 || ref === "" || at === void 0) return [];
+				return [{
+					ref,
+					at: Number(at) * 1e3,
+					subject: subject.join("").slice(0, 120)
+				}];
+			});
+			const pending = await this.git(root, [
+				"status",
+				"--porcelain",
+				"--",
+				target
+			], signal);
+			return {
+				available: true,
+				versions,
+				dirty: pending !== void 0 && pending.trim() !== ""
+			};
+		}
+		/**
+		* Compare two states of one produced file.
+		* @param request - the Workspace, the file, and the two states.
+		* @param signal - cancellation.
+		* @returns a unified diff.
+		*/
+		async artifactDiff(request, signal) {
+			const { root, target } = await this.artifactTarget(request.workspaceId, request.path);
+			const ref = (value) => value !== void 0 && /^[0-9a-f]{7,40}$/u.test(value) ? value : void 0;
+			const from = ref(request.from);
+			const to = ref(request.to);
+			const range = from === void 0 ? [] : to === void 0 ? [from] : [`${from}..${to}`];
+			const patch = await this.git(root, [
+				"--no-pager",
+				"diff",
+				...range,
+				"--",
+				target
+			], signal);
+			if (patch === void 0) return {
+				patch: "",
+				truncated: false
+			};
+			return {
+				patch: patch.slice(0, ARTIFACT_DIFF_BYTES),
+				truncated: patch.length > ARTIFACT_DIFF_BYTES
+			};
+		}
+		/**
+		* Resolve one produced file inside its Workspace.
+		* @param workspaceId - the Workspace.
+		* @param path - the file, absolute or Workspace-relative.
+		* @returns the Workspace root and the file's path relative to it.
+		*/
+		async artifactTarget(workspaceId, path) {
+			const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(workspaceId));
+			if (workspace === void 0) throw new Error("skill-chat: unknown Workspace");
+			const root = await realpath(workspace.path);
+			const absolute = resolve(root, path);
+			if (!isWithin(root, absolute)) throw new Error("skill-chat: path escapes Workspace");
+			const target = relative(root, absolute);
+			return {
+				root,
+				target: target === "" ? "." : `./${target}`
+			};
+		}
+		/**
+		* Run one read-only git command in a Workspace.
+		* @param root - the Workspace root, used as the working directory.
+		* @param argv - arguments after `git`.
+		* @param signal - cancellation.
+		* @returns stdout, or undefined when git is unavailable or the command failed.
+		*/
+		async git(root, argv, signal) {
+			const subprocess = this.ctx.get("subprocess");
+			if (subprocess === void 0) return void 0;
+			try {
+				const handle = subprocess.spawn({
+					argv: ["git", ...argv],
+					cwd: root,
+					stdio: {
+						stdin: "ignore",
+						stdout: { maxBytes: ARTIFACT_DIFF_BYTES * 2 },
+						stderr: { maxBytes: 8 * 1024 }
+					},
+					graceMs: 1e3,
+					...signal === void 0 ? {} : { signal }
+				});
+				if ((await handle.done).exitCode !== 0) return void 0;
+				return handle.collected.stdout?.readFrom(0).text ?? "";
+			} catch {
+				return;
+			}
 		}
 		/**
 		* Read one page of a terminal's scrollback.

@@ -29,6 +29,10 @@ import type {
   SkillChatProjectFileRequest,
   SkillChatProjectFileValue,
   SkillChatArtifact,
+  SkillChatArtifactDiffRequest,
+  SkillChatArtifactDiffValue,
+  SkillChatArtifactHistoryRequest,
+  SkillChatArtifactHistoryValue,
   SkillChatArtifactRequest,
   SkillChatArtifactValue,
   SkillChatSidecarSendRequest,
@@ -101,6 +105,10 @@ const ARTIFACT_MAX_FILES = 200
 const ARTIFACT_MAX_EXAMINED = 4000
 /** Room sessions whose logs one artifact listing will read. */
 const ARTIFACT_MAX_SESSIONS = 40
+/** Earlier states listed for one produced file. */
+const ARTIFACT_MAX_VERSIONS = 20
+/** Bytes of one diff returned to the panel. */
+const ARTIFACT_DIFF_BYTES = 512 * 1024
 /** Automation runs kept. Older ones are the sort of history nobody scrolls to. */
 const AUTOMATION_RUN_HISTORY = 60
 /** Characters of an assistant message kept for member attribution. */
@@ -611,6 +619,105 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     }
     files.sort((left, right) => right.producedAt - left.producedAt)
     return { files: files.slice(0, ARTIFACT_MAX_FILES), unavailable: false }
+  }
+
+  /**
+   * List a produced file's earlier states.
+   *
+   * The panel could say a file had been written three times but showed only its
+   * final content, so "what changed in the second draft" had no answer.
+   * Snapshots of our own would put file contents inside a state document that
+   * is already read and written whole; the Workspace's repository already keeps
+   * this, so that is where it comes from.
+   * @param request - the Workspace and the file.
+   * @param signal - cancellation.
+   * @returns the commits that touched it, newest first.
+   */
+  @Remote
+  async artifactHistory(
+    request: SkillChatArtifactHistoryRequest,
+    signal?: AbortSignal,
+  ): Promise<SkillChatArtifactHistoryValue> {
+    const { root, target } = await this.artifactTarget(request.workspaceId, request.path)
+    const log = await this.git(root, [
+      'log', `--max-count=${String(ARTIFACT_MAX_VERSIONS)}`, '--format=%H%x1f%at%x1f%s',
+      '--follow', '--', target,
+    ], signal)
+    if (log === undefined) return { available: false, versions: [], dirty: false }
+    const versions = log.split('\n').flatMap((row) => {
+      const [ref, at, ...subject] = row.split('\u001f')
+      if (ref === undefined || ref === '' || at === undefined) return []
+      return [{ ref, at: Number(at) * 1000, subject: subject.join('\u001f').slice(0, 120) }]
+    })
+    const pending = await this.git(root, ['status', '--porcelain', '--', target], signal)
+    return { available: true, versions, dirty: pending !== undefined && pending.trim() !== '' }
+  }
+
+  /**
+   * Compare two states of one produced file.
+   * @param request - the Workspace, the file, and the two states.
+   * @param signal - cancellation.
+   * @returns a unified diff.
+   */
+  @Remote
+  async artifactDiff(request: SkillChatArtifactDiffRequest, signal?: AbortSignal): Promise<SkillChatArtifactDiffValue> {
+    const { root, target } = await this.artifactTarget(request.workspaceId, request.path)
+    // Refs are validated rather than escaped: they come from our own listing,
+    // and a hand-made value has no business reaching git's argument list.
+    const ref = (value: string | undefined): string | undefined =>
+      value !== undefined && /^[0-9a-f]{7,40}$/u.test(value) ? value : undefined
+    const from = ref(request.from)
+    const to = ref(request.to)
+    const range = from === undefined ? [] : to === undefined ? [from] : [`${from}..${to}`]
+    const patch = await this.git(root, ['--no-pager', 'diff', ...range, '--', target], signal)
+    if (patch === undefined) return { patch: '', truncated: false }
+    return { patch: patch.slice(0, ARTIFACT_DIFF_BYTES), truncated: patch.length > ARTIFACT_DIFF_BYTES }
+  }
+
+  /**
+   * Resolve one produced file inside its Workspace.
+   * @param workspaceId - the Workspace.
+   * @param path - the file, absolute or Workspace-relative.
+   * @returns the Workspace root and the file's path relative to it.
+   */
+  private async artifactTarget(workspaceId: string, path: string): Promise<{ root: string; target: string }> {
+    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(workspaceId))
+    if (workspace === undefined) throw new Error('skill-chat: unknown Workspace')
+    const root = await realpath(workspace.path)
+    const absolute = resolve(root, path)
+    if (!isWithin(root, absolute)) throw new Error('skill-chat: path escapes Workspace')
+    // Relative, and never leading with `-`: git reads such a path as a flag.
+    const target = relative(root, absolute)
+    return { root, target: target === '' ? '.' : `./${target}` }
+  }
+
+  /**
+   * Run one read-only git command in a Workspace.
+   * @param root - the Workspace root, used as the working directory.
+   * @param argv - arguments after `git`.
+   * @param signal - cancellation.
+   * @returns stdout, or undefined when git is unavailable or the command failed.
+   */
+  private async git(root: string, argv: readonly string[], signal?: AbortSignal): Promise<string | undefined> {
+    const subprocess = this.ctx.get('subprocess')
+    if (subprocess === undefined) return undefined
+    try {
+      const handle = subprocess.spawn({
+        argv: ['git', ...argv],
+        cwd: root,
+        stdio: { stdin: 'ignore', stdout: { maxBytes: ARTIFACT_DIFF_BYTES * 2 }, stderr: { maxBytes: 8 * 1024 } },
+        graceMs: 1_000,
+        ...signal === undefined ? {} : { signal },
+      })
+      const outcome = await handle.done
+      // A non-repository, a path git has never seen, or no git at all: all of
+      // them mean "no history to show", which the caller reports as such rather
+      // than as an error the person can act on.
+      if (outcome.exitCode !== 0) return undefined
+      return handle.collected.stdout?.readFrom(0).text ?? ''
+    } catch {
+      return undefined
+    }
   }
 
   /**

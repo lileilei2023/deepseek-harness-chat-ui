@@ -300,6 +300,16 @@ function registerUi(ctx: Context): void {
         if (!result.ok) throw new Error(result.error.message)
         return result.value
       },
+      artifactHistory: async (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.artifactHistory({ workspaceId, path }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
+      artifactDiff: async (workspaceId: WorkspaceId, path: string, range: { from?: string; to?: string }, signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.artifactDiff({ workspaceId, path, ...range }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
       readTerminal: async (sessionId: SessionId, terminalId: string, page: { offset?: number; count?: number }, signal: AbortSignal) => {
         const result = await ctx.remote.workbuddySkills.readSkillChatTerminal({ sessionId, terminalId, ...page }, signal)
         if (!result.ok) throw new Error(result.error.message)

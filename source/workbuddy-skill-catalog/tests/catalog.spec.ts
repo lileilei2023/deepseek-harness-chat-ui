@@ -488,6 +488,93 @@ Do work.
     expect(reread.version).toBe(3)
   })
 
+  it('reads a produced file\'s history from git, and says so when there is none', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-history-'))
+    const ctx = await catalogContext()
+    const calls: string[][] = []
+    const reply = (argv: readonly string[]): { out: string; code: number } => {
+      if (argv[1] === 'log') return { out: 'abc1234\u001f1788600000\u001f第二版\ndef5678\u001f1788500000\u001f第一版\n', code: 0 }
+      if (argv[1] === 'status') return { out: ' M ./report.md\n', code: 0 }
+      return { out: '', code: 0 }
+    }
+    const spawn = vi.fn((spec: { argv: readonly string[] }) => {
+      calls.push([...spec.argv])
+      const { out, code } = reply(spec.argv)
+      const reader = { readFrom: () => ({ text: out, nextOffset: out.length, lossy: false }) }
+      return {
+        pid: 1, stdin: undefined, stdout: undefined, stderr: undefined,
+        collected: { stdout: reader, stderr: reader }, done: Promise.resolve({ exitCode: code }),
+        terminate: vi.fn(), waitForExit: vi.fn(() => Promise.resolve(true)),
+      }
+    })
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: [], status: async () => 'ok' as const }),
+    } as never)
+    ctx.provide('subprocess', { spawn } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+
+    const history = await catalog.artifactHistory({ workspaceId: 'w', path: 'report.md' })
+    expect(history.available).toBe(true)
+    expect(history.dirty).toBe(true)
+    expect(history.versions.map(version => version.subject)).toEqual(['第二版', '第一版'])
+    // Seconds in the log, milliseconds in the contract.
+    expect(history.versions[0]?.at).toBe(1788600000000)
+    // Relative and prefixed, so git cannot read a name beginning with `-` as a flag.
+    expect(calls[0]).toContain('./report.md')
+  })
+
+  it('reports no history rather than an error when the Workspace is not a repository', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-history-none-'))
+    const ctx = await catalogContext()
+    const reader = { readFrom: () => ({ text: '', nextOffset: 0, lossy: false }) }
+    const spawn = vi.fn(() => ({
+      pid: 1, stdin: undefined, stdout: undefined, stderr: undefined,
+      collected: { stdout: reader, stderr: reader }, done: Promise.resolve({ exitCode: 128 }),
+      terminate: vi.fn(), waitForExit: vi.fn(() => Promise.resolve(true)),
+    }))
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: [], status: async () => 'ok' as const }),
+    } as never)
+    ctx.provide('subprocess', { spawn } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+
+    // A non-repository, an untracked path, or no git at all: all of them mean
+    // "nothing to show", which the panel can act on. An error cannot be.
+    await expect(catalog.artifactHistory({ workspaceId: 'w', path: 'report.md' }))
+      .resolves.toEqual({ available: false, versions: [], dirty: false })
+  })
+
+  it('never passes an unvalidated ref to git, and refuses a path outside the Workspace', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-diff-'))
+    const ctx = await catalogContext()
+    const calls: string[][] = []
+    const reader = { readFrom: () => ({ text: 'patch', nextOffset: 5, lossy: false }) }
+    const spawn = vi.fn((spec: { argv: readonly string[] }) => {
+      calls.push([...spec.argv])
+      return {
+        pid: 1, stdin: undefined, stdout: undefined, stderr: undefined,
+        collected: { stdout: reader, stderr: reader }, done: Promise.resolve({ exitCode: 0 }),
+        terminate: vi.fn(), waitForExit: vi.fn(() => Promise.resolve(true)),
+      }
+    })
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: [], status: async () => 'ok' as const }),
+    } as never)
+    ctx.provide('subprocess', { spawn } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+
+    await catalog.artifactDiff({ workspaceId: 'w', path: 'report.md', from: '; rm -rf /' })
+    // Refs come from our own listing; anything else is dropped rather than
+    // escaped, so a hand-made value never reaches git's argument list at all.
+    expect(calls[0]?.some(argument => argument.includes('rm -rf'))).toBe(false)
+
+    await catalog.artifactDiff({ workspaceId: 'w', path: 'report.md', from: 'abc1234', to: 'def5678' })
+    expect(calls[1]).toContain('abc1234..def5678')
+
+    await expect(catalog.artifactDiff({ workspaceId: 'w', path: '../../etc/passwd' }))
+      .rejects.toThrow('escapes Workspace')
+  })
+
   it('records an automation run that never started, instead of failing silently', async () => {
     const ctx = await catalogContext()
     const stateFile = join(await mkdtemp(join(tmpdir(), 'dsh-runs-')), 'state.json')

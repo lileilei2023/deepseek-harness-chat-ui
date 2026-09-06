@@ -51,7 +51,7 @@ interface ProjectEntry {
   readonly hidden: boolean
 }
 
-interface ProjectFilePreview {
+export interface ProjectFilePreview {
   readonly path: string
   readonly name: string
   readonly content?: string
@@ -81,7 +81,7 @@ interface RoomArtifact {
 }
 
 /** One earlier state of a produced file, from the workspace's git history. */
-interface ArtifactVersion {
+export interface ArtifactVersion {
   readonly ref: string
   readonly at: number
   readonly subject: string
@@ -716,7 +716,7 @@ export function SkillChatHeaderTools({ sessionId }: { readonly sessionId: Sessio
   </div>
 }
 
-interface WorkbenchDrawerProps {
+export interface WorkbenchDrawerProps {
   readonly tool: ProjectToolKind
   readonly workspaceTitle: string
   readonly workspacePath: string
@@ -915,7 +915,7 @@ function TerminalOutput({ text }: { readonly text: string }): React.JSX.Element 
   </span>)}</>
 }
 
-interface TerminalPaneProps {
+export interface TerminalPaneProps {
   readonly terminal: TerminalSnapshot | null
   readonly busy: boolean
   readonly error: string | null
@@ -940,7 +940,7 @@ interface TerminalPaneProps {
  * @param props - the current snapshot and the panel's callbacks.
  * @returns the terminal pane.
  */
-function TerminalPane(props: TerminalPaneProps): React.JSX.Element {
+export function TerminalPane(props: TerminalPaneProps): React.JSX.Element {
   const scroller = useRef<HTMLPreElement | null>(null)
   const follow = useRef(true)
   const [cursor, setCursor] = useState<number | null>(null)
@@ -1136,7 +1136,7 @@ function takeFileAway(file: ProjectFilePreview, mode: 'download' | 'open'): void
   }
 }
 
-function ProjectFileView(
+export function ProjectFileView(
   { file, rendered, onToggle, onReveal }: {
     readonly file: ProjectFilePreview
     readonly rendered: boolean
@@ -1183,7 +1183,7 @@ function ProjectFileView(
  * @param props - the drawer's props.
  * @returns the version bar and either the file or a diff.
  */
-function filePreview(props: WorkbenchDrawerProps): React.JSX.Element | null {
+export function filePreview(props: WorkbenchDrawerProps): React.JSX.Element | null {
   if (props.file === null) return null
   const history = props.history
   return <>

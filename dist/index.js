@@ -970,8 +970,61 @@ let WorkBuddySkillCatalog = (() => {
 					});
 				}
 			};
+			if (request.contents) {
+				const found = await this.ripgrepContents(root, request.query, signal);
+				if (found !== void 0) return { files: found };
+			}
 			await walk(root, 0);
 			return { files: hits };
+		}
+		/**
+		* Search file contents with the Host's own ripgrep binary.
+		*
+		* The walk below this reads every candidate file into Node — up to 4000 files
+		* of half a megabyte each — which is why the first content search took
+		* seconds with nothing on screen. ripgrep does the same work in one process
+		* and skips binaries and ignored directories on its own. It is taken from
+		* PATH and treated as optional: most development machines have it, and the
+		* ones that do not still search, just slowly.
+		* @param root - the resolved Workspace root.
+		* @param query - the literal text to find.
+		* @param signal - cancellation.
+		* @returns the hits, or undefined when ripgrep is unavailable and the caller should fall back.
+		*/
+		async ripgrepContents(root, query, signal) {
+			const subprocess = this.ctx.get("subprocess");
+			if (subprocess === void 0) return void 0;
+			const binary = "rg";
+			try {
+				const handle = subprocess.spawn({
+					argv: [
+						binary,
+						"--json",
+						"--fixed-strings",
+						"--ignore-case",
+						"--max-columns=200",
+						"--max-count=1",
+						`--max-filesize=${String(SEARCH_MAX_FILE_BYTES)}`,
+						...[...ARTIFACT_SKIP_DIRECTORIES].flatMap((name) => ["--glob", `!${name}/`]),
+						"--",
+						query,
+						"."
+					],
+					cwd: root,
+					stdio: {
+						stdin: "ignore",
+						stdout: { maxBytes: 1024 * 1024 },
+						stderr: { maxBytes: 64 * 1024 }
+					},
+					graceMs: 1e3,
+					...signal === void 0 ? {} : { signal }
+				});
+				const outcome = await handle.done;
+				if (outcome.exitCode !== 0 && outcome.exitCode !== 1) return void 0;
+				return parseRipgrepRows(handle.collected.stdout?.readFrom(0).text ?? "", root);
+			} catch {
+				return;
+			}
 		}
 		/**
 		* Show one Workspace path in the desktop file manager.
@@ -1615,6 +1668,44 @@ function assistantOpening(content) {
 	return "";
 }
 /**
+* Turn ripgrep's `--json` stream into hits.
+*
+* The default `path:line:text` output is ambiguous — a filename may contain a
+* colon, and a report named `2026-09-06: 液冷.md` then parses as a path of
+* `2026-09-06`. That is exactly why ripgrep offers a JSON mode, and why this
+* uses it. Rows resolving outside the Workspace are dropped rather than shown.
+* @param stream - ripgrep's raw `--json` stdout, one JSON object per line.
+* @param root - the resolved Workspace root, which relative paths resolve against.
+* @returns the parsed hits, bounded.
+*/
+function parseRipgrepRows(stream, root) {
+	const found = [];
+	for (const row of stream.split("\n")) {
+		if (found.length >= SEARCH_MAX_HITS) break;
+		if (row === "") continue;
+		let event;
+		try {
+			event = JSON.parse(row);
+		} catch {
+			continue;
+		}
+		if (typeof event !== "object" || event === null) continue;
+		const record = event;
+		if (record.type !== "match") continue;
+		const relative = record.data?.path?.text;
+		const line = record.data?.lines?.text;
+		if (typeof relative !== "string" || typeof line !== "string") continue;
+		const full = resolve(root, relative);
+		if (full !== root && !full.startsWith(root + sep)) continue;
+		found.push({
+			path: full,
+			name: basename(full),
+			line: line.trim().slice(0, 160)
+		});
+	}
+	return found;
+}
+/**
 * A terminal value with nothing in it.
 *
 * Several branches — no terminal service, a session the backend already
@@ -2046,4 +2137,4 @@ async function scanWorkBuddySkillContacts(root, signal) {
 	}, signal);
 }
 //#endregion
-export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, scanSkillRoot, scanSkillRoots, scanWorkBuddySkillContacts };
+export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, parseRipgrepRows, scanSkillRoot, scanSkillRoots, scanWorkBuddySkillContacts };

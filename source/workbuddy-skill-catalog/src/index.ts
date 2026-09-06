@@ -722,8 +722,68 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
         if (line !== undefined) hits.push({ path: full, name: entry.name, line: line.trim().slice(0, 160) })
       }
     }
+    if (request.contents) {
+      const found = await this.ripgrepContents(root, request.query, signal)
+      if (found !== undefined) return { files: found }
+      // Falling through on purpose: a Host without the binary still searches,
+      // just slowly. Returning nothing would look like "no matches".
+    }
     await walk(root, 0)
     return { files: hits }
+  }
+
+  /**
+   * Search file contents with the Host's own ripgrep binary.
+   *
+   * The walk below this reads every candidate file into Node — up to 4000 files
+   * of half a megabyte each — which is why the first content search took
+   * seconds with nothing on screen. ripgrep does the same work in one process
+   * and skips binaries and ignored directories on its own. It is taken from
+   * PATH and treated as optional: most development machines have it, and the
+   * ones that do not still search, just slowly.
+   * @param root - the resolved Workspace root.
+   * @param query - the literal text to find.
+   * @param signal - cancellation.
+   * @returns the hits, or undefined when ripgrep is unavailable and the caller should fall back.
+   */
+  private async ripgrepContents(
+    root: string,
+    query: string,
+    signal?: AbortSignal,
+  ): Promise<readonly { readonly path: string; readonly name: string; readonly line: string }[] | undefined> {
+    const subprocess = this.ctx.get('subprocess')
+    if (subprocess === undefined) return undefined
+    // `rg` from PATH, not the Host's packaged copy: importing the Host's search
+    // package drags in its transitive dependencies, which a plugin installed
+    // from GitHub does not have — that failure stops the whole Harness from
+    // booting, which is far worse than a slower search.
+    const binary = 'rg'
+    try {
+      const handle = subprocess.spawn({
+        argv: [
+          binary,
+          // Fixed-string and case-insensitive, because this box is a filter,
+          // not a regex prompt: a stray `(` should find a paren, not error.
+          // JSON, because `path:line:text` cannot be parsed back when a
+          // filename contains a colon.
+          '--json', '--fixed-strings', '--ignore-case',
+          '--max-columns=200', '--max-count=1', `--max-filesize=${String(SEARCH_MAX_FILE_BYTES)}`,
+          ...[...ARTIFACT_SKIP_DIRECTORIES].flatMap(name => ['--glob', `!${name}/`]),
+          '--', query, '.',
+        ],
+        cwd: root,
+        stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 * 1024 }, stderr: { maxBytes: 64 * 1024 } },
+        graceMs: 1_000,
+        ...signal === undefined ? {} : { signal },
+      })
+      const outcome = await handle.done
+      // 0 is matches, 1 is a clean "no matches"; anything else means ripgrep
+      // itself failed and the caller should fall back rather than report empty.
+      if (outcome.exitCode !== 0 && outcome.exitCode !== 1) return undefined
+      return parseRipgrepRows(handle.collected.stdout?.readFrom(0).text ?? '', root)
+    } catch {
+      return undefined
+    }
   }
 
   /**
@@ -1369,6 +1429,44 @@ function assistantOpening(content: readonly { type: string; text?: string }[]): 
     if (trimmed !== '') return trimmed.slice(0, ARTIFACT_SPEAKER_CHARS)
   }
   return ''
+}
+
+/**
+ * Turn ripgrep's `--json` stream into hits.
+ *
+ * The default `path:line:text` output is ambiguous — a filename may contain a
+ * colon, and a report named `2026-09-06: 液冷.md` then parses as a path of
+ * `2026-09-06`. That is exactly why ripgrep offers a JSON mode, and why this
+ * uses it. Rows resolving outside the Workspace are dropped rather than shown.
+ * @param stream - ripgrep's raw `--json` stdout, one JSON object per line.
+ * @param root - the resolved Workspace root, which relative paths resolve against.
+ * @returns the parsed hits, bounded.
+ */
+export function parseRipgrepRows(
+  stream: string,
+  root: string,
+): readonly { readonly path: string; readonly name: string; readonly line: string }[] {
+  const found: { path: string; name: string; line: string }[] = []
+  for (const row of stream.split('\n')) {
+    if (found.length >= SEARCH_MAX_HITS) break
+    if (row === '') continue
+    let event: unknown
+    try {
+      event = JSON.parse(row) as unknown
+    } catch {
+      continue
+    }
+    if (typeof event !== 'object' || event === null) continue
+    const record = event as { type?: unknown; data?: { path?: { text?: unknown }; lines?: { text?: unknown } } }
+    if (record.type !== 'match') continue
+    const relative = record.data?.path?.text
+    const line = record.data?.lines?.text
+    if (typeof relative !== 'string' || typeof line !== 'string') continue
+    const full = resolve(root, relative)
+    if (full !== root && !full.startsWith(root + sep)) continue
+    found.push({ path: full, name: basename(full), line: line.trim().slice(0, 160) })
+  }
+  return found
 }
 
 /**

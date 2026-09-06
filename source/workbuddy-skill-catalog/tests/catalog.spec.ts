@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { WorkBuddySkillCatalog, scanSkillRoots, scanWorkBuddySkillContacts } from '../src/index.ts'
+import { WorkBuddySkillCatalog, parseRipgrepRows, scanSkillRoots, scanWorkBuddySkillContacts } from '../src/index.ts'
 
 async function writeSkill(root: string, plugin: string, version: string, relativePath: string, content: string): Promise<string> {
   const directory = join(root, plugin, version, relativePath)
@@ -603,5 +603,32 @@ Do work.
     await catalog.signalSkillChatTerminal({ sessionId: 'session', terminalId: opened.terminalId, signal: 'SIGINT' })
 
     expect(terminate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('parseRipgrepRows', () => {
+  /** One ripgrep `--json` match event. */
+  const match = (path: string, line: string): string =>
+    JSON.stringify({ type: 'match', data: { path: { text: path }, lines: { text: line } } })
+
+  it('keeps a filename that contains a colon', () => {
+    // The default `path:line:text` output cannot be parsed back here: the
+    // first colon is inside the filename, so a report named like this parsed
+    // as a path of `2026-09-06`. That ambiguity is why ripgrep has a JSON mode.
+    const rows = parseRipgrepRows(match('reports/2026-09-06: 液冷.md', '液冷板块回顾\n'), '/root')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.name).toBe('2026-09-06: 液冷.md')
+    expect(rows[0]?.line).toBe('液冷板块回顾')
+  })
+
+  it('drops rows that resolve outside the Workspace', () => {
+    // ripgrep runs with the root as cwd, but a path that climbs out must not
+    // become a way to display a file the panel has no business showing.
+    expect(parseRipgrepRows(match('../../etc/passwd', 'root'), '/root')).toEqual([])
+  })
+
+  it('ignores every event that is not a match', () => {
+    const noise = [JSON.stringify({ type: 'begin', data: {} }), 'not json', '', JSON.stringify({ type: 'summary' })]
+    expect(parseRipgrepRows(noise.join('\n'), '/root')).toEqual([])
   })
 })

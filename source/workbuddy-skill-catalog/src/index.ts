@@ -35,6 +35,8 @@ import type {
   SkillChatArtifactHistoryValue,
   SkillChatArtifactRequest,
   SkillChatArtifactValue,
+  SkillChatFileOpRequest,
+  SkillChatFileOpValue,
   SkillChatSidecarSendRequest,
   SkillChatSidecarStartRequest,
   SkillChatSidecarValue,
@@ -619,6 +621,54 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     }
     files.sort((left, right) => right.producedAt - left.producedAt)
     return { files: files.slice(0, ARTIFACT_MAX_FILES), unavailable: false }
+  }
+
+  /**
+   * Create, rename or delete one path inside a Workspace.
+   *
+   * The tree could only be read, so tidying up after a room produced something
+   * meant leaving the product. Each operation resolves inside the Workspace and
+   * refuses anything that leaves it; a rename takes a bare name rather than a
+   * path, so it can move a file within its directory but never out of it.
+   * @param request - the Workspace, the operation, and its target.
+   * @param signal - cancellation.
+   * @returns where the path ended up.
+   */
+  @Remote
+  async fileOperation(request: SkillChatFileOpRequest, signal?: AbortSignal): Promise<SkillChatFileOpValue> {
+    signal?.throwIfAborted()
+    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId))
+    if (workspace === undefined) throw new Error('skill-chat: unknown Workspace')
+    if (await workspace.status() !== 'ok') throw new Error('skill-chat: Workspace directory is unavailable')
+    const root = await realpath(workspace.path)
+    const target = resolve(root, request.path)
+    if (!isWithin(root, target) || target === root) throw new Error('skill-chat: path escapes Workspace')
+
+    if (request.op === 'delete') {
+      // Recursive because a directory the room made is a directory you want
+      // gone; the confirmation for that belongs to the client, which is the
+      // only side that can ask.
+      await rm(target, { recursive: true, force: false })
+      return { path: target }
+    }
+    if (request.op === 'rename') {
+      const name = safeFileName(request.name)
+      const renamed = join(dirname(target), name)
+      if (!isWithin(root, renamed)) throw new Error('skill-chat: path escapes Workspace')
+      // Never silently over an existing file: two reports with the same name is
+      // a mistake to report, not one to resolve by destroying one of them.
+      if (await stat(renamed).then(() => true, () => false)) throw new Error('skill-chat: a file with that name already exists')
+      await rename(target, renamed)
+      return { path: renamed }
+    }
+    if (await stat(target).then(() => true, () => false)) throw new Error('skill-chat: that path already exists')
+    if (request.op === 'create-directory') {
+      await mkdir(target, { recursive: true })
+      return { path: target }
+    }
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, '', { encoding: 'utf8', flag: 'wx' })
+    return { path: target }
   }
 
   /**
@@ -1736,6 +1786,24 @@ export function parseRipgrepRows(
     found.push({ path: full, name: basename(full), line: line.trim().slice(0, 160) })
   }
   return found
+}
+
+/**
+ * Validate a name typed for a new or renamed file.
+ *
+ * A name is a name: no separators, no `..`, nothing that resolves anywhere but
+ * the directory it was typed in. Rejecting is better than sanitizing, because a
+ * silently corrected name is a file the person cannot find again.
+ * @param value - the typed name.
+ * @returns the name, unchanged.
+ * @throws when the name could reach outside its directory.
+ */
+export function safeFileName(value: string | undefined): string {
+  const name = (value ?? '').trim()
+  if (name === '' || name === '.' || name === '..') throw new Error('skill-chat: invalid file name')
+  if (name.includes('/') || name.includes('\\') || name.includes('\u0000')) throw new Error('skill-chat: invalid file name')
+  if (name.length > 200) throw new Error('skill-chat: file name is too long')
+  return name
 }
 
 /**

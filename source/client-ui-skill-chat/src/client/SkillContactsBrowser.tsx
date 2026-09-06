@@ -177,6 +177,13 @@ interface SkillContactsInjected {
     readonly files: readonly RoomArtifact[]
     readonly unavailable: boolean
   }>
+  fileOperation: (
+    workspaceId: WorkspaceId,
+    op: 'create-file' | 'create-directory' | 'rename' | 'delete',
+    path: string,
+    name: string | undefined,
+    signal: AbortSignal,
+  ) => Promise<{ readonly path: string }>
   artifactHistory: (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => Promise<{
     readonly available: boolean
     readonly versions: readonly ArtifactVersion[]
@@ -1452,7 +1459,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
-    linkSkill, forkSession, messageSeq, recentProjectFiles, roomArtifacts, artifactHistory, artifactDiff,
+    linkSkill, forkSession, messageSeq, recentProjectFiles, roomArtifacts, artifactHistory, artifactDiff, fileOperation,
     readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
@@ -1524,6 +1531,12 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     dirty: boolean
   } | null>(null)
   const [artifactDiffPatch, setArtifactDiffPatch] = useState<string | null>(null)
+  // A rename or a new file in progress, and a delete waiting to be confirmed.
+  // Destructive work asks first; the Host refuses rather than asks, because it
+  // is not the side that can.
+  const [fileRename, setFileRename] = useState<{ path: string; name: string } | null>(null)
+  const [fileCreate, setFileCreate] = useState<{ parent: string; kind: 'file' | 'directory'; name: string } | null>(null)
+  const [fileDelete, setFileDelete] = useState<{ path: string; name: string; kind: 'file' | 'directory' } | null>(null)
   const [artifactsBusy, setArtifactsBusy] = useState(false)
   const [artifactRestOpen, setArtifactRestOpen] = useState(false)
   // Notification.permission is not reactive, so the prompt's outcome needs a
@@ -2535,6 +2548,38 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     void Notification.requestPermission().then(() => { setNotificationsRevision(current => current + 1) })
   }
 
+  /**
+   * Run one write against the project tree and refresh what it changed.
+   * @param op - the operation.
+   * @param path - the target path.
+   * @param name - a bare name, for create and rename.
+   */
+  const runFileOperation = (
+    op: 'create-file' | 'create-directory' | 'rename' | 'delete',
+    path: string,
+    name?: string,
+  ): void => {
+    if (activeWorkspace === undefined) return
+    const abort = new AbortController()
+    void fileOperation(activeWorkspace.workspaceId, op, path, name, abort.signal).then((result) => {
+      setFileRename(null); setFileCreate(null); setFileDelete(null)
+      // The listing the change happened in, plus the root, because a create can
+      // add a directory the tree is showing at either level.
+      const parent = result.path.slice(0, result.path.lastIndexOf('/'))
+      for (const directory of new Set([parent, ...expandedDirs])) {
+        void browseProject(activeWorkspace.workspaceId, directory, new AbortController().signal)
+          .then((listing) => { setDirListings(current => ({ ...current, [directory]: listing.entries })) }, () => {})
+      }
+      void browseProject(activeWorkspace.workspaceId, undefined, new AbortController().signal)
+        .then(setProjectListing, () => {})
+      if (op === 'delete') {
+        setOpenFiles(current => current.filter(item => item.path !== path))
+        setProjectFile(current => current?.path === path ? null : current)
+      }
+      setNotice(op === 'delete' ? t('fileDeleted') : t('fileSaved'))
+    }, (error: unknown) => { setNotice(error instanceof Error ? error.message : String(error)) })
+  }
+
   /** Show one workspace path in the desktop file manager. */
   const revealPath = (path: string): void => {
     if (activeWorkspace === undefined) return
@@ -3194,6 +3239,10 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
           <button type="button" onClick={() => { attachPath(target.path); close() }}>{t('attachToChat')}</button>
           <button type="button" onClick={() => { void navigator.clipboard?.writeText(target.path).then(() => { setNotice(t('copied')) }, () => {}); close() }}>{t('copyPath')}</button>
           <button type="button" onClick={() => { revealPath(target.path); close() }}>{t('revealInFinder')}</button>
+          <button type="button" onClick={() => { setFileRename({ path: target.path, name: target.name }); close() }}>{t('renameFile')}</button>
+          <button type="button" onClick={() => { setFileCreate({ parent: target.kind === 'directory' ? target.path : target.path.slice(0, target.path.lastIndexOf('/')), kind: 'file', name: '' }); close() }}>{t('newFileHere')}</button>
+          <button type="button" onClick={() => { setFileCreate({ parent: target.kind === 'directory' ? target.path : target.path.slice(0, target.path.lastIndexOf('/')), kind: 'directory', name: '' }); close() }}>{t('newDirectoryHere')}</button>
+          <button className={css.menuDanger} type="button" onClick={() => { setFileDelete({ path: target.path, name: target.name, kind: target.kind }); close() }}>{t('deleteFile')}</button>
           <button type="button" onClick={() => {
             const directory = target.kind === 'directory' ? target.path : target.path.slice(0, target.path.lastIndexOf('/'))
             openProjectTool('terminal')
@@ -3219,6 +3268,53 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
     })() : null}
 
     {deleteConfirm !== null ? <Dialog className={css.confirmDialog} label={t('delete')} onClose={() => { setDeleteConfirm(null) }}><h2>{t('deleteRoomTitle')}</h2><p>{t('deleteRoomBody')}</p><div className={css.confirmActions}><Button onClick={() => { setDeleteConfirm(null) }}>{t('cancel')}</Button><Button variant="danger" onClick={() => { deleteRoom(deleteConfirm); setDeleteConfirm(null) }}>{t('delete')}</Button></div></Dialog> : null}
+
+    {fileRename !== null ? <Dialog className={css.confirmDialog} label={t('renameFile')} onClose={() => { setFileRename(null) }}>
+      <h2>{t('renameFile')}</h2>
+      <label className={css.field}>
+        <span>{t('newNameLabel')}</span>
+        <input
+          value={fileRename.name}
+          autoFocus
+          onChange={event => { setFileRename(current => current === null ? null : { ...current, name: event.target.value }) }}
+          onKeyDown={event => { if (event.key === 'Enter') runFileOperation('rename', fileRename.path, fileRename.name.trim()) }}
+        />
+      </label>
+      <div className={css.confirmActions}>
+        <Button onClick={() => { setFileRename(null) }}>{t('cancel')}</Button>
+        <Button variant="primary" disabled={fileRename.name.trim() === ''} onClick={() => { runFileOperation('rename', fileRename.path, fileRename.name.trim()) }}>{t('saveIdentity')}</Button>
+      </div>
+    </Dialog> : null}
+
+    {fileCreate !== null ? <Dialog className={css.confirmDialog} label={fileCreate.kind === 'file' ? t('newFileHere') : t('newDirectoryHere')} onClose={() => { setFileCreate(null) }}>
+      <h2>{fileCreate.kind === 'file' ? t('newFileHere') : t('newDirectoryHere')}</h2>
+      <label className={css.field}>
+        <span>{t('newNameLabel')}</span>
+        <input
+          value={fileCreate.name}
+          autoFocus
+          placeholder={fileCreate.kind === 'file' ? 'report.md' : 'reports'}
+          onChange={event => { setFileCreate(current => current === null ? null : { ...current, name: event.target.value }) }}
+          onKeyDown={event => { if (event.key === 'Enter' && fileCreate.name.trim() !== '') runFileOperation(fileCreate.kind === 'file' ? 'create-file' : 'create-directory', `${fileCreate.parent}/${fileCreate.name.trim()}`) }}
+        />
+      </label>
+      <div className={css.confirmActions}>
+        <Button onClick={() => { setFileCreate(null) }}>{t('cancel')}</Button>
+        <Button variant="primary" disabled={fileCreate.name.trim() === ''} onClick={() => { runFileOperation(fileCreate.kind === 'file' ? 'create-file' : 'create-directory', `${fileCreate.parent}/${fileCreate.name.trim()}`) }}>{t('create')}</Button>
+      </div>
+    </Dialog> : null}
+
+    {/* Deleting is the one thing here with no undo, so it names what it will
+      * remove and says so plainly rather than asking "are you sure". */}
+    {fileDelete !== null ? <Dialog className={css.confirmDialog} label={t('deleteFile')} onClose={() => { setFileDelete(null) }}>
+      <h2>{t('deleteFile')}</h2>
+      <p>{fileDelete.kind === 'directory' ? t('deleteDirectoryBody') : t('deleteFileBody')}</p>
+      <p><strong>{fileDelete.name}</strong></p>
+      <div className={css.confirmActions}>
+        <Button onClick={() => { setFileDelete(null) }}>{t('cancel')}</Button>
+        <Button variant="danger" onClick={() => { runFileOperation('delete', fileDelete.path) }}>{t('deleteFile')}</Button>
+      </div>
+    </Dialog> : null}
 
     {archiveConfirm !== null ? <Dialog className={css.confirmDialog} label="归档群组" onClose={() => { setArchiveConfirm(null) }}><h2>{t('archiveGroupTitle')}</h2><p>{t('archiveGroupBody')}</p><div className={css.confirmActions}><Button onClick={() => { setArchiveConfirm(null) }}>取消</Button><Button variant="danger" onClick={() => { updateRoom(archiveConfirm, { archivedAt: Date.now() }); setArchiveConfirm(null); setRoomSettingsOpen(false) }}>归档</Button></div></Dialog> : null}
 

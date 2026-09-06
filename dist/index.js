@@ -189,6 +189,7 @@ let WorkBuddySkillCatalog = (() => {
 	let _unlinkSkill_decorators;
 	let _recentProjectFiles_decorators;
 	let _roomArtifacts_decorators;
+	let _fileOperation_decorators;
 	let _artifactHistory_decorators;
 	let _artifactDiff_decorators;
 	let _readSkillChatTerminal_decorators;
@@ -216,6 +217,7 @@ let WorkBuddySkillCatalog = (() => {
 			_unlinkSkill_decorators = [Remote];
 			_recentProjectFiles_decorators = [Remote];
 			_roomArtifacts_decorators = [Remote];
+			_fileOperation_decorators = [Remote];
 			_artifactHistory_decorators = [Remote];
 			_artifactDiff_decorators = [Remote];
 			_readSkillChatTerminal_decorators = [Remote];
@@ -307,6 +309,17 @@ let WorkBuddySkillCatalog = (() => {
 				access: {
 					has: (obj) => "roomArtifacts" in obj,
 					get: (obj) => obj.roomArtifacts
+				},
+				metadata: _metadata
+			}, null, _instanceExtraInitializers);
+			__esDecorate(this, null, _fileOperation_decorators, {
+				kind: "method",
+				name: "fileOperation",
+				static: false,
+				private: false,
+				access: {
+					has: (obj) => "fileOperation" in obj,
+					get: (obj) => obj.fileOperation
 				},
 				metadata: _metadata
 			}, null, _instanceExtraInitializers);
@@ -890,6 +903,52 @@ let WorkBuddySkillCatalog = (() => {
 				files: files.slice(0, ARTIFACT_MAX_FILES),
 				unavailable: false
 			};
+		}
+		/**
+		* Create, rename or delete one path inside a Workspace.
+		*
+		* The tree could only be read, so tidying up after a room produced something
+		* meant leaving the product. Each operation resolves inside the Workspace and
+		* refuses anything that leaves it; a rename takes a bare name rather than a
+		* path, so it can move a file within its directory but never out of it.
+		* @param request - the Workspace, the operation, and its target.
+		* @param signal - cancellation.
+		* @returns where the path ended up.
+		*/
+		async fileOperation(request, signal) {
+			signal?.throwIfAborted();
+			const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId));
+			if (workspace === void 0) throw new Error("skill-chat: unknown Workspace");
+			if (await workspace.status() !== "ok") throw new Error("skill-chat: Workspace directory is unavailable");
+			const root = await realpath(workspace.path);
+			const target = resolve(root, request.path);
+			if (!isWithin(root, target) || target === root) throw new Error("skill-chat: path escapes Workspace");
+			if (request.op === "delete") {
+				await rm(target, {
+					recursive: true,
+					force: false
+				});
+				return { path: target };
+			}
+			if (request.op === "rename") {
+				const name = safeFileName(request.name);
+				const renamed = join(dirname(target), name);
+				if (!isWithin(root, renamed)) throw new Error("skill-chat: path escapes Workspace");
+				if (await stat(renamed).then(() => true, () => false)) throw new Error("skill-chat: a file with that name already exists");
+				await rename(target, renamed);
+				return { path: renamed };
+			}
+			if (await stat(target).then(() => true, () => false)) throw new Error("skill-chat: that path already exists");
+			if (request.op === "create-directory") {
+				await mkdir(target, { recursive: true });
+				return { path: target };
+			}
+			await mkdir(dirname(target), { recursive: true });
+			await writeFile(target, "", {
+				encoding: "utf8",
+				flag: "wx"
+			});
+			return { path: target };
 		}
 		/**
 		* List a produced file's earlier states.
@@ -2023,6 +2082,23 @@ function parseRipgrepRows(stream, root) {
 	return found;
 }
 /**
+* Validate a name typed for a new or renamed file.
+*
+* A name is a name: no separators, no `..`, nothing that resolves anywhere but
+* the directory it was typed in. Rejecting is better than sanitizing, because a
+* silently corrected name is a file the person cannot find again.
+* @param value - the typed name.
+* @returns the name, unchanged.
+* @throws when the name could reach outside its directory.
+*/
+function safeFileName(value) {
+	const name = (value ?? "").trim();
+	if (name === "" || name === "." || name === "..") throw new Error("skill-chat: invalid file name");
+	if (name.includes("/") || name.includes("\\") || name.includes("\0")) throw new Error("skill-chat: invalid file name");
+	if (name.length > 200) throw new Error("skill-chat: file name is too long");
+	return name;
+}
+/**
 * Split one state document into the files it is stored as.
 *
 * Personas dominate the document — hundreds of entries against a handful of
@@ -2475,4 +2551,4 @@ async function scanWorkBuddySkillContacts(root, signal) {
 	}, signal);
 }
 //#endregion
-export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, nextRecurringAt, parseRipgrepRows, scanSkillRoot, scanSkillRoots, scanWorkBuddySkillContacts };
+export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, nextRecurringAt, parseRipgrepRows, safeFileName, scanSkillRoot, scanSkillRoots, scanWorkBuddySkillContacts };

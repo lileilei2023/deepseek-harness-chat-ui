@@ -300,6 +300,18 @@ function registerUi(ctx: Context): void {
         if (!result.ok) throw new Error(result.error.message)
         return result.value
       },
+      fileOperation: async (
+        workspaceId: WorkspaceId,
+        op: 'create-file' | 'create-directory' | 'rename' | 'delete',
+        path: string,
+        name: string | undefined,
+        signal: AbortSignal,
+      ) => {
+        const result = await ctx.remote.workbuddySkills.fileOperation(
+          { workspaceId, op, path, ...name === undefined ? {} : { name } }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
       artifactHistory: async (workspaceId: WorkspaceId, path: string, signal: AbortSignal) => {
         const result = await ctx.remote.workbuddySkills.artifactHistory({ workspaceId, path }, signal)
         if (!result.ok) throw new Error(result.error.message)

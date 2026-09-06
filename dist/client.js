@@ -4298,6 +4298,18 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			"terminalId": string().readonly()
 		});
 		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_closeSkillChatTerminal_result$schema = _void();
+		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_fileOperation_parameter_0$schema = object({
+			"workspaceId": string().readonly(),
+			"op": union([
+				literal("delete"),
+				literal("create-file"),
+				literal("create-directory"),
+				literal("rename")
+			]).readonly(),
+			"path": string().readonly(),
+			"name": string().readonly().optional()
+		});
+		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_fileOperation_result$schema = object({ "path": string().readonly() });
 		const _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_getSkillChatState_result$schema = object({
 			"version": union([literal(2), literal(3)]).readonly(),
 			"rooms": array(object({
@@ -4953,7 +4965,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 663,
+						"line": 713,
 						"column": 9
 					}
 				},
@@ -4981,7 +4993,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 637,
+						"line": 687,
 						"column": 9
 					}
 				},
@@ -5009,7 +5021,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 940,
+						"line": 990,
 						"column": 9
 					}
 				},
@@ -5036,7 +5048,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1152,
+						"line": 1202,
 						"column": 9
 					}
 				},
@@ -5063,7 +5075,35 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1093,
+						"line": 1143,
+						"column": 9
+					}
+				},
+				{
+					id: "deepseek-harness-chat-ui#workbuddySkills/fileOperation",
+					service: "workBuddySkillCatalog",
+					namespace: "workbuddySkills",
+					method: "fileOperation",
+					invocation: { kind: "direct" },
+					parameters: [{
+						name: "request",
+						wire: "request",
+						source: "json",
+						codec: {
+							mode: "strict",
+							typeSymbol: "deepseek-harness-chat-ui/types#SkillChatFileOpRequest",
+							schema: _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_fileOperation_parameter_0$schema
+						}
+					}],
+					cancellation: { parameter: "signal" },
+					result: {
+						mode: "strict",
+						typeSymbol: "deepseek-harness-chat-ui/types#SkillChatFileOpValue",
+						schema: _deepseek_ai_dsh_experimental_workbuddy_skill_catalog_workbuddySkills_fileOperation_result$schema
+					},
+					sourceLocation: {
+						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
+						"line": 638,
 						"column": 9
 					}
 				},
@@ -5082,7 +5122,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1161,
+						"line": 1211,
 						"column": 9
 					}
 				},
@@ -5110,7 +5150,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 369,
+						"line": 371,
 						"column": 9
 					}
 				},
@@ -5138,7 +5178,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 392,
+						"line": 394,
 						"column": 9
 					}
 				},
@@ -5157,7 +5197,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 331,
+						"line": 333,
 						"column": 9
 					}
 				},
@@ -5185,7 +5225,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1001,
+						"line": 1051,
 						"column": 9
 					}
 				},
@@ -5213,7 +5253,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1282,
+						"line": 1332,
 						"column": 9
 					}
 				},
@@ -5241,7 +5281,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 968,
+						"line": 1018,
 						"column": 9
 					}
 				},
@@ -5269,7 +5309,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 734,
+						"line": 784,
 						"column": 9
 					}
 				},
@@ -5297,7 +5337,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 514,
+						"line": 516,
 						"column": 9
 					}
 				},
@@ -5325,7 +5365,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 913,
+						"line": 963,
 						"column": 9
 					}
 				},
@@ -5353,7 +5393,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 567,
+						"line": 569,
 						"column": 9
 					}
 				},
@@ -5381,7 +5421,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1313,
+						"line": 1363,
 						"column": 9
 					}
 				},
@@ -5409,7 +5449,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 337,
+						"line": 339,
 						"column": 9
 					}
 				},
@@ -5437,7 +5477,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 801,
+						"line": 851,
 						"column": 9
 					}
 				},
@@ -5465,7 +5505,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1144,
+						"line": 1194,
 						"column": 9
 					}
 				},
@@ -5493,7 +5533,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1039,
+						"line": 1089,
 						"column": 9
 					}
 				},
@@ -5521,7 +5561,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 775,
+						"line": 825,
 						"column": 9
 					}
 				},
@@ -5549,7 +5589,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 1110,
+						"line": 1160,
 						"column": 9
 					}
 				},
@@ -5577,7 +5617,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 					},
 					sourceLocation: {
 						"file": "packages/experimental/workbuddy-skill-catalog/src/index.ts",
-						"line": 408,
+						"line": 410,
 						"column": 9
 					}
 				}
@@ -7851,6 +7891,15 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			roomNotice: "群公告",
 			runHistory: "运行记录",
 			versions: "历史版本",
+			renameFile: "重命名",
+			newFileHere: "在这里新建文件",
+			newDirectoryHere: "在这里新建文件夹",
+			deleteFile: "删除",
+			newNameLabel: "名称",
+			deleteFileBody: "这个文件会从磁盘上删除，没有撤销。",
+			deleteDirectoryBody: "这个文件夹和它里面的全部内容都会从磁盘上删除，没有撤销。",
+			fileDeleted: "已删除",
+			fileSaved: "已保存",
 			uncommittedChange: "未提交的改动",
 			backToFile: "← 回到文件",
 			noArtifactChange: "这两版之间这个文件没有变化。",
@@ -8167,6 +8216,15 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			roomNotice: "Room notice",
 			runHistory: "Run history",
 			versions: "Versions",
+			renameFile: "Rename",
+			newFileHere: "New file here",
+			newDirectoryHere: "New folder here",
+			deleteFile: "Delete",
+			newNameLabel: "Name",
+			deleteFileBody: "This file is removed from disk. There is no undo.",
+			deleteDirectoryBody: "This folder and everything in it is removed from disk. There is no undo.",
+			fileDeleted: "Deleted",
+			fileSaved: "Saved",
 			uncommittedChange: "Uncommitted change",
 			backToFile: "← Back to the file",
 			noArtifactChange: "This file did not change between those two versions.",
@@ -9999,7 +10057,7 @@ ${roster}
 			});
 		}
 		function SkillContactsBrowser(props) {
-			const { wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession, startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote, linkSkill, forkSession, messageSeq, recentProjectFiles, roomArtifacts, artifactHistory, artifactDiff, readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer, browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t } = props;
+			const { wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession, startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote, linkSkill, forkSession, messageSeq, recentProjectFiles, roomArtifacts, artifactHistory, artifactDiff, fileOperation, readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer, browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t } = props;
 			const sessions = useSessions((value) => value);
 			const workspaces = useWorkspaces((value) => value);
 			const [view, setView] = (0, react.useState)("chats");
@@ -10057,6 +10115,9 @@ ${roster}
 			const [artifactsTraced, setArtifactsTraced] = (0, react.useState)(false);
 			const [artifactHistoryValue, setArtifactHistoryValue] = (0, react.useState)(null);
 			const [artifactDiffPatch, setArtifactDiffPatch] = (0, react.useState)(null);
+			const [fileRename, setFileRename] = (0, react.useState)(null);
+			const [fileCreate, setFileCreate] = (0, react.useState)(null);
+			const [fileDelete, setFileDelete] = (0, react.useState)(null);
 			const [artifactsBusy, setArtifactsBusy] = (0, react.useState)(false);
 			const [artifactRestOpen, setArtifactRestOpen] = (0, react.useState)(false);
 			const [notificationsRevision, setNotificationsRevision] = (0, react.useState)(0);
@@ -11271,6 +11332,36 @@ ${roster}
 				if (typeof Notification === "undefined" || Notification.permission !== "default") return;
 				Notification.requestPermission().then(() => {
 					setNotificationsRevision((current) => current + 1);
+				});
+			};
+			/**
+			* Run one write against the project tree and refresh what it changed.
+			* @param op - the operation.
+			* @param path - the target path.
+			* @param name - a bare name, for create and rename.
+			*/
+			const runFileOperation = (op, path, name) => {
+				if (activeWorkspace === void 0) return;
+				const abort = new AbortController();
+				fileOperation(activeWorkspace.workspaceId, op, path, name, abort.signal).then((result) => {
+					setFileRename(null);
+					setFileCreate(null);
+					setFileDelete(null);
+					const parent = result.path.slice(0, result.path.lastIndexOf("/"));
+					for (const directory of new Set([parent, ...expandedDirs])) browseProject(activeWorkspace.workspaceId, directory, new AbortController().signal).then((listing) => {
+						setDirListings((current) => ({
+							...current,
+							[directory]: listing.entries
+						}));
+					}, () => {});
+					browseProject(activeWorkspace.workspaceId, void 0, new AbortController().signal).then(setProjectListing, () => {});
+					if (op === "delete") {
+						setOpenFiles((current) => current.filter((item) => item.path !== path));
+						setProjectFile((current) => current?.path === path ? null : current);
+					}
+					setNotice(op === "delete" ? t("fileDeleted") : t("fileSaved"));
+				}, (error) => {
+					setNotice(error instanceof Error ? error.message : String(error));
 				});
 			};
 			/** Show one workspace path in the desktop file manager. */
@@ -13052,6 +13143,54 @@ ${roster}
 									(0, react_jsx_runtime.jsx)("button", {
 										type: "button",
 										onClick: () => {
+											setFileRename({
+												path: target.path,
+												name: target.name
+											});
+											close();
+										},
+										children: t("renameFile")
+									}),
+									(0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => {
+											setFileCreate({
+												parent: target.kind === "directory" ? target.path : target.path.slice(0, target.path.lastIndexOf("/")),
+												kind: "file",
+												name: ""
+											});
+											close();
+										},
+										children: t("newFileHere")
+									}),
+									(0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => {
+											setFileCreate({
+												parent: target.kind === "directory" ? target.path : target.path.slice(0, target.path.lastIndexOf("/")),
+												kind: "directory",
+												name: ""
+											});
+											close();
+										},
+										children: t("newDirectoryHere")
+									}),
+									(0, react_jsx_runtime.jsx)("button", {
+										className: SkillContactsBrowser_module_css_default.menuDanger,
+										type: "button",
+										onClick: () => {
+											setFileDelete({
+												path: target.path,
+												name: target.name,
+												kind: target.kind
+											});
+											close();
+										},
+										children: t("deleteFile")
+									}),
+									(0, react_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => {
 											const directory = target.kind === "directory" ? target.path : target.path.slice(0, target.path.lastIndexOf("/"));
 											openProjectTool("terminal");
 											setTerminalCommand(`cd ${/\s/u.test(directory) ? `"${directory}"` : directory}`);
@@ -13142,6 +13281,118 @@ ${roster}
 										setDeleteConfirm(null);
 									},
 									children: t("delete")
+								})]
+							})
+						]
+					}) : null,
+					fileRename !== null ? (0, react_jsx_runtime.jsxs)(Dialog, {
+						className: SkillContactsBrowser_module_css_default.confirmDialog,
+						label: t("renameFile"),
+						onClose: () => {
+							setFileRename(null);
+						},
+						children: [
+							(0, react_jsx_runtime.jsx)("h2", { children: t("renameFile") }),
+							(0, react_jsx_runtime.jsxs)("label", {
+								className: SkillContactsBrowser_module_css_default.field,
+								children: [(0, react_jsx_runtime.jsx)("span", { children: t("newNameLabel") }), (0, react_jsx_runtime.jsx)("input", {
+									value: fileRename.name,
+									autoFocus: true,
+									onChange: (event) => {
+										setFileRename((current) => current === null ? null : {
+											...current,
+											name: event.target.value
+										});
+									},
+									onKeyDown: (event) => {
+										if (event.key === "Enter") runFileOperation("rename", fileRename.path, fileRename.name.trim());
+									}
+								})]
+							}),
+							(0, react_jsx_runtime.jsxs)("div", {
+								className: SkillContactsBrowser_module_css_default.confirmActions,
+								children: [(0, react_jsx_runtime.jsx)(Button, {
+									onClick: () => {
+										setFileRename(null);
+									},
+									children: t("cancel")
+								}), (0, react_jsx_runtime.jsx)(Button, {
+									variant: "primary",
+									disabled: fileRename.name.trim() === "",
+									onClick: () => {
+										runFileOperation("rename", fileRename.path, fileRename.name.trim());
+									},
+									children: t("saveIdentity")
+								})]
+							})
+						]
+					}) : null,
+					fileCreate !== null ? (0, react_jsx_runtime.jsxs)(Dialog, {
+						className: SkillContactsBrowser_module_css_default.confirmDialog,
+						label: fileCreate.kind === "file" ? t("newFileHere") : t("newDirectoryHere"),
+						onClose: () => {
+							setFileCreate(null);
+						},
+						children: [
+							(0, react_jsx_runtime.jsx)("h2", { children: fileCreate.kind === "file" ? t("newFileHere") : t("newDirectoryHere") }),
+							(0, react_jsx_runtime.jsxs)("label", {
+								className: SkillContactsBrowser_module_css_default.field,
+								children: [(0, react_jsx_runtime.jsx)("span", { children: t("newNameLabel") }), (0, react_jsx_runtime.jsx)("input", {
+									value: fileCreate.name,
+									autoFocus: true,
+									placeholder: fileCreate.kind === "file" ? "report.md" : "reports",
+									onChange: (event) => {
+										setFileCreate((current) => current === null ? null : {
+											...current,
+											name: event.target.value
+										});
+									},
+									onKeyDown: (event) => {
+										if (event.key === "Enter" && fileCreate.name.trim() !== "") runFileOperation(fileCreate.kind === "file" ? "create-file" : "create-directory", `${fileCreate.parent}/${fileCreate.name.trim()}`);
+									}
+								})]
+							}),
+							(0, react_jsx_runtime.jsxs)("div", {
+								className: SkillContactsBrowser_module_css_default.confirmActions,
+								children: [(0, react_jsx_runtime.jsx)(Button, {
+									onClick: () => {
+										setFileCreate(null);
+									},
+									children: t("cancel")
+								}), (0, react_jsx_runtime.jsx)(Button, {
+									variant: "primary",
+									disabled: fileCreate.name.trim() === "",
+									onClick: () => {
+										runFileOperation(fileCreate.kind === "file" ? "create-file" : "create-directory", `${fileCreate.parent}/${fileCreate.name.trim()}`);
+									},
+									children: t("create")
+								})]
+							})
+						]
+					}) : null,
+					fileDelete !== null ? (0, react_jsx_runtime.jsxs)(Dialog, {
+						className: SkillContactsBrowser_module_css_default.confirmDialog,
+						label: t("deleteFile"),
+						onClose: () => {
+							setFileDelete(null);
+						},
+						children: [
+							(0, react_jsx_runtime.jsx)("h2", { children: t("deleteFile") }),
+							(0, react_jsx_runtime.jsx)("p", { children: fileDelete.kind === "directory" ? t("deleteDirectoryBody") : t("deleteFileBody") }),
+							(0, react_jsx_runtime.jsx)("p", { children: (0, react_jsx_runtime.jsx)("strong", { children: fileDelete.name }) }),
+							(0, react_jsx_runtime.jsxs)("div", {
+								className: SkillContactsBrowser_module_css_default.confirmActions,
+								children: [(0, react_jsx_runtime.jsx)(Button, {
+									onClick: () => {
+										setFileDelete(null);
+									},
+									children: t("cancel")
+								}), (0, react_jsx_runtime.jsx)(Button, {
+									variant: "danger",
+									onClick: () => {
+										runFileOperation("delete", fileDelete.path);
+									},
+									children: t("deleteFile")
 								})]
 							})
 						]
@@ -14046,6 +14297,16 @@ ${roster}
 						const result = await ctx.remote.workbuddySkills.roomArtifacts({
 							workspaceId,
 							sessionIds
+						}, signal);
+						if (!result.ok) throw new Error(result.error.message);
+						return result.value;
+					},
+					fileOperation: async (workspaceId, op, path, name, signal) => {
+						const result = await ctx.remote.workbuddySkills.fileOperation({
+							workspaceId,
+							op,
+							path,
+							...name === void 0 ? {} : { name }
 						}, signal);
 						if (!result.ok) throw new Error(result.error.message);
 						return result.value;

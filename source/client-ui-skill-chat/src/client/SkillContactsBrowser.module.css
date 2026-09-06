@@ -1047,6 +1047,8 @@
 .noticeRegion:empty { display: none; }
 /* A row of moments, not a list of commits: the question is "what did the
  * second draft change", so each chip is a time you can compare against. */
+/* The one entry in this menu with no undo, marked as such. */
+.menuDanger { color: var(--ds-chat-danger); }
 .versionBar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: var(--ds-chat-hairline) solid var(--ds-chat-code-border); background: var(--ds-chat-code-bg-raised); }
 .versionBar > span { color: var(--ds-chat-code-muted); font-size: var(--ds-chat-text-caption); }
 .versionBar button { padding: 3px 8px; border: var(--ds-chat-hairline) solid var(--ds-chat-code-border); border-radius: 7px; color: var(--ds-chat-code-fg); background: transparent; cursor: pointer; font: inherit; font-size: var(--ds-chat-text-caption); font-variant-numeric: tabular-nums; }

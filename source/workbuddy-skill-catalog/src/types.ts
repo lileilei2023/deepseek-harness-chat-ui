@@ -170,6 +170,27 @@ export interface SkillChatTerminalValue {
   readonly lineEnd: number
 }
 
+/**
+ * Create, rename or delete one path inside a Workspace.
+ *
+ * The tree was read-only, so a room could produce a report and then leave you
+ * unable to tidy it. Every operation stays inside the Workspace, and delete is
+ * the caller's to confirm — the Host refuses rather than asks.
+ */
+export interface SkillChatFileOpRequest {
+  readonly workspaceId: string
+  readonly op: 'create-file' | 'create-directory' | 'rename' | 'delete'
+  /** The path being acted on, absolute or Workspace-relative. */
+  readonly path: string
+  /** New name for a rename; a bare name, not a path. */
+  readonly name?: string
+}
+
+/** Where the acted-on path ended up. */
+export interface SkillChatFileOpValue {
+  readonly path: string
+}
+
 /** Ask what a Room's sessions actually produced. */
 export interface SkillChatArtifactRequest {
   readonly workspaceId: string

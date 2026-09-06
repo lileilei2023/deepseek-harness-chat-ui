@@ -7,7 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import {
-  WorkBuddySkillCatalog, nextRecurringAt, parseRipgrepRows, scanSkillRoots, scanWorkBuddySkillContacts,
+  WorkBuddySkillCatalog, nextRecurringAt, parseRipgrepRows, safeFileName, scanSkillRoots,
+  scanWorkBuddySkillContacts,
 } from '../src/index.ts'
 
 async function writeSkill(root: string, plugin: string, version: string, relativePath: string, content: string): Promise<string> {
@@ -575,6 +576,57 @@ Do work.
       .rejects.toThrow('escapes Workspace')
   })
 
+  it('creates, renames and deletes inside the Workspace', async () => {
+    const workspace = await realpath(await mkdtemp(join(tmpdir(), 'dsh-fileops-')))
+    const ctx = await catalogContext()
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: [], status: async () => 'ok' as const }),
+    } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+    const op = catalog.fileOperation.bind(catalog)
+
+    await op({ workspaceId: 'w', op: 'create-directory', path: 'reports' })
+    const created = await op({ workspaceId: 'w', op: 'create-file', path: 'reports/draft.md' })
+    await expect(readFile(created.path, 'utf8')).resolves.toBe('')
+
+    const renamed = await op({ workspaceId: 'w', op: 'rename', path: created.path, name: 'final.md' })
+    expect(renamed.path.endsWith('/reports/final.md')).toBe(true)
+    // A rename takes a bare name, so it moves a file inside its directory and
+    // never out of it.
+    await expect(op({ workspaceId: 'w', op: 'rename', path: renamed.path, name: '../escaped.md' }))
+      .rejects.toThrow('invalid file name')
+
+    await op({ workspaceId: 'w', op: 'delete', path: renamed.path })
+    await expect(readFile(renamed.path, 'utf8')).rejects.toThrow()
+  })
+
+  it('refuses to destroy something that is already there, or anything outside the Workspace', async () => {
+    // The real path, because the Host resolves the Workspace root that way and
+    // on macOS `/var/folders` is a symlink into `/private/var/folders`.
+    const workspace = await realpath(await mkdtemp(join(tmpdir(), 'dsh-fileops-guard-')))
+    await writeFile(join(workspace, 'kept.md'), 'important')
+    await writeFile(join(workspace, 'other.md'), 'also important')
+    const ctx = await catalogContext()
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: [], status: async () => 'ok' as const }),
+    } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+    const op = catalog.fileOperation.bind(catalog)
+
+    // Two reports with the same name is a mistake to report, not one to resolve
+    // by destroying one of them.
+    await expect(op({ workspaceId: 'w', op: 'create-file', path: 'kept.md' })).rejects.toThrow('already exists')
+    await expect(op({ workspaceId: 'w', op: 'rename', path: join(workspace, 'other.md'), name: 'kept.md' }))
+      .rejects.toThrow('already exists')
+    await expect(readFile(join(workspace, 'kept.md'), 'utf8')).resolves.toBe('important')
+
+    for (const path of ['../outside.md', '/etc/passwd']) {
+      await expect(op({ workspaceId: 'w', op: 'delete', path })).rejects.toThrow('escapes Workspace')
+    }
+    // The Workspace root itself is not a thing this can delete.
+    await expect(op({ workspaceId: 'w', op: 'delete', path: '.' })).rejects.toThrow('escapes Workspace')
+  })
+
   it('records an automation run that never started, instead of failing silently', async () => {
     const ctx = await catalogContext()
     const stateFile = join(await mkdtemp(join(tmpdir(), 'dsh-runs-')), 'state.json')
@@ -816,5 +868,20 @@ describe('nextRecurringAt', () => {
     expect(nextRecurringAt(every, 1_000) - 1_000).toBe(2 * 3_600_000)
     const broken = { kind: 'recurring' as const, rule: 'whenever', timezone: 'UTC' }
     expect(nextRecurringAt(broken, 1_000) - 1_000).toBe(86_400_000)
+  })
+})
+
+describe('safeFileName', () => {
+  it('rejects anything that could resolve outside its own directory', () => {
+    // Rejecting beats sanitizing: a silently corrected name is a file the
+    // person cannot find again.
+    for (const name of ['', '   ', '.', '..', 'a/b', 'a' + String.fromCharCode(92) + 'b', 'a' + String.fromCharCode(0) + 'b']) {
+      expect(() => safeFileName(name)).toThrow('invalid file name')
+    }
+    expect(() => safeFileName('x'.repeat(201))).toThrow('too long')
+  })
+
+  it('keeps an ordinary name exactly as typed', () => {
+    expect(safeFileName('  液冷板块 报告.md  ')).toBe('液冷板块 报告.md')
   })
 })

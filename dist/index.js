@@ -1652,9 +1652,121 @@ function languageForPath(path) {
 		sql: "sql"
 	}[extname(path).slice(1).toLocaleLowerCase()] ?? "text";
 }
+/**
+* How far the named zone is ahead of UTC at one instant.
+*
+* `Intl` can render an instant in a zone but will not hand back the offset, so
+* this reads the rendered wall-clock back as if it were UTC and takes the
+* difference. That is the standard way to do this without a date library.
+* @param at - the instant, in epoch milliseconds.
+* @param timeZone - an IANA zone name.
+* @returns the offset in milliseconds, or 0 when the zone is unusable.
+*/
+function zoneOffset(at, timeZone) {
+	try {
+		const parts = new Intl.DateTimeFormat("en-US", {
+			timeZone,
+			hour12: false,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hourCycle: "h23",
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit"
+		}).formatToParts(at);
+		const field = (type) => Number(parts.find((part) => part.type === type)?.value ?? "0");
+		return Date.UTC(field("year"), field("month") - 1, field("day"), field("hour"), field("minute"), field("second")) - Math.floor(at / 1e3) * 1e3;
+	} catch {
+		return 0;
+	}
+}
+/**
+* The instant at which a given wall-clock time occurs in a zone.
+*
+* The offset depends on the instant, and the instant is what is being solved
+* for, so this guesses once and corrects — which is what makes it land on the
+* right side of a daylight-saving change.
+* @param year - calendar year in the zone.
+* @param month - 1-based month in the zone.
+* @param day - day of month in the zone.
+* @param hour - hour in the zone.
+* @param minute - minute in the zone.
+* @param timeZone - an IANA zone name.
+* @returns the instant in epoch milliseconds.
+*/
+function zonedTime(year, month, day, hour, minute, timeZone) {
+	const wall = Date.UTC(year, month - 1, day, hour, minute);
+	return wall - zoneOffset(wall - zoneOffset(wall, timeZone), timeZone);
+}
+/** Calendar fields of one instant, as seen in a zone. */
+function zonedFields(at, timeZone) {
+	try {
+		const parts = new Intl.DateTimeFormat("en-US", {
+			timeZone,
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			weekday: "short"
+		}).formatToParts(at);
+		const value = (type) => parts.find((part) => part.type === type)?.value ?? "";
+		return {
+			year: Number(value("year")),
+			month: Number(value("month")),
+			day: Number(value("day")),
+			weekday: Math.max(0, [
+				"Sun",
+				"Mon",
+				"Tue",
+				"Wed",
+				"Thu",
+				"Fri",
+				"Sat"
+			].indexOf(value("weekday")))
+		};
+	} catch {
+		const date = new Date(at);
+		return {
+			year: date.getUTCFullYear(),
+			month: date.getUTCMonth() + 1,
+			day: date.getUTCDate(),
+			weekday: date.getUTCDay()
+		};
+	}
+}
+/**
+* When one recurring automation should next run.
+*
+* `every:N<unit>` counts from the run that just finished, so a task that starts
+* late stays late for good — "every 24h" drifts by however long each run was
+* delayed. `daily@HH:MM` and `weekdays@HH:MM` are anchored to a wall clock in
+* the automation's own zone instead, which is what "every morning at nine"
+* actually means.
+* @param schedule - the automation's schedule.
+* @param after - the instant the last run finished.
+* @returns the next run instant, in epoch milliseconds.
+*/
 function nextRecurringAt(schedule, after) {
 	if (schedule.kind === "once") return after;
-	const match = /^every:(\d+)(m|h|d)$/u.exec(schedule.rule.trim());
+	const rule = schedule.rule.trim();
+	const clock = /^(daily|weekdays)@(\d{1,2}):(\d{2})$/u.exec(rule);
+	if (clock !== null) {
+		const zone = schedule.timezone === "" ? "UTC" : schedule.timezone;
+		const hour = Math.min(23, Number(clock[2]));
+		const minute = Math.min(59, Number(clock[3]));
+		for (let ahead = 0; ahead <= 8; ahead += 1) {
+			const probe = zonedFields(after + ahead * 864e5, zone);
+			const candidate = zonedTime(probe.year, probe.month, probe.day, hour, minute, zone);
+			if (candidate <= after) continue;
+			if (clock[1] === "weekdays") {
+				const weekday = zonedFields(candidate, zone).weekday;
+				if (weekday === 0 || weekday === 6) continue;
+			}
+			return candidate;
+		}
+		return after + 864e5;
+	}
+	const match = /^every:(\d+)(m|h|d)$/u.exec(rule);
 	if (match === null) return after + 1440 * 60 * 1e3;
 	const amount = Number(match[1]);
 	const unit = match[2] === "m" ? 6e4 : match[2] === "h" ? 36e5 : 864e5;
@@ -2211,4 +2323,4 @@ async function scanWorkBuddySkillContacts(root, signal) {
 	}, signal);
 }
 //#endregion
-export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, parseRipgrepRows, scanSkillRoot, scanSkillRoots, scanWorkBuddySkillContacts };
+export { Config, WorkBuddySkillCatalog, WorkBuddySkillCatalog as default, nextRecurringAt, parseRipgrepRows, scanSkillRoot, scanSkillRoots, scanWorkBuddySkillContacts };

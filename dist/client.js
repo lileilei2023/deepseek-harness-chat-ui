@@ -7771,6 +7771,13 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			memberWorking: "正在处理",
 			roomNotice: "群公告",
 			runHistory: "运行记录",
+			repeatLabel: "重复方式",
+			repeatDaily: "每天",
+			repeatWeekdays: "工作日",
+			repeatInterval: "按间隔",
+			atLabel: "时刻",
+			everyPrefix: "每",
+			unitMinute: "分钟",
 			runRunning: "进行中",
 			runDone: "已完成",
 			runFailed: "失败",
@@ -8076,6 +8083,13 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 			memberWorking: "working",
 			roomNotice: "Room notice",
 			runHistory: "Run history",
+			repeatLabel: "Repeat",
+			repeatDaily: "Every day at",
+			repeatWeekdays: "Weekdays at",
+			repeatInterval: "By interval",
+			atLabel: "Time",
+			everyPrefix: "Every",
+			unitMinute: "minutes",
 			runRunning: "Running",
 			runDone: "Done",
 			runFailed: "Failed",
@@ -8562,6 +8576,22 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
 				};
 			}, [open]);
 			return ref;
+		}
+		/**
+		* Say a recurrence rule the way a person would.
+		*
+		* The card used to print `rule.slice(6)`, which assumed every rule started with
+		* `every:` — a clock-anchored rule rendered as garbage.
+		* @param rule - the stored recurrence rule.
+		* @returns a readable phrase.
+		*/
+		function scheduleLabel(rule) {
+			const clock = /^(daily|weekdays)@(\d{1,2}:\d{2})$/u.exec(rule.trim());
+			if (clock !== null) return `${clock[1] === "weekdays" ? tr("repeatWeekdays") : tr("repeatDaily")} ${clock[2] ?? ""}`;
+			const every = /^every:(\d+)(m|h|d)$/u.exec(rule.trim());
+			if (every === null) return rule;
+			const unit = every[2] === "m" ? tr("unitMinute") : every[2] === "h" ? tr("unitHour") : tr("unitDay");
+			return `${tr("everyPrefix")} ${every[1] ?? ""} ${unit}`;
 		}
 		function roomTime(value) {
 			const then = new Date(value);
@@ -9929,6 +9959,8 @@ ${roster}
 			const [automationPrompt, setAutomationPrompt] = (0, react.useState)("");
 			const [automationWhen, setAutomationWhen] = (0, react.useState)("");
 			const [automationSchedule, setAutomationSchedule] = (0, react.useState)("once");
+			const [automationRepeat, setAutomationRepeat] = (0, react.useState)("daily");
+			const [automationAt, setAutomationAt] = (0, react.useState)("09:00");
 			const [automationInterval, setAutomationInterval] = (0, react.useState)("1");
 			const [automationUnit, setAutomationUnit] = (0, react.useState)("d");
 			const [phase, setPhase] = (0, react.useState)("idle");
@@ -10757,7 +10789,7 @@ ${roster}
 						runAt: new Date(timestamp).toISOString()
 					} : {
 						kind: "recurring",
-						rule: `every:${interval}${automationUnit}`,
+						rule: automationRepeat === "interval" ? `every:${interval}${automationUnit}` : `${automationRepeat}@${automationAt}`,
 						timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
 					},
 					lifecycle: automationSchedule === "once" ? "run-once" : "continuous",
@@ -10779,6 +10811,8 @@ ${roster}
 					setAutomationSchedule("once");
 					setAutomationInterval("1");
 					setAutomationUnit("d");
+					setAutomationRepeat("daily");
+					setAutomationAt("09:00");
 					setNotice(t("automationCreated"));
 				} catch (error) {
 					setNotice(`自动化保存失败：${error instanceof Error ? error.message : String(error)}`);
@@ -12020,7 +12054,7 @@ ${roster}
 									(0, react_jsx_runtime.jsxs)("div", { children: [(0, react_jsx_runtime.jsx)("strong", { children: automation.name }), (0, react_jsx_runtime.jsxs)("small", { children: [
 										state.rooms.find((room) => room.roomId === automation.roomId)?.title ?? "已归档 Room",
 										" · ",
-										automation.schedule.kind === "once" ? t("onceLabel") : `每 ${automation.schedule.rule.slice(6)}`
+										automation.schedule.kind === "once" ? t("onceLabel") : scheduleLabel(automation.schedule.rule)
 									] })] }),
 									(0, react_jsx_runtime.jsx)("p", { children: automation.prompt }),
 									(0, react_jsx_runtime.jsxs)("footer", { children: [
@@ -12620,6 +12654,29 @@ ${roster}
 									className: SkillContactsBrowser_module_css_default.repeatFields,
 									children: [(0, react_jsx_runtime.jsxs)("label", {
 										className: SkillContactsBrowser_module_css_default.field,
+										children: [(0, react_jsx_runtime.jsx)("span", { children: t("repeatLabel") }), (0, react_jsx_runtime.jsxs)("select", {
+											value: automationRepeat,
+											onChange: (event) => {
+												const value = event.target.value;
+												setAutomationRepeat(value === "interval" ? "interval" : value === "weekdays" ? "weekdays" : "daily");
+											},
+											children: [
+												(0, react_jsx_runtime.jsx)("option", {
+													value: "daily",
+													children: t("repeatDaily")
+												}),
+												(0, react_jsx_runtime.jsx)("option", {
+													value: "weekdays",
+													children: t("repeatWeekdays")
+												}),
+												(0, react_jsx_runtime.jsx)("option", {
+													value: "interval",
+													children: t("repeatInterval")
+												})
+											]
+										})]
+									}), automationRepeat === "interval" ? (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [(0, react_jsx_runtime.jsxs)("label", {
+										className: SkillContactsBrowser_module_css_default.field,
 										children: [(0, react_jsx_runtime.jsx)("span", { children: t("intervalLabel") }), (0, react_jsx_runtime.jsx)("input", {
 											inputMode: "numeric",
 											min: "1",
@@ -12643,6 +12700,15 @@ ${roster}
 												value: "d",
 												children: t("unitDay")
 											})]
+										})]
+									})] }) : (0, react_jsx_runtime.jsxs)("label", {
+										className: SkillContactsBrowser_module_css_default.field,
+										children: [(0, react_jsx_runtime.jsx)("span", { children: t("atLabel") }), (0, react_jsx_runtime.jsx)("input", {
+											type: "time",
+											value: automationAt,
+											onChange: (event) => {
+												setAutomationAt(event.target.value);
+											}
 										})]
 									})]
 								}) : null,

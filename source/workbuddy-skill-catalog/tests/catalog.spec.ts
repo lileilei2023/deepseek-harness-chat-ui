@@ -6,7 +6,9 @@ import { gzipSync } from 'node:zlib'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import { WorkBuddySkillCatalog, parseRipgrepRows, scanSkillRoots, scanWorkBuddySkillContacts } from '../src/index.ts'
+import {
+  WorkBuddySkillCatalog, nextRecurringAt, parseRipgrepRows, scanSkillRoots, scanWorkBuddySkillContacts,
+} from '../src/index.ts'
 
 async function writeSkill(root: string, plugin: string, version: string, relativePath: string, content: string): Promise<string> {
   const directory = join(root, plugin, version, relativePath)
@@ -682,5 +684,50 @@ describe('parseRipgrepRows', () => {
   it('ignores every event that is not a match', () => {
     const noise = [JSON.stringify({ type: 'begin', data: {} }), 'not json', '', JSON.stringify({ type: 'summary' })]
     expect(parseRipgrepRows(noise.join('\n'), '/root')).toEqual([])
+  })
+})
+
+describe('nextRecurringAt', () => {
+  /** Read an instant back as a wall clock in one zone, for readable assertions. */
+  const wall = (at: number, timeZone: string): string => new Intl.DateTimeFormat('en-GB', {
+    timeZone, hourCycle: 'h23', weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).format(at)
+
+  it('anchors a daily rule to the wall clock instead of counting from the last run', () => {
+    // `every:24h` counts from the run that just finished, so a task delayed by
+    // twenty minutes stays twenty minutes late for good. This is what "every
+    // morning at nine" actually means.
+    const schedule = { kind: 'recurring' as const, rule: 'daily@09:00', timezone: 'Asia/Shanghai' }
+    const lateRun = Date.parse('2026-03-02T01:20:00Z') // 09:20 in Shanghai
+    expect(wall(nextRecurringAt(schedule, lateRun), 'Asia/Shanghai')).toBe('Tue, 03/03/2026, 09:00')
+    // Before the hour on the same day, the next one is still today.
+    const early = Date.parse('2026-03-02T00:10:00Z') // 08:10 in Shanghai
+    expect(wall(nextRecurringAt(schedule, early), 'Asia/Shanghai')).toBe('Mon, 02/03/2026, 09:00')
+  })
+
+  it('skips the weekend for a weekdays rule', () => {
+    const schedule = { kind: 'recurring' as const, rule: 'weekdays@09:00', timezone: 'Asia/Shanghai' }
+    // Friday after the hour: the next run is Monday, not Saturday.
+    const friday = Date.parse('2026-03-06T02:00:00Z') // Fri 10:00 in Shanghai
+    expect(wall(nextRecurringAt(schedule, friday), 'Asia/Shanghai')).toBe('Mon, 09/03/2026, 09:00')
+  })
+
+  it('lands on the right side of a daylight-saving change', () => {
+    // New York moves to daylight time on 2026-03-08. Adding 24 hours to the
+    // previous run would put this an hour out; solving the wall clock does not.
+    const schedule = { kind: 'recurring' as const, rule: 'daily@09:00', timezone: 'America/New_York' }
+    const beforeShift = Date.parse('2026-03-07T15:00:00Z') // Sat 10:00 EST
+    const next = nextRecurringAt(schedule, beforeShift)
+    expect(wall(next, 'America/New_York')).toBe('Sun, 08/03/2026, 09:00')
+    // 09:00 EDT is 13:00 UTC; 09:00 EST would have been 14:00 UTC.
+    expect(new Date(next).toISOString()).toBe('2026-03-08T13:00:00.000Z')
+  })
+
+  it('keeps the interval form working and falls back on an unreadable rule', () => {
+    const every = { kind: 'recurring' as const, rule: 'every:2h', timezone: 'UTC' }
+    expect(nextRecurringAt(every, 1_000) - 1_000).toBe(2 * 3_600_000)
+    const broken = { kind: 'recurring' as const, rule: 'whenever', timezone: 'UTC' }
+    expect(nextRecurringAt(broken, 1_000) - 1_000).toBe(86_400_000)
   })
 })

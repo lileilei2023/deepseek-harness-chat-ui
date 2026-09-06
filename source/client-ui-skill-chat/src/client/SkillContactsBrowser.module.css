@@ -1026,7 +1026,34 @@
  * identical whether three members are running in parallel or nothing is
  * happening, so this pulse is the signal that the room is alive — and keeping
  * it the only one is what stops it becoming decoration. */
-.workingStrip { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 4px 8px; font-size: var(--ds-chat-text-caption); }
+/* `conversation.input.dock` is a full-width band and each entry narrows itself:
+ * the shipped todo and queue cards all use this one geometry, published on the
+ * conversation root as custom properties. Without it the strip ran the whole
+ * column width and started at its left edge, a good 200px left of the composer
+ * it belongs to. Fallbacks because a variable that does not resolve voids the
+ * whole declaration, and the strip would silently go back to full width. */
+.workingStrip {
+  box-sizing: border-box;
+  flex: none;
+  margin: 0 auto;
+  width: calc(
+    100%
+    - 2 * var(--dsh-composer-side-clearance, 16px)
+    - 4 * var(--dsh-composer-dock-inset, 8px)
+  );
+  max-width: calc(
+    var(--dsh-composer-card-max-width, calc(var(--dsh-chat-content-width, 920px) + 32px))
+    - 4 * var(--dsh-composer-dock-inset, 8px)
+  );
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  /* 12px matches the todo card's own inner padding, so the two dock entries
+   * start on the same vertical line rather than one being 8px proud. */
+  padding: 6px 12px 8px;
+  font-size: var(--ds-chat-text-caption);
+}
 .workingMember { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .workingMember b { flex: 0 0 auto; color: var(--ds-chat-text-color); font-weight: 500; }
 .workingMember small { overflow: hidden; max-width: 22ch; color: var(--ds-chat-text-secondary); text-overflow: ellipsis; white-space: nowrap; }

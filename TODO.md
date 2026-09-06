@@ -110,6 +110,10 @@
 - **`content-visibility` 会让 `getComputedStyle` 失真。** 被跳过的子树里读到的
   颜色可能是另一套主题的值。这一轮的对比度审计因此误报过一批「暗色下白底白字」，
   截图才是准的；要用计算样式测量就先临时 `*{content-visibility:visible!important}`。
+- **挂进宿主插槽的东西，先查那个插槽的几何契约。** `conversation.input.dock` 是
+  全宽的带，收窄由条目自己做（`--dsh-composer-side-clearance` / `--dsh-composer-dock-inset`
+  / `--dsh-composer-card-max-width`，定义在 `ConversationRoot.module.css` 的 `.root`）。
+  照抄宿主自己那几张卡片的算式，别自己估一个宽度。
 - **想在演示实例里造一段没有模型也能看的会话**，可以直接写 session 日志：
   `$DSH_HOME/sessions/<workspace>/<session>/session.jsonl.zstd`。三个坑：日志是
   多个 zstd 帧首尾相接的，Node 的 `zstdDecompressSync` 只解第一帧（要用 `zstd -dc`）；
@@ -146,3 +150,4 @@
 | 演示媒体是手工流程 | `scripts/shoot.mjs` 进仓库并写进文档 |
 | 群头像比联系人头像轻一半 | 瓷砖 40→46，两人改对角相叠（脸 17→27），三四人 2×2（脸 17→20），`generalAvatar` 跟着一起放大 |
 | 派活那一行只是 `工具调用 · subagent` | 注册 `tool.call.toolview` 的 `subagent` 键，换成成员头像 + 昵称 + 任务 + 状态，展开有回传内容与交办内容 |
+| 「正在工作」条铺满整列，比输入框左出约 200px | 照 `conversation.input.dock` 的宽度契约收窄，实测与正文列逐像素对齐 |

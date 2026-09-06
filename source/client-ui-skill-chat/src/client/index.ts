@@ -25,6 +25,7 @@ import type { ChatBinding, ContactGroup, ExternalSkillContact, SkillContact } fr
 import type { SkillChatState } from './model.ts'
 import { DS_CHAT_SHELL_CHILDREN } from './shell/index.ts'
 import { createSkinRuntime, SkinCenter } from './skin/index.ts'
+import { SubagentRow } from './subagent.tsx'
 import { en, NS, type SkillChatKey, zh } from './locales.ts'
 
 export * from './shell/index.ts'
@@ -427,6 +428,16 @@ function registerUi(ctx: Context): void {
     id: 'skill-chat-branch',
     order: 30,
   }, SkillChatMessageActions))
+
+  // The one place the group stopped looking like a group. `subagent` has no
+  // shipped occupant on this keyed slot, so claiming it is additive — every
+  // other tool keeps the rendering it has. `subagent_fork` is the same tool
+  // under the alias a forking agent preset gives it; registering a key the
+  // running agent never dispatches simply never renders.
+  ctx.slots.inject('tool.call.toolview', function* () {
+    yield ctx.slots.register({ name: 'tool.call.toolview', key: 'subagent' }, SubagentRow)
+    yield ctx.slots.register({ name: 'tool.call.toolview', key: 'subagent_fork' }, SubagentRow)
+  })
 }
 
 export function mergeContacts(

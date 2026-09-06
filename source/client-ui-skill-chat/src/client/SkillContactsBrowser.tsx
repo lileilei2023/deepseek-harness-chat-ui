@@ -479,7 +479,7 @@ function GroupAvatar({ avatarId, label, small = false }: { readonly avatarId: st
   </span>
 }
 
-interface HeaderBridgeValue {
+export interface HeaderBridgeValue {
   readonly sessionId: SessionId
   readonly room: ChatRoom
   readonly roomSessions: readonly RoomSession[]
@@ -551,7 +551,7 @@ function publishHeaderBridge(value: HeaderBridgeValue | null): void {
   for (const listener of headerBridgeListeners) listener()
 }
 
-function useHeaderBridge(): HeaderBridgeValue | null {
+export function useHeaderBridge(): HeaderBridgeValue | null {
   return useSyncExternalStore(
     listener => { headerBridgeListeners.add(listener); return () => { headerBridgeListeners.delete(listener) } },
     () => headerBridgeValue,
@@ -1628,8 +1628,15 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       // A rounded square, not a row of overlapping circles: the shape is what
       // says "group" at 30px, the way it does in every messaging client, and
       // four portraits in a 2x2 read as one object where 1x3 read as clutter.
+      // Each portrait takes as much of the tile as its arrangement allows. A
+      // lone member fills it; a pair sits on the diagonal at more than half the
+      // tile each; three or four share a 2x2. The old flat 17px made every
+      // group read lighter than the contact circle beside it in the same list.
+      const face = members.length === 1
+        ? (compact ? 28 : 42)
+        : members.length === 2 ? (compact ? 19 : 27) : (compact ? 13 : 20)
       return <span className={css.roomTile} data-count={members.length} data-compact={compact || undefined} title={room.title}>
-        {members.map(member => <Avatar key={member.id} avatarId={member.avatar} label={member.name} size={compact ? 13 : 17}/>)}
+        {members.map(member => <Avatar key={member.id} avatarId={member.avatar} label={member.name} size={face}/>)}
       </span>
     }
     const contact = memberContact(room.memberIds[0] ?? '')

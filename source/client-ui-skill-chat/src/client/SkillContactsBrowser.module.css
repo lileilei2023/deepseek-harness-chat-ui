@@ -1635,24 +1635,26 @@
  * a person's circle — which also ends the 38-vs-40 ragged left edge. The fill
  * is the tile's neutral ground, with the accent left to the mark, so the row
  * does not sit heavier than its neighbours. */
+/* Sized with `.roomTile`, not with the contact circle: both are rooms, and a
+ * list where the two room shapes disagree on size reads as a mistake. */
 .generalAvatar {
   box-sizing: border-box;
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   flex: none;
   display: grid;
   place-items: center;
   border: var(--ds-chat-hairline) solid var(--ds-chat-border);
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--ds-chat-accent-text);
   background: var(--ds-chat-surface-sunken, var(--ds-chat-hover));
   box-shadow: none;
   font-size: var(--ds-chat-text-title3);
 }
 .generalAvatar[data-compact='true'] {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
   font-size: var(--ds-chat-text-body);
 }
 .historyRow .avatar,
@@ -2395,26 +2397,40 @@
  * four of them reads as one object, and the square-vs-circle contrast is what
  * distinguishes a group from a person before any pixel of the artwork does. */
 .roomTile {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1px;
   place-content: center;
   box-sizing: border-box;
   flex: none;
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
   padding: 2px;
   border: var(--ds-chat-hairline) solid var(--ds-chat-border);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--ds-chat-surface-sunken, var(--ds-chat-hover));
   overflow: hidden;
 }
 
-.roomTile[data-compact] { width: 30px; height: 30px; border-radius: 9px; }
+.roomTile[data-compact] { width: 32px; height: 32px; border-radius: 10px; }
 .roomTile > * { min-width: 0; min-height: 0; }
-/* One member fills the tile; two sit side by side, vertically centred. */
+/* One member fills the tile. */
 .roomTile[data-count='1'] { grid-template-columns: 1fr; }
 .roomTile[data-count='1'] > * { width: 100%; height: 100%; }
+/* Two members sat side by side on one row, which left the tile half empty
+ * above and below and made a pair read lighter than a single contact at the
+ * same width. On the diagonal they each get most of the tile's height, and the
+ * ring on the front portrait is what keeps them two faces rather than a blot. */
+.roomTile[data-count='2'] { display: block; }
+.roomTile[data-count='2'] > * { position: absolute; }
+.roomTile[data-count='2'] > :first-child { top: 2px; left: 2px; }
+.roomTile[data-count='2'] > :last-child {
+  right: 2px;
+  bottom: 2px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--ds-chat-surface-sunken, var(--ds-chat-hover));
+}
 .roomTile[data-count='3'] > :first-child { grid-column: 1 / -1; justify-self: center; }
 .roomTile > * { display: block; }
 .roomTile img { display: block; width: 100%; height: 100%; border-radius: 50%; }
@@ -2836,3 +2852,132 @@
 }
 
 .treeCaret { display: inline-block; width: 12px; color: var(--ds-chat-muted); font-size: 10px; }
+
+/* ── Delegated member row ────────────────────────────────────────────────────
+ * `subagent` calls used to render as the generic tool line, which is the right
+ * treatment for a tool and the wrong one for a colleague: in a room of twelve,
+ * three concurrent members produced three identical grey rows. This gives the
+ * delegation the member's face and name, and keeps the report the generic row
+ * used to expand — the key is unoccupied upstream, so nothing else changed. */
+.subagentRow {
+  margin: 4px 0;
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: 12px;
+  background: var(--ds-chat-surface);
+  overflow: hidden;
+}
+
+.subagentRow[data-state='failed'] { border-color: var(--ds-chat-danger-soft); }
+
+.subagentHead {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.subagentHead:hover { background: var(--ds-chat-hover); }
+.subagentFace { position: relative; display: inline-flex; flex: 0 0 auto; }
+
+/* No matched member. A generated portrait here would invent a colleague who is
+ * not in the room; the mark says "a delegated child" and claims nothing more. */
+.subagentAnon {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 30px;
+  height: 30px;
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: 50%;
+  color: var(--ds-chat-accent-text);
+  background: var(--ds-chat-fill-quaternary);
+  font-size: var(--ds-chat-text-caption);
+}
+
+.subagentPulse {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  box-sizing: content-box;
+  width: 7px;
+  height: 7px;
+  border: 2px solid var(--ds-chat-surface);
+  border-radius: 50%;
+  background: var(--ds-chat-accent-solid);
+  animation: dsChatPulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) { .subagentPulse { animation: none; } }
+
+.subagentCopy { display: grid; min-width: 0; gap: 1px; }
+.subagentCopy b {
+  overflow: hidden;
+  color: var(--ds-chat-text-color);
+  font-size: var(--ds-chat-text-body);
+  font-weight: var(--ds-chat-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagentCopy small {
+  overflow: hidden;
+  color: var(--ds-chat-text-secondary);
+  font-size: var(--ds-chat-text-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagentState {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 7px;
+  color: var(--ds-chat-muted);
+  background: var(--ds-chat-fill-quaternary);
+  font-size: var(--ds-chat-text-caption);
+}
+
+.subagentRow[data-state='running'] .subagentState { color: var(--ds-chat-accent-text); background: var(--ds-chat-accent-soft); }
+.subagentRow[data-state='failed'] .subagentState { color: var(--ds-chat-danger); background: var(--ds-chat-danger-soft); }
+
+.subagentBody {
+  padding: 2px 12px 10px;
+  border-top: var(--ds-chat-hairline) solid var(--ds-chat-border);
+}
+
+.subagentBody pre {
+  max-height: 320px;
+  margin: 8px 0 0;
+  overflow: auto;
+  color: var(--ds-chat-text-color);
+  font-family: var(--ds-chat-font-mono, ui-monospace, monospace);
+  font-size: var(--ds-chat-text-caption);
+  line-height: var(--ds-chat-leading-normal);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.subagentEmpty { margin: 8px 0 0; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); }
+.subagentBodyActions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin-top: 8px; }
+.subagentBodyActions details { min-width: 0; flex: 1 1 220px; }
+.subagentBodyActions summary { color: var(--ds-chat-text-secondary); font-size: var(--ds-chat-text-caption); cursor: pointer; }
+.subagentBodyActions > button {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border: var(--ds-chat-hairline) solid var(--ds-chat-border);
+  border-radius: 7px;
+  color: var(--ds-chat-text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--ds-chat-text-caption);
+}
+
+.subagentBodyActions > button:hover { border-color: var(--ds-chat-accent-solid); color: var(--ds-chat-accent-text); }

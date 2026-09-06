@@ -62,12 +62,12 @@ name, prompt and cadence, or start from a blank one.
 | --- | --- |
 | Social chat | Normal chat, Skill contacts, direct conversations and group chats in one recency-sorted room list, with persistent search |
 | Room management | Pin, drag to reorder, archive, delete, and save a room as a team that follows you across projects |
-| Groups | Searchable members, coordinator selection, group system prompt, project binding; a 2x2 tile of up to four member portraits identifies the room |
+| Groups | Searchable members, coordinator selection, group system prompt, project binding; a tile of member portraits identifies the room — a pair overlaps on the diagonal, three or four sit in a 2x2 |
 | Personification | Generated portraits, deterministic friendly names, profiles and original Skill metadata |
 | Skills | Every agent tool's Skill directory in one catalog, `skills.sh` search, install and install-then-add flows |
 | Real invocation | Joining a room links the Skill into the Harness's own Skill root, so the model can actually load it |
 | Parallel members | When a task needs several members the coordinator delegates one background subagent per member, each loading that member's Skill — real concurrency, not a narrated one |
-| Per-speaker faces | Each relayed answer carries the portrait of the member who wrote it, so a group reads as a group |
+| Per-speaker faces | Each relayed answer carries the portrait of the member who wrote it, and so does the row where the coordinator hands work out — a face, a name and the task, in place of a `subagent` tool line |
 | Visible work | A members panel says what each member is doing; a working strip above the composer sits where a chat client puts "someone is typing"; tap a member to address them, or `@everyone` for one answer each |
 | Room notice | Standing conventions for a room, carried into every new session so you stop repeating them |
 | Workspace | Project files, terminal, deliverables, diff, browser and sidecar tasks; each room remembers the panel, expanded directories and open file tabs it left |

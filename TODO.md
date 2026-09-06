@@ -22,6 +22,11 @@
 路由的可替换插槽），代价是重新实现思考与工具调用的富渲染——第四轮评审已经因为
 同样的原因放弃过一次折叠。
 
+**已经找到的落脚点**：`tool.call.toolview` 是按**工具名**分发的键控插槽，`subagent`
+在上游没有占用者，所以注册它是新增而非接管（这一轮已经这么做了，见
+`src/client/subagent.tsx`）。并排还需要跨多个 call 组织版面，那仍然落在
+`conversation.chat.node` 上，但至少单个成员的那一行不必再走接管路线。
+
 **做到什么算完**：一次提问 N 个成员各答一次，结果并排，可点「采纳」。
 
 ---
@@ -105,6 +110,15 @@
 - **`content-visibility` 会让 `getComputedStyle` 失真。** 被跳过的子树里读到的
   颜色可能是另一套主题的值。这一轮的对比度审计因此误报过一批「暗色下白底白字」，
   截图才是准的；要用计算样式测量就先临时 `*{content-visibility:visible!important}`。
+- **想在演示实例里造一段没有模型也能看的会话**，可以直接写 session 日志：
+  `$DSH_HOME/sessions/<workspace>/<session>/session.jsonl.zstd`。三个坑：日志是
+  多个 zstd 帧首尾相接的，Node 的 `zstdDecompressSync` 只解第一帧（要用 `zstd -dc`）；
+  **第一帧必须正好是那一行 header**；`user/message` 的 source 要带 `rpcId`，
+  `assistant/message` 要带 `id` 和 `source.replayState`，否则宿主判定日志损坏。
+  改完要删掉 `$DSH_HOME/storages/session_projcache`。脚本见
+  `scratchpad/seed-subagent.mjs`（未进仓库）。
+- **回放出来的日志看不到「进行中」**：没有 `turn/end` 的调用会被投影成「已停止」，
+  所以运行中的样子只能在真跑的时候看，或临时改 `data-state` 看配色。
 - **macOS 上 `mkdtemp` 给的路径不是 realpath**（`/var` → `/private/var`）。宿主按
   realpath 解析工作区，所以测试里构造绝对路径要先 `realpath`，否则会撞上越界拒绝。
 
@@ -130,3 +144,5 @@
 | 群里看不到谁在干活（新发现） | 成员面板、正在工作条、点名 @、群公告、入群提示 |
 | 客户端没有组件渲染测试 | 工作台三个组件共 13 项渲染测试 |
 | 演示媒体是手工流程 | `scripts/shoot.mjs` 进仓库并写进文档 |
+| 群头像比联系人头像轻一半 | 瓷砖 40→46，两人改对角相叠（脸 17→27），三四人 2×2（脸 17→20），`generalAvatar` 跟着一起放大 |
+| 派活那一行只是 `工具调用 · subagent` | 注册 `tool.call.toolview` 的 `subagent` 键，换成成员头像 + 昵称 + 任务 + 状态，展开有回传内容与交办内容 |

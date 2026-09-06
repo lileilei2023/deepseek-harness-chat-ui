@@ -170,6 +170,55 @@ export interface SkillChatTerminalValue {
   readonly lineEnd: number
 }
 
+/** Ask what a Room's sessions actually produced. */
+export interface SkillChatArtifactRequest {
+  readonly workspaceId: string
+  /** Harness sessions belonging to the Room, in any order. */
+  readonly sessionIds: readonly string[]
+}
+
+/**
+ * One file a Room produced, together with the call that produced it.
+ *
+ * The panel used to list whatever changed on disk while a Room was open, which
+ * catches files you edited yourself in another window and misses nothing it
+ * should. These come from the session log's own mutation calls, so the link
+ * between a file and the turn that wrote it is causal rather than coincidental.
+ */
+export interface SkillChatArtifact {
+  readonly path: string
+  readonly name: string
+  readonly size: number
+  readonly modifiedAt: number
+  /** Session whose log recorded the producing call. */
+  readonly sessionId: string
+  /** Sequence number of that call, for pointing back at the conversation. */
+  readonly seq: number
+  /** When the call was made, which can predate the file's own mtime. */
+  readonly producedAt: number
+  /**
+   * Opening of the assistant message that owns the call.
+   *
+   * The coordinator opens a relayed member result with `@name`, so this is what
+   * lets the client name the member without the Host knowing about personas.
+   */
+  readonly speaker: string
+  /** How many times these sessions wrote this same path. */
+  readonly revisions: number
+}
+
+/** Produced files for one Room, newest first. */
+export interface SkillChatArtifactValue {
+  readonly files: readonly SkillChatArtifact[]
+  /**
+   * True when no session log could be read at all.
+   *
+   * The client then falls back to the modification-time scan rather than
+   * claiming a Room produced nothing.
+   */
+  readonly unavailable: boolean
+}
+
 /** Start a temporary side conversation from the visible Room context. */
 export interface SkillChatSidecarStartRequest {
   readonly sourceSessionId: string

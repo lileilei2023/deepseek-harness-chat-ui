@@ -434,6 +434,63 @@ Do work.
     await expect(catalog.readProjectFile({ workspaceId: 'workspace', path: join(outside, 'secret.txt') })).rejects.toThrow('escapes Workspace')
   })
 
+  it('lists what the Room wrote, not everything that changed on disk', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-artifacts-'))
+    await writeFile(join(workspace, 'report.md'), 'produced')
+    await writeFile(join(workspace, 'notes.md'), 'edited by hand in another window')
+    const ctx = await catalogContext()
+    const call = (seq: number, name: string, args: unknown) => ({
+      type: 'tool/call', seq, time: 1_000 + seq,
+      data: { turn: 1, step: 1, callId: `c${String(seq)}`, name, arguments: JSON.stringify(args) },
+    })
+    const events = [
+      {
+        type: 'assistant/message', seq: 1, time: 1_001,
+        data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text: '@analyst 我把结论写进报告了' }] } },
+      },
+      call(2, 'write', { file_path: 'report.md', content: 'produced' }),
+      // Incomplete arguments never ran, so the path must not become a phantom.
+      call(3, 'write', { file_path: 'ghost.md' }),
+      // A read is not a mutation.
+      call(4, 'read', { file_path: 'notes.md' }),
+      // Outside the Workspace: not this Room's deliverable, and not ours to show.
+      call(5, 'write', { file_path: '../escaped.md', content: 'x' }),
+      // Written twice: one row, counted.
+      call(6, 'write', { file_path: 'report.md', content: 'produced again' }),
+    ]
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: ['session'], status: async () => 'ok' as const }),
+    } as never)
+    ctx.provide('sessionQuery', { readSession: async () => ({ events }) } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+
+    const listed = await catalog.roomArtifacts({ workspaceId: 'workspace', sessionIds: ['session'] })
+
+    expect(listed.unavailable).toBe(false)
+    expect(listed.files.map(file => file.name)).toEqual(['report.md'])
+    const [report] = listed.files
+    expect(report?.seq).toBe(6)
+    expect(report?.revisions).toBe(2)
+    // The opening of the assistant message is what lets the client name the
+    // member without the Host knowing anything about personas.
+    expect(report?.speaker).toContain('@analyst')
+  })
+
+  it('says so rather than claiming a Room produced nothing when no log can be read', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-artifacts-none-'))
+    const ctx = await catalogContext()
+    ctx.provide('workspaceRegistry', {
+      get: () => ({ path: workspace, sessionIds: ['session'], status: async () => 'ok' as const }),
+    } as never)
+    ctx.provide('sessionQuery', { readSession: async () => { throw new Error('gone') } } as never)
+    const catalog = new WorkBuddySkillCatalog(ctx)
+
+    // The client falls back to the modification-time scan on this flag; an
+    // empty list with `unavailable: false` would silently hide real files.
+    await expect(catalog.roomArtifacts({ workspaceId: 'workspace', sessionIds: ['session'] }))
+      .resolves.toMatchObject({ files: [], unavailable: true })
+  })
+
   it('streams the fallback shell instead of returning everything at the end', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'dsh-terminal-fallback-'))
     const ctx = await catalogContext()

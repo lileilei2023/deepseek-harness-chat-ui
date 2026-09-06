@@ -14,6 +14,7 @@ import type { AgentHandle } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-agent-default-model'
+import type {} from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-session-title'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import { load as parseYaml } from 'js-yaml'
@@ -27,6 +28,9 @@ import type {
   SkillChatProjectBrowseValue,
   SkillChatProjectFileRequest,
   SkillChatProjectFileValue,
+  SkillChatArtifact,
+  SkillChatArtifactRequest,
+  SkillChatArtifactValue,
   SkillChatSidecarSendRequest,
   SkillChatSidecarStartRequest,
   SkillChatSidecarValue,
@@ -93,6 +97,10 @@ const MAX_PREVIEW_BYTES = 512 * 1024
 const ARTIFACT_MAX_DEPTH = 4
 const ARTIFACT_MAX_FILES = 200
 const ARTIFACT_MAX_EXAMINED = 4000
+/** Room sessions whose logs one artifact listing will read. */
+const ARTIFACT_MAX_SESSIONS = 40
+/** Characters of an assistant message kept for member attribution. */
+const ARTIFACT_SPEAKER_CHARS = 80
 /**
  * Lines returned by one scrollback page.
  *
@@ -509,6 +517,76 @@ export class WorkBuddySkillCatalog extends TypertRemoteService {
     await walk(root, 0)
     found.sort((left, right) => right.modifiedAt - left.modifiedAt)
     return { files: found.slice(0, ARTIFACT_MAX_FILES) }
+  }
+
+  /**
+   * List what a Room's sessions actually produced.
+   *
+   * The modification-time scan this replaces answered a different question:
+   * "what changed on disk while the Room was open". That catches the file you
+   * edited yourself in another window, and it cannot say which turn or which
+   * member is responsible. Mutation calls in the session log can: the path
+   * comes from the call's own arguments, so a file appears here only because
+   * the team wrote it.
+   * @param request - the Workspace and the Room's sessions.
+   * @returns produced files newest first, or `unavailable` when no log could be read.
+   */
+  @Remote
+  async roomArtifacts(request: SkillChatArtifactRequest, signal?: AbortSignal): Promise<SkillChatArtifactValue> {
+    signal?.throwIfAborted()
+    const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(request.workspaceId))
+    if (workspace === undefined) throw new Error('skill-chat: unknown Workspace')
+    const root = await realpath(workspace.path)
+    const sessionQuery = this.ctx.get('sessionQuery')
+    if (sessionQuery === undefined) return { files: [], unavailable: true }
+
+    const produced = new Map<string, { seq: number; producedAt: number; sessionId: string; speaker: string; revisions: number }>()
+    let readAny = false
+    for (const sessionId of request.sessionIds.slice(0, ARTIFACT_MAX_SESSIONS)) {
+      let events
+      try {
+        events = (await sessionQuery.readSession(SessionId(sessionId))).events
+      } catch {
+        // A session the corpus cannot load (deleted, or mid-write) is skipped
+        // rather than failing the whole panel: the other sessions still answer.
+        continue
+      }
+      readAny = true
+      let speaker = ''
+      for (const event of events) {
+        if (event.type === 'assistant/message') {
+          speaker = assistantOpening(event.data.message.content)
+          continue
+        }
+        if (event.type !== 'tool/call') continue
+        const relative = mutationPath(event.data.name, event.data.arguments)
+        if (relative === null) continue
+        const full = resolve(root, relative)
+        // A path outside the Workspace is not this Room's deliverable, and
+        // listing it would leak a location the panel has no right to show.
+        if (full !== root && !full.startsWith(root + sep)) continue
+        const known = produced.get(full)
+        produced.set(full, {
+          seq: event.seq,
+          producedAt: event.time,
+          sessionId,
+          speaker,
+          revisions: (known?.revisions ?? 0) + 1,
+        })
+      }
+    }
+    if (!readAny) return { files: [], unavailable: true }
+
+    const files: SkillChatArtifact[] = []
+    for (const [path, record] of produced) {
+      // Written then deleted is not a deliverable; a stat also gives the size
+      // and mtime the panel shows.
+      const info = await stat(path).catch(() => undefined)
+      if (info === undefined || !info.isFile()) continue
+      files.push({ path, name: basename(path), size: info.size, modifiedAt: Math.round(info.mtimeMs), ...record })
+    }
+    files.sort((left, right) => right.producedAt - left.producedAt)
+    return { files: files.slice(0, ARTIFACT_MAX_FILES), unavailable: false }
   }
 
   /**
@@ -1143,6 +1221,63 @@ interface OneshotTerminal {
   running: boolean
   /** True once the transcript dropped its head to stay bounded. */
   truncated: boolean
+}
+
+/**
+ * The path one mutation call wrote, or null when the call wrote nothing.
+ *
+ * This is the same vocabulary the Host's own deliverables row uses, kept
+ * deliberately narrow: a call whose arguments are incomplete never ran, so
+ * treating it as a produced file would put a phantom in the panel.
+ * @param name - the wire tool name exactly as the model called it.
+ * @param argsRaw - the raw JSON arguments string from the log.
+ * @returns the written path, or null.
+ */
+function mutationPath(name: string, argsRaw: string): string | null {
+  let args: unknown
+  try {
+    args = JSON.parse(argsRaw) as unknown
+  } catch {
+    return null
+  }
+  if (typeof args !== 'object' || args === null) return null
+  const record = args as Record<string, unknown>
+  const text = (value: unknown): string | null => typeof value === 'string' && value.trim() !== '' ? value : null
+  if (name === 'write') return typeof record.content === 'string' ? text(record.file_path) : null
+  if (name === 'edit') {
+    return typeof record.old_string === 'string' && record.old_string.length > 0
+      && typeof record.new_string === 'string' && record.old_string !== record.new_string
+      ? text(record.file_path)
+      : null
+  }
+  if (name !== 'str_replace_editor') return null
+  const path = text(record.path)
+  if (path === null) return null
+  if (record.command === 'create') return typeof record.file_text === 'string' ? path : null
+  if (record.command === 'str_replace') {
+    return typeof record.old_str === 'string' && record.old_str.length > 0 ? path : null
+  }
+  if (record.command === 'insert') {
+    return typeof record.insert_line === 'number' && typeof record.new_str === 'string' ? path : null
+  }
+  return null
+}
+
+/**
+ * The opening of an assistant message, for attributing a file to a member.
+ *
+ * The coordinator opens a relayed member result with `@name`, so the first line
+ * is exactly what the client already reads to decide who spoke.
+ * @param content - the message's content blocks.
+ * @returns the opening text, trimmed.
+ */
+function assistantOpening(content: readonly { type: string; text?: string }[]): string {
+  for (const block of content) {
+    if (block.type !== 'text' || typeof block.text !== 'string') continue
+    const trimmed = block.text.trim()
+    if (trimmed !== '') return trimmed.slice(0, ARTIFACT_SPEAKER_CHARS)
+  }
+  return ''
 }
 
 /**

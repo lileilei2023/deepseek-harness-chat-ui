@@ -1007,6 +1007,12 @@
 .terminalComposer { display: grid; grid-template-columns: auto minmax(0, 1fr) repeat(2, auto); align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--ds-chat-code-border); background: var(--ds-chat-code-bg-raised); }
 /* One row per output line, so an empty line keeps its height and a styled run
  * cannot leak its colour into the next line. */
+/* Two lines per artifact: the file, then where it came from. The provenance is
+ * the point of this pane, so it is always visible rather than a hover title. */
+.artifactRow span { display: grid; min-width: 0; gap: 1px; }
+.artifactRow b { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.artifactRow small { overflow: hidden; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); text-overflow: ellipsis; white-space: nowrap; }
+.artifactCaption { padding: 8px 12px; color: var(--ds-chat-muted); font-size: var(--ds-chat-text-caption); line-height: 1.6; }
 .terminalLine { display: block; min-height: 1.65em; }
 .terminalEarlier { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--ds-chat-code-border); padding: 7px 12px; color: var(--ds-chat-code-fg); background: var(--ds-chat-code-bg-raised); font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: left; opacity: .72; cursor: pointer; }
 .terminalEarlier:hover { color: var(--ds-chat-accent-bright); opacity: 1; }

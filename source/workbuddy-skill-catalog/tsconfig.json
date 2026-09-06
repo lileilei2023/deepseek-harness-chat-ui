@@ -13,6 +13,7 @@
     { "path": "../../core/agent-default-model" },
     { "path": "../../llm/llm" },
     { "path": "../../core/session" },
+    { "path": "../../session-query/session-query" },
     { "path": "../../session/session-title" },
     { "path": "../../core/system-prompt" },
     { "path": "../../subprocess/subprocess" },

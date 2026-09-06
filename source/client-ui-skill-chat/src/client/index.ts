@@ -294,6 +294,11 @@ function registerUi(ctx: Context): void {
         if (!result.ok) throw new Error(result.error.message)
         return result.value.files
       },
+      roomArtifacts: async (workspaceId: WorkspaceId, sessionIds: readonly string[], signal: AbortSignal) => {
+        const result = await ctx.remote.workbuddySkills.roomArtifacts({ workspaceId, sessionIds }, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        return result.value
+      },
       readTerminal: async (sessionId: SessionId, terminalId: string, page: { offset?: number; count?: number }, signal: AbortSignal) => {
         const result = await ctx.remote.workbuddySkills.readSkillChatTerminal({ sessionId, terminalId, ...page }, signal)
         if (!result.ok) throw new Error(result.error.message)

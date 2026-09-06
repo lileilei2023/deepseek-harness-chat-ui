@@ -60,6 +60,25 @@ interface ProjectFilePreview {
   readonly truncated: boolean
 }
 
+/**
+ * One file the room produced, and what produced it.
+ *
+ * `seq` and `speaker` are absent for a file that only the modification-time
+ * scan found: that fallback knows a file changed, not who changed it, and
+ * saying otherwise would be a guess dressed as provenance.
+ */
+interface RoomArtifact {
+  readonly path: string
+  readonly name: string
+  readonly size: number
+  readonly modifiedAt: number
+  readonly sessionId?: string
+  readonly seq?: number
+  readonly producedAt?: number
+  readonly speaker?: string
+  readonly revisions?: number
+}
+
 interface TerminalSnapshot {
   readonly terminalId: string
   readonly text: string
@@ -146,6 +165,10 @@ interface SkillContactsInjected {
   linkSkill: (path: string, name: string, signal: AbortSignal) => Promise<{ readonly name: string; readonly target: string }>
   forkSession: (sessionId: SessionId, atSeq: number, increaseTitle: boolean) => Promise<SessionId>
   recentProjectFiles: (workspaceId: WorkspaceId, since: number, signal: AbortSignal) => Promise<readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[]>
+  roomArtifacts: (workspaceId: WorkspaceId, sessionIds: readonly string[], signal: AbortSignal) => Promise<{
+    readonly files: readonly RoomArtifact[]
+    readonly unavailable: boolean
+  }>
   readTerminal: (sessionId: SessionId, terminalId: string, page: { offset?: number; count?: number }, signal: AbortSignal) => Promise<TerminalSnapshot>
   signalTerminal: (sessionId: SessionId, terminalId: string, kind: 'SIGINT' | 'SIGTERM', signal: AbortSignal) => Promise<TerminalSnapshot>
   searchProjectFiles: (workspaceId: WorkspaceId, query: string, contents: boolean, signal: AbortSignal) => Promise<readonly { readonly path: string; readonly name: string; readonly line?: string }[]>
@@ -606,7 +629,9 @@ interface WorkbenchDrawerProps {
   readonly terminalCommand: string
   readonly terminalBusy: boolean
   readonly browserUrl: string
-  readonly artifacts: readonly { readonly path: string; readonly name: string; readonly size: number; readonly modifiedAt: number }[]
+  readonly artifacts: readonly RoomArtifact[]
+  readonly artifactsTraced: boolean
+  readonly onArtifactOrigin: (artifact: RoomArtifact) => string | null
   readonly artifactsBusy: boolean
   readonly artifactRestOpen: boolean
   readonly fileQuery: string
@@ -977,29 +1002,38 @@ function WorkbenchDrawer(props: WorkbenchDrawerProps): React.JSX.Element {
               ? <div className={css.status}>{tr('loading')}</div>
               : props.artifacts.length === 0
                 ? <div className={css.drawerEmpty}>{tr('noArtifacts')}</div>
-                : <>
-                  {props.artifacts.filter(item => isDeliverable(item.name)).map(item => <button
-                    type="button"
-                    data-selected={props.file?.path === item.path || undefined}
-                    key={item.path}
-                    onClick={() => { props.onPreviewFile(item.path) }}
-                  ><IconCodeOutline16/><span>{item.name}</span></button>)}
-                  {(() => {
-                    const rest = props.artifacts.filter(item => !isDeliverable(item.name))
-                    if (rest.length === 0) return null
-                    return <>
+                : (() => {
+                  /* Who made it, and when. A traced file names the member; a
+                   * scanned one can only say the file changed, so it says that
+                   * instead of inventing an author. */
+                  const row = (item: RoomArtifact): React.JSX.Element => {
+                    const origin = props.onArtifactOrigin(item)
+                    return <button
+                      className={css.artifactRow}
+                      type="button"
+                      data-selected={props.file?.path === item.path || undefined}
+                      key={item.path}
+                      onClick={() => { props.onPreviewFile(item.path) }}
+                    >
+                      <IconCodeOutline16/>
+                      <span>
+                        <b>{item.name}</b>
+                        <small>{origin ?? tr('artifactChanged')} · {roomTime(item.producedAt ?? item.modifiedAt)}</small>
+                      </span>
+                    </button>
+                  }
+                  const rest = props.artifacts.filter(item => !isDeliverable(item.name))
+                  return <>
+                    {props.artifactsTraced ? null : <div className={css.artifactCaption}>{tr('artifactsUntraced')}</div>}
+                    {props.artifacts.filter(item => isDeliverable(item.name)).map(row)}
+                    {rest.length === 0 ? null : <>
                       <button className={css.artifactMore} type="button" onClick={props.onToggleArtifactRest}>
                         {props.artifactRestOpen ? '▾' : '▸'} {tr('otherFiles')} · {rest.length}
                       </button>
-                      {props.artifactRestOpen ? rest.map(item => <button
-                        type="button"
-                        data-selected={props.file?.path === item.path || undefined}
-                        key={item.path}
-                        onClick={() => { props.onPreviewFile(item.path) }}
-                      ><IconCodeOutline16/><span>{item.name}</span></button>) : null}
-                    </>
-                  })()}
-                </>}
+                      {props.artifactRestOpen ? rest.map(row) : null}
+                    </>}
+                  </>
+                })()}
           </div>
         </div>
         <div className={css.filePreview}>
@@ -1149,7 +1183,7 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   const {
     wide, expandSidebar, useSessions, useWorkspaces, loadContacts, searchExternal, openSession, renameSession,
     startSession, addWorkspace, chooseContact, chooseGroup, loadState, saveState, runAutomation: runAutomationRemote,
-    linkSkill, forkSession, messageSeq, recentProjectFiles, readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
+    linkSkill, forkSession, messageSeq, recentProjectFiles, roomArtifacts, readTerminal, signalTerminal, searchProjectFiles, revealProjectPath, attachToComposer,
     browseProject, readProjectFile, openTerminal, sendTerminal, closeTerminal, startSidecar, sendSidecar, closeSidecar, renderSlot, t,
   } = props
   const sessions = useSessions(value => value)
@@ -1204,7 +1238,11 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
   // A rendered report is what a person opening an HTML deliverable wants first;
   // the source is one click away and stays the default for everything else.
   const [renderedFile, setRenderedFile] = useState(true)
-  const [artifacts, setArtifacts] = useState<readonly { path: string; name: string; size: number; modifiedAt: number }[]>([])
+  const [artifacts, setArtifacts] = useState<readonly RoomArtifact[]>([])
+  // False once the Host answered from session logs. It drives the panel's own
+  // caption, because "what this team produced" and "what changed on disk" are
+  // different claims and the panel should not make the stronger one by mistake.
+  const [artifactsTraced, setArtifactsTraced] = useState(false)
   const [artifactsBusy, setArtifactsBusy] = useState(false)
   const [artifactRestOpen, setArtifactRestOpen] = useState(false)
   const [terminal, setTerminal] = useState<TerminalSnapshot | null>(null)
@@ -1669,22 +1707,51 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
 
   useEffect(() => {
     if (projectTool !== 'artifacts' || workspaceId === undefined || activeRoom === undefined) return
-    // From the room's oldest surviving session: that is the window in which this
-    // team could have produced anything, and it survives a reload where a
-    // per-turn record would not.
-    const since = state.roomSessions
-      .filter(item => item.roomId === activeRoom.roomId)
-      .reduce((oldest, item) => Math.min(oldest, item.createdAt), Date.now())
+    const sessions = state.roomSessions.filter(item => item.roomId === activeRoom.roomId)
     const abort = new AbortController()
     setArtifactsBusy(true)
-    void recentProjectFiles(workspaceId, since, abort.signal)
-      .then(
-        (files) => { if (!abort.signal.aborted) setArtifacts(files) },
-        (error: unknown) => { if (!abort.signal.aborted) setNotice(error instanceof Error ? error.message : String(error)) },
-      )
+    // The room's own session logs first: a file is listed because a call in
+    // this room wrote it, so it can be traced back to the turn and the member.
+    // The modification-time scan below answers a weaker question — what changed
+    // on disk while the room was open — which also catches files you edited
+    // yourself in another window. It stays only as the fallback for a Session
+    // whose log cannot be read.
+    void roomArtifacts(workspaceId, sessions.map(item => item.harnessSessionId), abort.signal)
+      .then(async (traced) => {
+        if (abort.signal.aborted) return
+        if (!traced.unavailable) { setArtifacts(traced.files); setArtifactsTraced(true); return }
+        const since = sessions.reduce((oldest, item) => Math.min(oldest, item.createdAt), Date.now())
+        const scanned = await recentProjectFiles(workspaceId, since, abort.signal)
+        if (abort.signal.aborted) return
+        setArtifacts(scanned)
+        setArtifactsTraced(false)
+      })
+      .catch((error: unknown) => { if (!abort.signal.aborted) setNotice(error instanceof Error ? error.message : String(error)) })
       .finally(() => { if (!abort.signal.aborted) setArtifactsBusy(false) })
     return () => { abort.abort() }
-  }, [activeRoom, projectTool, recentProjectFiles, state.roomSessions, workspaceId])
+  }, [activeRoom, projectTool, recentProjectFiles, roomArtifacts, state.roomSessions, workspaceId])
+
+  /**
+   * Name the member a produced file came from.
+   *
+   * The Host returns the opening of the assistant message that owns the writing
+   * call; the coordinator opens a relayed member result with `@name`, so the
+   * same attribution the message list uses resolves it here too.
+   * @param artifact - the produced file.
+   * @returns a short origin line, or null when nothing is known.
+   */
+  const artifactOrigin = (artifact: RoomArtifact): string | null => {
+    if (artifact.seq === undefined) return null
+    const members = activeRoom === undefined
+      ? []
+      : activeRoom.memberIds.flatMap(id => allContacts.find(contact => contact.id === id) ?? [])
+    const author = members.length === 0
+      ? undefined
+      : responderForMessage(members, activeRoom?.coordinatorId, '', mode, artifact.speaker ?? '')
+    const who = author === undefined ? null : displayOf(author, mode).name
+    const revisions = (artifact.revisions ?? 1) > 1 ? ` · ${String(artifact.revisions)} ${tr('artifactRevisions')}` : ''
+    return `${who === null ? tr('artifactProduced') : who}${revisions}`
+  }
 
   const createGroup = (): void => {
     if (workspaceId === undefined) { setNotice(t('workspaceRequired')); return }
@@ -2526,6 +2593,8 @@ export function SkillContactsBrowser(props: SkillContactsBrowserProps): React.JS
       listing={projectListing}
       file={projectFile}
       artifacts={artifacts}
+      artifactsTraced={artifactsTraced}
+      onArtifactOrigin={artifactOrigin}
       artifactsBusy={artifactsBusy}
       artifactRestOpen={artifactRestOpen}
       fileQuery={fileQuery}

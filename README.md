@@ -12,7 +12,7 @@ This is **not another ChatGPT-style single-assistant shell**. DS Chat treats eve
 
 The demo walks the room list, opens a Skill group, inspects its members and system role, switches rooms and returns with the conversation intact, then scrolls the contact directory — several hundred Skills, each with its own generated identity.
 
-[Watch the 26-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
+[Watch the 13-second MP4 demo](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI main screen](docs/images/deepseek-harness-chat-ui-main.png)
 

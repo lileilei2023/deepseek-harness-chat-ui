@@ -12,7 +12,7 @@
 
 演示使用真实模型完成一次群组咨询：查看群成员与群组职能，让三位拟人化 Skill 分工回答，由协调者汇总结果；随后切换到另一个群组再返回，原对话仍会恢复。内嵌 GIF 使用 15 FPS，播放更流畅。
 
-[观看 26 秒完整 MP4 演示](docs/media/deepseek-harness-chat-ui-demo.mp4)
+[观看 13 秒完整 MP4 演示](docs/media/deepseek-harness-chat-ui-demo.mp4)
 
 ![DeepSeek Harness Chat UI 主界面](docs/images/deepseek-harness-chat-ui-main.png)
 

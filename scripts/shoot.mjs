@@ -102,6 +102,10 @@ async function evaluate(expression) {
 }
 
 async function shoot(name) {
+  // Every step drives the page by clicking, and a clicked button keeps focus —
+  // the dark shot came out with a focus ring round 设置. Nobody reading a
+  // README is tabbing through it.
+  await evaluate('document.activeElement?.blur?.()')
   const { data } = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   writeFileSync(resolve(outDir, `${name}.png`), Buffer.from(data, 'base64'))
   console.log(`captured ${name}.png`)
